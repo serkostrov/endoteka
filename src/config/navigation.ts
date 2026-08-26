@@ -65,10 +65,10 @@ export const navGroups: NavGroup[] = [
   },
   {
     id: 'warehouse',
-    label: 'Хранилище',
+    label: 'Склад',
     items: [
       {
-        label: 'Склад',
+        label: 'Остаток',
         to: routes.inventory,
         icon: Package,
         permission: Permission.InventoryRead,
