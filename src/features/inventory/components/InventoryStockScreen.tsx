@@ -62,21 +62,28 @@ export function InventoryStockScreen() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Склад"
-        description="Текущий остаток по журналу движений. Карточка позиции открывается из строки или по штрихкоду."
+        title="Остатки"
+        description="Сколько товара сейчас на складе. Карточка позиции открывается из строки. Номенклатура (названия и штрихкоды) — в справочниках."
       />
 
       <FilterBar>
-        <BarcodeScanInput className="max-w-sm" onScan={(code) => void handleScan(code)} />
-        <SearchInput
-          value={search}
-          onChange={(next) => {
-            setSearch(next)
-            setPage(1)
-          }}
-          label="Поиск по складу"
-          placeholder="Наименование, артикул, код, штрихкод"
-        />
+        <div className="w-full max-w-sm space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Сканер — открыть карточку по штрихкоду</p>
+          <BarcodeScanInput className="max-w-none" onScan={(code) => void handleScan(code)} />
+        </div>
+        <div className="w-full max-w-sm space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Поиск по остаткам</p>
+          <SearchInput
+            value={search}
+            onChange={(next) => {
+              setSearch(next)
+              setPage(1)
+            }}
+            label="Поиск по складу"
+            placeholder="Наименование, артикул, код, штрихкод"
+            className="max-w-none"
+          />
+        </div>
         <Select
           value={stockFilter}
           onValueChange={(value) => {

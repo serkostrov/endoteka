@@ -28,6 +28,7 @@ export function isInventoryMovementType(value: string): value is InventoryMoveme
 }
 
 export const INVENTORY_PAGE_SIZE = 20
+export const INVENTORY_PICKER_PAGE_SIZE = 24
 export const INVENTORY_COUNT_LINE_PAGE_SIZE = 50
 export const INVENTORY_SEARCH_DEBOUNCE_MS = 300
 export const INVENTORY_SEARCH_MIN_LENGTH = 2

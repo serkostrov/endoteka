@@ -67,13 +67,18 @@ export function InventoryCountScreen() {
   return <CountDocumentBody document={document} />
 }
 
+const countTabs = [
+  { id: 'count' as const, label: 'Пересчёт' },
+  { id: 'statement' as const, label: 'Акт расхождений' },
+]
+
 function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
   const editable =
     document.status === InventoryCountStatus.Draft || document.status === InventoryCountStatus.InProgress
+  const [tab, setTab] = useState<(typeof countTabs)[number]['id']>('count')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<InventoryCountLineFilter>(InventoryCountLineFilter.All)
   const [page, setPage] = useState(1)
-  const [picked, setPicked] = useState<InventoryItem | null>(null)
   const debouncedSearch = useDebouncedValue(search, INVENTORY_SEARCH_DEBOUNCE_MS)
   const linesQuery = useInventoryCountLines(
     document.id,
@@ -116,7 +121,6 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
   async function handleAdd(item: InventoryItem) {
     try {
       await addItem.mutateAsync(item.id)
-      setPicked(null)
       toast.success(`Добавлено: ${item.name}`)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -127,7 +131,11 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
     <div className="space-y-4">
       <PageHeader
         title={document.number}
-        description={`Ответственный: ${document.actorName || '—'}`}
+        description={
+          document.completedAt
+            ? `Ответственный: ${document.actorName || '—'}. Проведена ${formatDateTime(document.completedAt)}`
+            : `Ответственный: ${document.actorName || '—'}. Факт сохраняется по строке, проведение пишет журнал.`
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             {document.status === InventoryCountStatus.Draft ? (
@@ -181,197 +189,211 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
         }
       />
 
-      <SectionCard
-        title="Статус и прогресс"
-        description={
-          document.completedAt
-            ? `Проведена ${formatDateTime(document.completedAt)}`
-            : 'Факт сохраняется по строке. Проведение одним запросом пишет движения журнала.'
-        }
-        actions={
-          <StatusBadge tone={inventoryCountStatusTone(document.status)}>
-            {inventoryCountStatusLabels[document.status]}
-          </StatusBadge>
-        }
-      >
-        <div className="space-y-3">
-          <div className="flex flex-wrap gap-4 text-sm">
-            <span>
-              Пересчитано{' '}
-              <span className="font-medium">
-                {document.countedCount} из {document.lineCount}
-              </span>
-            </span>
-            <span>
-              Не пересчитано <span className="font-medium">{document.uncountedCount}</span>
-            </span>
-            <span>
-              Расхождений{' '}
-              <span className={cn('font-medium', document.discrepancyCount > 0 && 'text-destructive')}>
-                {document.discrepancyCount}
-              </span>
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-muted">
-            <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
-          </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+        <StatusBadge tone={inventoryCountStatusTone(document.status)}>
+          {inventoryCountStatusLabels[document.status]}
+        </StatusBadge>
+        <span>
+          Пересчитано{' '}
+          <span className="font-medium">
+            {document.countedCount} из {document.lineCount}
+          </span>
+        </span>
+        <span>
+          Не пересчитано <span className="font-medium">{document.uncountedCount}</span>
+        </span>
+        <span>
+          Расхождений{' '}
+          <span className={cn('font-medium', document.discrepancyCount > 0 && 'text-destructive')}>
+            {document.discrepancyCount}
+          </span>
+        </span>
+        <div className="h-1.5 w-36 overflow-hidden rounded-full bg-muted">
+          <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
         </div>
-      </SectionCard>
+      </div>
 
-      {editable ? (
-        <SectionCard title="Сканер и добавление">
-          <div className="space-y-3">
-            <BarcodeScanInput
-              autoFocus
-              disabled={increment.isPending}
-              onScan={(code) => void handleScan(code)}
-              placeholder="Считайте штрихкод — факт увеличится на 1"
-            />
-            <ItemSearchField
-              selected={picked}
-              onSelect={setPicked}
-              onClear={() => setPicked(null)}
-              showScan={false}
-            />
-            {picked ? (
-              <Button type="button" disabled={addItem.isPending} onClick={() => void handleAdd(picked)}>
-                Добавить в документ
-              </Button>
-            ) : null}
-          </div>
-        </SectionCard>
-      ) : null}
-
-      <SectionCard title="Строки пересчёта">
-        <FilterBar className="mb-4">
-          <SearchInput
-            value={search}
-            onChange={(next) => {
-              setSearch(next)
-              setPage(1)
-            }}
-            label="Поиск в документе"
-            placeholder="Наименование, артикул, код, штрихкод"
-          />
-          <Select
-            value={filter}
-            onValueChange={(value) => {
-              setFilter(value as InventoryCountLineFilter)
-              setPage(1)
-            }}
+      <div className="flex gap-1 border-b">
+        {countTabs.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={cn(
+              'border-b-2 px-3 py-2 text-sm',
+              tab === item.id
+                ? 'border-primary font-medium text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
+            )}
+            onClick={() => setTab(item.id)}
           >
-            <SelectTrigger aria-label="Фильтр строк">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.values(InventoryCountLineFilter).map((code) => (
-                <SelectItem key={code} value={code}>
-                  {inventoryCountLineFilterLabels[code]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </FilterBar>
+            {item.label}
+            {item.id === 'statement' && document.discrepancyCount > 0 ? ` (${document.discrepancyCount})` : ''}
+          </button>
+        ))}
+      </div>
 
-        <DataTable
-          caption="Строки инвентаризации"
-          isLoading={linesQuery.isLoading}
-          error={linesQuery.error ? getErrorMessage(linesQuery.error) : null}
-          data={linesQuery.data?.items ?? []}
-          getRowId={(row) => row.id}
-          emptyTitle="Строк нет"
-          emptyDescription={editable ? 'Добавьте позиции сканером или поиском.' : 'В документе нет строк.'}
-          pagination={{ page, pageCount, onPageChange: setPage }}
-          columns={[
-            { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-            {
-              id: 'code',
-              header: 'Код',
-              className: 'hidden md:table-cell',
-              cell: (row) => row.itemCode,
-            },
-            { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
-            {
-              id: 'actual',
-              header: 'Факт',
-              cell: (row) =>
-                editable ? (
-                  <CountActualInput
-                    line={row}
-                    disabled={setActual.isPending}
-                    onSave={(actual) => {
-                      setActual.mutate(
-                        { lineId: row.id, actual },
-                        { onError: (error) => toast.error(getErrorMessage(error)) },
-                      )
-                    }}
-                  />
-                ) : (
-                  row.actualQuantity === null ? '—' : formatQuantity(row.actualQuantity)
-                ),
-            },
-            {
-              id: 'diff',
-              header: 'Разница',
-              cell: (row) => <DifferenceCell difference={row.difference} />,
-            },
-            {
-              id: 'unit',
-              header: 'Ед.',
-              cell: (row) => row.unitName,
-            },
-            ...(editable
-              ? [
-                  {
-                    id: 'remove',
-                    header: '',
-                    cell: (row: InventoryCountLine) => (
-                      <IconActionButton
-                        label="Убрать"
-                        variant="ghost"
-                        disabled={removeLine.isPending}
-                        onClick={() => {
-                          removeLine.mutate(row.id, {
-                            onError: (error) => toast.error(getErrorMessage(error)),
-                          })
-                        }}
-                      >
-                        <Trash2 />
-                      </IconActionButton>
-                    ),
-                  },
-                ]
-              : []),
-          ]}
-        />
-      </SectionCard>
+      {tab === 'count' ? (
+        <SectionCard
+          title="Строки пересчёта"
+          description={
+            editable
+              ? 'Сканер увеличивает факт на 1. Список добавляет позицию в документ. Поиск ниже только фильтрует уже добавленные строки.'
+              : 'Таблица позиций этого документа.'
+          }
+        >
+          {editable ? (
+            <div className="mb-4 space-y-3 rounded-md border p-3">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Сканер — +1 к факту по штрихкоду</p>
+                <BarcodeScanInput
+                  autoFocus
+                  disabled={increment.isPending}
+                  onScan={(code) => void handleScan(code)}
+                  placeholder="Считайте штрихкод — факт увеличится на 1"
+                />
+              </div>
+              <ItemSearchField
+                onSelect={(item) => void handleAdd(item)}
+                showScan={false}
+                searchHint="Добавить позицию в документ — нажмите, чтобы увидеть все"
+                searchPlaceholder="Все позиции — введите, чтобы сузить"
+                disabled={addItem.isPending}
+              />
+            </div>
+          ) : null}
 
-      <SectionCard
-        title="Акт расхождений"
-        description={`Ответственный: ${document.actorName || '—'}. В акт попадают только строки с разницей.`}
-      >
-        <DataTable
-          caption="Акт расхождений"
-          isLoading={statementQuery.isLoading}
-          error={statementQuery.error ? getErrorMessage(statementQuery.error) : null}
-          data={statementQuery.data?.lines ?? []}
-          getRowId={(row) => row.id}
-          emptyTitle="Расхождений нет"
-          emptyDescription="После заполнения факта здесь появятся отличия от ожидаемого остатка."
-          columns={[
-            { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-            { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
-            { id: 'actual', header: 'Факт', cell: (row) => formatQuantity(row.actualQuantity) },
-            {
-              id: 'diff',
-              header: 'Разница',
-              cell: (row) => <DifferenceCell difference={row.difference} />,
-            },
-            { id: 'unit', header: 'Ед.', cell: (row) => row.unitName },
-            { id: 'actor', header: 'Ответственный', cell: () => document.actorName || '—' },
-          ]}
-        />
-      </SectionCard>
+          <FilterBar className="mb-4">
+            <SearchInput
+              value={search}
+              onChange={(next) => {
+                setSearch(next)
+                setPage(1)
+              }}
+              label="Фильтр строк документа"
+              placeholder="Найти в этом документе"
+            />
+            <Select
+              value={filter}
+              onValueChange={(value) => {
+                setFilter(value as InventoryCountLineFilter)
+                setPage(1)
+              }}
+            >
+              <SelectTrigger aria-label="Какие строки показать" className="w-44">
+                <SelectValue placeholder="Все строки" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.values(InventoryCountLineFilter).map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {inventoryCountLineFilterLabels[code]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </FilterBar>
+
+          <DataTable
+            caption="Строки инвентаризации"
+            isLoading={linesQuery.isLoading}
+            error={linesQuery.error ? getErrorMessage(linesQuery.error) : null}
+            onRetry={() => void linesQuery.refetch()}
+            data={linesQuery.data?.items ?? []}
+            getRowId={(row) => row.id}
+            emptyTitle="Строк нет"
+            emptyDescription={editable ? 'Добавьте позиции сканером или из списка номенклатуры.' : 'В документе нет строк.'}
+            pagination={{ page, pageCount, onPageChange: setPage }}
+            columns={[
+              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
+              {
+                id: 'code',
+                header: 'Код',
+                className: 'hidden md:table-cell',
+                cell: (row) => row.itemCode,
+              },
+              { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
+              {
+                id: 'actual',
+                header: 'Факт',
+                cell: (row) =>
+                  editable ? (
+                    <CountActualInput
+                      line={row}
+                      disabled={setActual.isPending}
+                      onSave={(actual) => {
+                        setActual.mutate(
+                          { lineId: row.id, actual },
+                          { onError: (error) => toast.error(getErrorMessage(error)) },
+                        )
+                      }}
+                    />
+                  ) : (
+                    row.actualQuantity === null ? '—' : formatQuantity(row.actualQuantity)
+                  ),
+              },
+              {
+                id: 'diff',
+                header: 'Разница',
+                cell: (row) => <DifferenceCell difference={row.difference} />,
+              },
+              {
+                id: 'unit',
+                header: 'Ед.',
+                cell: (row) => row.unitName,
+              },
+              ...(editable
+                ? [
+                    {
+                      id: 'remove',
+                      header: '',
+                      cell: (row: InventoryCountLine) => (
+                        <IconActionButton
+                          label="Убрать"
+                          variant="ghost"
+                          disabled={removeLine.isPending}
+                          onClick={() => {
+                            removeLine.mutate(row.id, {
+                              onError: (error) => toast.error(getErrorMessage(error)),
+                            })
+                          }}
+                        >
+                          <Trash2 />
+                        </IconActionButton>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </SectionCard>
+      ) : (
+        <SectionCard
+          title="Акт расхождений"
+          description="Сюда попадают только строки, где факт уже заполнен и отличается от ожидаемого остатка."
+        >
+          <DataTable
+            caption="Акт расхождений"
+            isLoading={statementQuery.isLoading}
+            error={statementQuery.error ? getErrorMessage(statementQuery.error) : null}
+            onRetry={() => void statementQuery.refetch()}
+            data={statementQuery.data?.lines ?? []}
+            getRowId={(row) => row.id}
+            emptyTitle="Расхождений нет"
+            emptyDescription="После заполнения факта здесь появятся отличия от ожидаемого остатка."
+            columns={[
+              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
+              { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
+              { id: 'actual', header: 'Факт', cell: (row) => formatQuantity(row.actualQuantity) },
+              {
+                id: 'diff',
+                header: 'Разница',
+                cell: (row) => <DifferenceCell difference={row.difference} />,
+              },
+              { id: 'unit', header: 'Ед.', cell: (row) => row.unitName },
+              { id: 'actor', header: 'Ответственный', cell: () => document.actorName || '—' },
+            ]}
+          />
+        </SectionCard>
+      )}
     </div>
   )
 }

@@ -3,7 +3,11 @@ import { useState } from 'react'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
 import { Button } from '@/components/ui/button'
-import { INVENTORY_SEARCH_DEBOUNCE_MS, INVENTORY_SEARCH_MIN_LENGTH, formatQuantity } from '@/lib/constants/inventory'
+import {
+  INVENTORY_PICKER_PAGE_SIZE,
+  INVENTORY_SEARCH_DEBOUNCE_MS,
+  formatQuantity,
+} from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { cn } from '@/lib/utils'
@@ -20,6 +24,10 @@ type ItemSearchFieldProps = {
   allowCreate?: boolean
   onCreateRequest?: () => void
   showScan?: boolean
+  scanHint?: string
+  searchHint?: string
+  searchPlaceholder?: string
+  defaultOpen?: boolean
 }
 
 export function ItemSearchField({
@@ -30,20 +38,23 @@ export function ItemSearchField({
   allowCreate = false,
   onCreateRequest,
   showScan = true,
+  scanHint = 'Сканер сразу находит позицию по штрихкоду',
+  searchHint = 'Список всех позиций. Можно сузить поиском.',
+  searchPlaceholder = 'Все позиции — введите, чтобы сузить',
+  defaultOpen = false,
 }: ItemSearchFieldProps) {
   const [search, setSearch] = useState('')
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(defaultOpen)
   const [scanError, setScanError] = useState<string | null>(null)
   const debouncedSearch = useDebouncedValue(search, INVENTORY_SEARCH_DEBOUNCE_MS)
-  const listQuery = useInventoryStock(debouncedSearch, 1, 8)
+  const listQuery = useInventoryStock(debouncedSearch, 1, INVENTORY_PICKER_PAGE_SIZE)
   const barcodeQuery = useInventoryBarcodeLookup(debouncedSearch)
   const term = debouncedSearch.trim()
-  const showManual = term.length >= INVENTORY_SEARCH_MIN_LENGTH
-  const items = showManual
-    ? (barcodeQuery.data && barcodeQuery.data.length > 0 ? barcodeQuery.data : (listQuery.data?.items ?? []))
-    : []
-  const searching = showManual && (listQuery.isFetching || barcodeQuery.isFetching)
-  const showPanel = open && (searching || showManual)
+  const barcodeHits = barcodeQuery.data ?? []
+  const items = term && barcodeHits.length > 0 ? barcodeHits : (listQuery.data?.items ?? [])
+  const total = listQuery.data?.total ?? 0
+  const searching = listQuery.isFetching || (term.length > 0 && barcodeQuery.isFetching)
+  const showPanel = open && !disabled
 
   async function handleScan(code: string) {
     setScanError(null)
@@ -56,11 +67,13 @@ export function ItemSearchField({
         return
       }
       if (found.length === 0) {
-        setScanError('Позиция со штрихкодом не найдена. Воспользуйтесь поиском.')
+        setScanError('Позиция со штрихкодом не найдена. Воспользуйтесь списком.')
         setSearch(code)
+        setOpen(true)
         return
       }
       setSearch(code)
+      setOpen(true)
     } catch (error) {
       setScanError(getErrorMessage(error))
     }
@@ -88,64 +101,81 @@ export function ItemSearchField({
 
   return (
     <div className="space-y-2">
-      <div className="grid gap-2">
-        {showScan ? <BarcodeScanInput className="w-full" disabled={disabled} onScan={(code) => void handleScan(code)} /> : null}
-        <SearchSuggestOverlay
-          open={showPanel}
-          onOpenChange={setOpen}
-          panel={
-            <div className="max-h-64 overflow-auto">
-              {searching && items.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
-              ) : items.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-muted-foreground">Позиции не найдены</p>
-              ) : (
-                <ul>
-                  {items.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        className={cn('flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent')}
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => {
-                          onSelect(item)
-                          setSearch('')
-                          setOpen(false)
-                        }}
-                      >
-                        <span className="font-medium">{item.name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {[item.code, item.article, item.barcode, `${formatQuantity(item.stockQuantity)} ${item.unitName}`]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          }
-        >
-          <SearchInput
-            value={search}
-            onChange={(next) => {
-              setSearch(next)
-              setOpen(true)
-            }}
-            onFocus={() => setOpen(true)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape') {
-                setOpen(false)
-              }
-            }}
-            disabled={disabled}
-            label="Поиск номенклатуры"
-            placeholder="Наименование, артикул, код или штрихкод"
-            className="max-w-none"
-          />
-        </SearchSuggestOverlay>
+      <div className="grid gap-3">
+        {showScan ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{scanHint}</p>
+            <BarcodeScanInput className="w-full" disabled={disabled} onScan={(code) => void handleScan(code)} />
+          </div>
+        ) : null}
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">{searchHint}</p>
+          <SearchSuggestOverlay
+            open={showPanel}
+            onOpenChange={setOpen}
+            panel={
+              <div className="max-h-80 overflow-auto">
+                {listQuery.error ? (
+                  <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(listQuery.error)}</p>
+                ) : searching && items.length === 0 ? (
+                  <p className="px-3 py-4 text-sm text-muted-foreground">Загрузка списка…</p>
+                ) : items.length === 0 ? (
+                  <p className="px-3 py-4 text-sm text-muted-foreground">Позиции не найдены</p>
+                ) : (
+                  <>
+                    <ul>
+                      {items.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            className={cn('flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent')}
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => {
+                              onSelect(item)
+                              setSearch('')
+                              setOpen(false)
+                            }}
+                          >
+                            <span className="font-medium">{item.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {[item.code, item.article, item.barcode, `${formatQuantity(item.stockQuantity)} ${item.unitName}`]
+                                .filter(Boolean)
+                                .join(' · ')}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {!term && total > items.length ? (
+                      <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                        Показаны первые {items.length} из {total}. Введите текст, чтобы сузить список.
+                      </p>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            }
+          >
+            <SearchInput
+              value={search}
+              onChange={(next) => {
+                setSearch(next)
+                setOpen(true)
+              }}
+              onFocus={() => setOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') {
+                  setOpen(false)
+                }
+              }}
+              disabled={disabled}
+              label="Список номенклатуры"
+              placeholder={searchPlaceholder}
+              className="max-w-none"
+            />
+          </SearchSuggestOverlay>
+        </div>
         {allowCreate ? (
           <Button type="button" variant="outline" className="w-full" disabled={disabled} onClick={onCreateRequest}>
             Новая позиция

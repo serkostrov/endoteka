@@ -40,14 +40,14 @@ npm run dev
 
 1. В Dokploy создайте приложение из Git, **Build Type: Dockerfile**.
 2. Dockerfile path: `Dockerfile`, context: `.`, порт контейнера: `80`.
-3. В Environment задайте:
+3. В Environment приложения (не Build Args) задайте:
 
 ```
 VITE_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJ...
 ```
 
-Переменные читаются при старте контейнера, пересборка образа не нужна. `service_role` сюда не кладите.
+Сборка образа секретов не требует. При старте контейнера скрипт пишет `/env.js` из этих переменных. `service_role` сюда не кладите.
 
 4. Привяжите домен и HTTPS. Этот origin укажите в Edge Function `invite-user` как `SITE_URL`.
 5. В Supabase Auth добавьте тот же origin в Redirect URLs (`https://ваш-домен/auth/callback`).

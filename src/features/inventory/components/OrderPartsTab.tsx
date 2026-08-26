@@ -80,7 +80,7 @@ export function OrderPartsTab({ orderId }: OrderPartsTabProps) {
             onScan={(code) => void handleScan(code)}
             placeholder="Считайте штрихкод — спишется 1 единица"
           />
-          <ItemSearchField selected={picked} onSelect={setPicked} onClear={() => setPicked(null)} showScan={false} />
+          <ItemSearchField selected={picked} onSelect={setPicked} onClear={() => setPicked(null)} showScan={false} searchHint="Выберите запчасть из списка — открывается со всеми позициями" />
           {picked ? (
             <div className="flex flex-wrap items-end gap-2">
               <label className="space-y-1 text-sm">

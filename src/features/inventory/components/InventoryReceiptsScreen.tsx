@@ -204,39 +204,44 @@ function ReceiveStockSheet({ open, onOpenChange }: { open: boolean; onOpenChange
           <SheetHeader>
             <SheetTitle>Новый приход</SheetTitle>
             <SheetDescription>
-              Проведение создаёт партии и записи журнала одной транзакцией. Новую позицию можно добавить здесь же.
+              Сначала документ, затем товары. Проведение создаёт партии и журнал одной транзакцией.
             </SheetDescription>
           </SheetHeader>
           <Form {...form}>
             <form className="flex flex-1 flex-col gap-4 px-4 pb-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="supplier"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Поставщик</FormLabel>
-                      <FormControl>
-                        <Input {...field} autoComplete="off" />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="receiptDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Дата</FormLabel>
-                      <FormControl>
-                        <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium">Документ</p>
+                  <p className="text-xs text-muted-foreground">Поставщик, дата и комментарий к поступлению.</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="supplier"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Поставщик</FormLabel>
+                        <FormControl>
+                          <Input {...field} autoComplete="off" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="receiptDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Дата</FormLabel>
+                        <FormControl>
+                          <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               <FormField
                 control={form.control}
                 name="notes"
@@ -249,10 +254,16 @@ function ReceiveStockSheet({ open, onOpenChange }: { open: boolean; onOpenChange
                     <FormMessage />
                   </FormItem>
                 )}
-              />
+                />
+              </div>
 
               <div className="space-y-3 rounded-md border p-3">
-                <p className="text-sm font-medium">Позиции</p>
+                <div>
+                  <p className="text-sm font-medium">Товары в приходе</p>
+                  <p className="text-xs text-muted-foreground">
+                    Выберите позицию из списка (открывается со всеми), укажите количество и цену, затем «В документ».
+                  </p>
+                </div>
                 <ItemSearchField
                   selected={picking}
                   onSelect={(item) => {
@@ -262,6 +273,9 @@ function ReceiveStockSheet({ open, onOpenChange }: { open: boolean; onOpenChange
                   onClear={() => setPicking(null)}
                   allowCreate
                   onCreateRequest={() => setCreateItemOpen(true)}
+                  scanHint="Сканер — найти позицию по штрихкоду"
+                  searchHint="Номенклатура — нажмите, чтобы увидеть все позиции"
+                  defaultOpen
                 />
                 {picking ? (
                   <div className="flex flex-wrap items-end gap-2">
@@ -294,7 +308,7 @@ function ReceiveStockSheet({ open, onOpenChange }: { open: boolean; onOpenChange
                 ) : null}
 
                 {lines.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Строк пока нет. Считайте штрихкод или найдите позицию.</p>
+                  <p className="text-sm text-muted-foreground">В документе пока нет строк.</p>
                 ) : (
                   <ul className="space-y-2">
                     {lines.map((line) => (

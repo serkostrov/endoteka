@@ -52,6 +52,7 @@ type DataTableProps<T> = {
   caption?: string
   isLoading?: boolean
   error?: string | null
+  onRetry?: () => void
   emptyTitle?: string
   emptyDescription?: string
   onRowClick?: (row: T) => void
@@ -66,6 +67,7 @@ export function DataTable<T>({
   caption,
   isLoading = false,
   error,
+  onRetry,
   emptyTitle = 'Нет данных',
   emptyDescription = 'По выбранным условиям ничего не найдено.',
   onRowClick,
@@ -73,7 +75,7 @@ export function DataTable<T>({
   sort,
 }: DataTableProps<T>) {
   if (error) {
-    return <ErrorState description={error} />
+    return <ErrorState description={error} onRetry={onRetry} />
   }
 
   if (isLoading) {

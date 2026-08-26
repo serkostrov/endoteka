@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --pretty",
+    "typecheck": "tsc -b --pretty && tsc -p tsconfig.import.json --pretty",
     "lint": "eslint .",
     "lint:oxlint": "oxlint",
     "format": "prettier --write .",

@@ -1,9 +1,10 @@
-import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
-import { useState } from 'react'
+import { ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -99,27 +100,14 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
       <ScrollArea className="min-h-0 flex-1">
         <nav aria-label="Основная навигация" className={cn('space-y-4 py-3', collapsed ? 'px-2' : 'px-3')}>
           {groups.map((group) => (
-            <div key={group.id}>
-              {collapsed ? (
-                <span className="sr-only">{group.label}</span>
-              ) : (
-                <p className="mb-1 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  {group.label}
-                </p>
-              )}
-              <ul className="space-y-0.5">
-                {group.items.map((item) => (
-                  <li key={item.to}>
-                    <SidebarLink
-                      item={item}
-                      collapsed={collapsed}
-                      isActive={isNavItemActive(location.pathname, item, items)}
-                      onNavigate={onNavigate}
-                    />
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <SidebarNavGroup
+              key={group.id}
+              group={group}
+              collapsed={collapsed}
+              pathname={location.pathname}
+              items={items}
+              onNavigate={onNavigate}
+            />
           ))}
         </nav>
       </ScrollArea>
@@ -198,6 +186,66 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
   )
 }
 
+function SidebarNavGroup({
+  group,
+  collapsed,
+  pathname,
+  items,
+  onNavigate,
+}: {
+  group: NavGroup
+  collapsed: boolean
+  pathname: string
+  items: NavItem[]
+  onNavigate?: () => void
+}) {
+  const hasActive = group.items.some((item) => isNavItemActive(pathname, item, items))
+  const [open, setOpen] = useState(true)
+
+  useEffect(() => {
+    if (hasActive) {
+      setOpen(true)
+    }
+  }, [hasActive])
+
+  const list = (
+    <ul className="space-y-0.5">
+      {group.items.map((item) => (
+        <li key={item.to}>
+          <SidebarLink
+            item={item}
+            collapsed={collapsed}
+            isActive={isNavItemActive(pathname, item, items)}
+            onNavigate={onNavigate}
+          />
+        </li>
+      ))}
+    </ul>
+  )
+
+  if (collapsed) {
+    return (
+      <div>
+        <span className="sr-only">{group.label}</span>
+        {list}
+      </div>
+    )
+  }
+
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger
+        className="mb-1 flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-[11px] font-medium tracking-wide text-muted-foreground uppercase hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+        aria-label={open ? `Свернуть раздел ${group.label}` : `Развернуть раздел ${group.label}`}
+      >
+        <span>{group.label}</span>
+        <ChevronDown className={cn('size-3.5 shrink-0 transition-transform', open ? 'rotate-0' : '-rotate-90')} />
+      </CollapsibleTrigger>
+      <CollapsibleContent>{list}</CollapsibleContent>
+    </Collapsible>
+  )
+}
+
 function SidebarLink({
   item,
   collapsed,
@@ -224,15 +272,24 @@ function SidebarLink({
           : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
       )}
     >
-      <Icon className="size-4 shrink-0" aria-hidden="true" />
-      {collapsed ? <span className="sr-only">{item.label}</span> : <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+      <Icon className="mt-0.5 size-4 shrink-0 self-start" aria-hidden="true" />
+      {collapsed ? (
+        <span className="sr-only">{item.label}</span>
+      ) : (
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <span className="truncate">{item.label}</span>
+            {count > 0 ? (
+              <span className="rounded-full bg-primary px-1.5 text-[10px] leading-4 font-medium text-primary-foreground">
+                {count > 99 ? '99+' : count}
+              </span>
+            ) : null}
+          </span>
+          <span className="mt-0.5 block truncate text-[11px] font-normal text-muted-foreground">{item.description}</span>
+        </span>
+      )}
       {count > 0 && collapsed ? (
         <span className="absolute top-0.5 right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-medium text-primary-foreground">
-          {count > 99 ? '99+' : count}
-        </span>
-      ) : null}
-      {count > 0 && !collapsed ? (
-        <span className="rounded-full bg-primary px-1.5 text-[10px] leading-4 font-medium text-primary-foreground">
           {count > 99 ? '99+' : count}
         </span>
       ) : null}
@@ -246,8 +303,9 @@ function SidebarLink({
   return (
     <Tooltip>
       <TooltipTrigger asChild>{link}</TooltipTrigger>
-      <TooltipContent side="right">
-        {count > 0 ? `${item.label} (${count > 99 ? '99+' : count})` : item.label}
+      <TooltipContent side="right" className="max-w-56">
+        <p>{count > 0 ? `${item.label} (${count > 99 ? '99+' : count})` : item.label}</p>
+        <p className="text-xs font-normal text-muted-foreground">{item.description}</p>
       </TooltipContent>
     </Tooltip>
   )
