@@ -57,7 +57,7 @@ export function InventoryItemsScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Номенклатура"
-        description="Карточки позиций: названия, артикулы, штрихкоды и цены. Текущие количества — в разделе «Остатки»."
+        description="Справочник запчастей и расходников. Наименование уникально."
         actions={
           canReceive ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>

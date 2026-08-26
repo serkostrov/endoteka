@@ -64,7 +64,7 @@ export function AppLayout() {
             className={
               sidebarCollapsed
                 ? 'sticky top-0 h-screen w-16 shrink-0 border-r border-sidebar-border print:hidden'
-                : 'sticky top-0 h-screen w-64 shrink-0 border-r border-sidebar-border print:hidden'
+                : 'sticky top-0 h-screen w-60 shrink-0 border-r border-sidebar-border print:hidden'
             }
           >
             <AppSidebar

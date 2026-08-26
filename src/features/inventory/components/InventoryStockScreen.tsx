@@ -62,8 +62,8 @@ export function InventoryStockScreen() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Остатки"
-        description="Сколько товара сейчас на складе. Карточка позиции открывается из строки. Номенклатура (названия и штрихкоды) — в справочниках."
+        title="Склад"
+        description="Текущий остаток по журналу движений. Карточка позиции открывается из строки или по штрихкоду."
       />
 
       <FilterBar>
