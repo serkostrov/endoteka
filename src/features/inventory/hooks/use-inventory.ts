@@ -13,6 +13,7 @@ import {
   cancelInventoryCount,
   completeInventoryCount,
   createInventoryCount,
+  deleteInventoryCount,
   getInventoryCount,
   getInventoryCountStatement,
   incrementInventoryCountItem,
@@ -246,6 +247,17 @@ export function useCreateInventoryCount() {
   return useMutation({
     mutationFn: (input: { seedMode: InventoryCountSeedMode; seedItemId?: string | null }) =>
       createInventoryCount(input),
+    onSuccess: async () => {
+      await invalidateCounts(queryClient)
+    },
+  })
+}
+
+export function useDeleteInventoryCount() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (countId: string) => deleteInventoryCount(countId),
     onSuccess: async () => {
       await invalidateCounts(queryClient)
     },

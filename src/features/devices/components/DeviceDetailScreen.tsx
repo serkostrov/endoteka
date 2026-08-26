@@ -4,12 +4,15 @@ import { useForm } from 'react-hook-form'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
+import { Pencil, Trash2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { PageTabs } from '@/components/shared/PageTabs'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
@@ -31,6 +34,8 @@ import { CLASSIFICATION_NONE, classificationLabel, emptyToNull } from '../classi
 import { useDeleteDevice, useDeviceCard, useUpdateDevice } from '../hooks/use-devices'
 import { deviceClassificationSchema, type DeviceClassificationFormValues } from '../schemas'
 import type { DeviceCard, DeviceLookup, DeviceWarranty } from '../services/devices-service'
+
+type DeviceTab = 'card' | 'orders' | 'history' | 'warranties'
 
 export function DeviceDetailScreen() {
   const { id } = useParams()
@@ -57,6 +62,7 @@ function DeviceCardBody({ card }: { card: DeviceCard }) {
   const canDelete = useHasPermission(Permission.DevicesDelete)
   const remove = useDeleteDevice()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [tab, setTab] = useState<DeviceTab>('card')
   const device = card.device
   const orders = device.repairs
   const pastRepairs = orders.filter((item) => item.statusCode === 'issued' || item.statusCode === 'cancelled')
@@ -79,92 +85,110 @@ function DeviceCardBody({ card }: { card: DeviceCard }) {
         description={classificationLabel(device)}
         actions={
           canDelete ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
+            <IconActionButton
+              label="Удалить"
               className="text-destructive hover:text-destructive"
               onClick={() => setDeleteOpen(true)}
             >
-              Удалить
-            </Button>
+              <Trash2 />
+            </IconActionButton>
           ) : undefined
         }
       />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <SectionCard title="Идентификация">
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Info label="Серийный номер" value={device.serialNumber} />
-            <Info label="Создан" value={formatDateTime(device.createdAt)} />
-            <Info label="Обновлён" value={formatDateTime(device.updatedAt)} />
-          </dl>
-        </SectionCard>
+      <PageTabs
+        aria-label="Разделы карточки прибора"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { id: 'card', label: 'Карточка' },
+          { id: 'orders', label: 'Заказы', count: orders.length },
+          { id: 'history', label: 'История', count: pastRepairs.length },
+          { id: 'warranties', label: 'Гарантии', count: card.warranties.length },
+        ]}
+      />
 
-        <SectionCard title="Текущая гарантия">
-          <WarrantyBadge warranty={device.warranty} />
-          {device.warranty ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              {formatDate(device.warranty.startsOn)} — {formatDate(device.warranty.endsOn)}
-              {device.warranty.orderNumber ? ` · заказ ${device.warranty.orderNumber}` : ''}
-            </p>
+      {tab === 'card' ? (
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SectionCard title="Идентификация">
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <Info label="Серийный номер" value={device.serialNumber} />
+                <Info label="Создан" value={formatDateTime(device.createdAt)} />
+                <Info label="Обновлён" value={formatDateTime(device.updatedAt)} />
+              </dl>
+            </SectionCard>
+
+            <SectionCard title="Текущая гарантия">
+              <WarrantyBadge warranty={device.warranty} />
+              {device.warranty ? (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {formatDate(device.warranty.startsOn)} — {formatDate(device.warranty.endsOn)}
+                  {device.warranty.orderNumber ? ` · заказ ${device.warranty.orderNumber}` : ''}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">Гарантия появляется при выдаче заказа.</p>
+              )}
+            </SectionCard>
+          </div>
+
+          <div className="grid items-stretch gap-4 lg:grid-cols-2">
+            <ClassificationSection deviceId={device.id} device={device} />
+            <DeviceFieldsSection deviceId={device.id} />
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'orders' ? (
+        <SectionCard title="Заказы" description="Все ремонты этого серийного номера, независимо от текущего клиента.">
+          <DataTable
+            caption="Заказы прибора"
+            data={orders}
+            getRowId={(row) => row.id}
+            emptyTitle="Заказов нет"
+            emptyDescription="По этому серийному номеру ещё не было ремонтов."
+            onRowClick={(row) => navigate(routes.order.replace(':id', row.id))}
+            columns={[
+              { id: 'number', header: 'Номер', cell: (row) => row.number },
+              { id: 'client', header: 'Клиент', cell: (row) => row.customerName },
+              { id: 'status', header: 'Статус', cell: (row) => row.statusName },
+              {
+                id: 'malfunction',
+                header: 'Неисправность',
+                className: 'hidden md:table-cell',
+                cell: (row) => row.claimedMalfunction || '—',
+              },
+              { id: 'created', header: 'Принят', cell: (row) => formatDate(row.createdAt) },
+            ]}
+          />
+        </SectionCard>
+      ) : null}
+
+      {tab === 'history' ? (
+        <SectionCard title="История ремонтов" description="Выданные и закрытые обращения. Клиент указан на момент заказа.">
+          {pastRepairs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Закрытых ремонтов пока нет.</p>
           ) : (
-            <p className="mt-2 text-sm text-muted-foreground">Гарантия появляется при выдаче заказа.</p>
+            <ul className="space-y-2 text-sm">
+              {pastRepairs.map((repair) => (
+                <li key={repair.id} className="flex flex-wrap justify-between gap-2 border-b pb-2 last:border-b-0">
+                  <span>
+                    <Link className="font-medium hover:underline" to={routes.order.replace(':id', repair.id)}>
+                      {repair.number}
+                    </Link>
+                    <span className="text-muted-foreground"> · {repair.customerName}</span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    {repair.statusName} · {formatDate(repair.createdAt)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </SectionCard>
-      </div>
+      ) : null}
 
-      <div className="grid items-stretch gap-4 lg:grid-cols-2">
-        <ClassificationSection deviceId={device.id} device={device} />
-        <DeviceFieldsSection deviceId={device.id} />
-      </div>
-
-      <SectionCard title="Заказы" description="Все ремонты этого серийного номера, независимо от текущего клиента.">
-        <DataTable
-          caption="Заказы прибора"
-          data={orders}
-          getRowId={(row) => row.id}
-          emptyTitle="Заказов нет"
-          emptyDescription="По этому серийному номеру ещё не было ремонтов."
-          onRowClick={(row) => navigate(routes.order.replace(':id', row.id))}
-          columns={[
-            { id: 'number', header: 'Номер', cell: (row) => row.number },
-            { id: 'client', header: 'Клиент', cell: (row) => row.customerName },
-            { id: 'status', header: 'Статус', cell: (row) => row.statusName },
-            {
-              id: 'malfunction',
-              header: 'Неисправность',
-              className: 'hidden md:table-cell',
-              cell: (row) => row.claimedMalfunction || '—',
-            },
-            { id: 'created', header: 'Принят', cell: (row) => formatDate(row.createdAt) },
-          ]}
-        />
-      </SectionCard>
-
-      <SectionCard title="История ремонтов" description="Выданные и закрытые обращения. Клиент указан на момент заказа.">
-        {pastRepairs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Закрытых ремонтов пока нет.</p>
-        ) : (
-          <ul className="space-y-2 text-sm">
-            {pastRepairs.map((repair) => (
-              <li key={repair.id} className="flex flex-wrap justify-between gap-2 border-b pb-2 last:border-b-0">
-                <span>
-                  <Link className="font-medium hover:underline" to={routes.order.replace(':id', repair.id)}>
-                    {repair.number}
-                  </Link>
-                  <span className="text-muted-foreground"> · {repair.customerName}</span>
-                </span>
-                <span className="text-muted-foreground">
-                  {repair.statusName} · {formatDate(repair.createdAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionCard>
-
-      <WarrantiesSection warranties={card.warranties} />
+      {tab === 'warranties' ? <WarrantiesSection warranties={card.warranties} /> : null}
 
       <ConfirmDialog
         open={deleteOpen}
@@ -190,9 +214,9 @@ function ClassificationSection({ deviceId, device }: { deviceId: string; device:
       className="h-full"
       actions={
         canUpdate && !editing ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Редактировать
-          </Button>
+          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
+            <Pencil />
+          </IconActionButton>
         ) : null
       }
     >
@@ -316,9 +340,9 @@ function DeviceFieldsSection({ deviceId }: { deviceId: string }) {
       className="h-full"
       actions={
         canUpdate && !editing ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Редактировать
-          </Button>
+          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
+            <Pencil />
+          </IconActionButton>
         ) : null
       }
     >

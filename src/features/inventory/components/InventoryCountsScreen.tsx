@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
+import { Trash2 } from 'lucide-react'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { FilterBar } from '@/components/shared/FilterBar'
+import { IconActionButton } from '@/components/shared/IconActionButton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
@@ -29,17 +32,33 @@ import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDateTime } from '@/lib/utils/date'
 
-import { useCreateInventoryCount, useInventoryCounts } from '../hooks/use-inventory'
+import { useCreateInventoryCount, useDeleteInventoryCount, useInventoryCounts } from '../hooks/use-inventory'
+import type { InventoryCountListItem } from '../services/counts-service'
 
 export function InventoryCountsScreen() {
   const [page, setPage] = useState(1)
   const [status, setStatus] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<InventoryCountListItem | null>(null)
   const canCount = useHasPermission(Permission.InventoryCount)
   const countsQuery = useInventoryCounts(status, page, INVENTORY_PAGE_SIZE)
+  const remove = useDeleteInventoryCount()
   const navigate = useNavigate()
   const total = countsQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / INVENTORY_PAGE_SIZE))
+
+  async function handleDelete() {
+    if (!deleteTarget) {
+      return
+    }
+    try {
+      await remove.mutateAsync(deleteTarget.id)
+      toast.success('Документ удалён')
+      setDeleteTarget(null)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -88,10 +107,11 @@ export function InventoryCountsScreen() {
         onRowClick={(row) => navigate(routes.inventoryCount.replace(':id', row.id))}
         pagination={{ page, pageCount, onPageChange: setPage }}
         columns={[
-          { id: 'number', header: 'Номер', cell: (row) => row.number },
+          { id: 'number', header: 'Номер', className: 'min-w-[8rem]', cell: (row) => row.number },
           {
             id: 'status',
             header: 'Статус',
+            className: 'w-[1%]',
             cell: (row) => (
               <StatusBadge tone={inventoryCountStatusTone(row.status)}>
                 {inventoryCountStatusLabels[row.status]}
@@ -101,24 +121,68 @@ export function InventoryCountsScreen() {
           {
             id: 'progress',
             header: 'Прогресс',
+            className: 'w-[1%]',
             cell: (row) => `${row.countedCount} / ${row.lineCount}`,
           },
           {
             id: 'diff',
             header: 'Расхождения',
+            className: 'w-[1%]',
             cell: (row) => (row.discrepancyCount > 0 ? String(row.discrepancyCount) : '—'),
           },
-          { id: 'actor', header: 'Ответственный', cell: (row) => row.actorName || '—' },
+          { id: 'actor', header: 'Ответственный', className: 'w-[1%]', cell: (row) => row.actorName || '—' },
           {
             id: 'created',
             header: 'Создан',
-            className: 'hidden md:table-cell',
+            className: 'hidden w-[1%] md:table-cell',
             cell: (row) => formatDateTime(row.createdAt),
           },
+          ...(canCount
+            ? [
+                {
+                  id: 'actions',
+                  header: 'Действия',
+                  className: 'w-[1%] whitespace-nowrap',
+                  cell: (row: InventoryCountListItem) => (
+                    <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+                      <IconActionButton
+                        label={
+                          row.status === InventoryCountStatus.Completed
+                            ? 'Проведённую инвентаризацию нельзя удалить'
+                            : 'Удалить'
+                        }
+                        disabled={row.status === InventoryCountStatus.Completed}
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(row)}
+                      >
+                        <Trash2 />
+                      </IconActionButton>
+                    </div>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
 
       <CreateCountDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Удалить инвентаризацию"
+        description={
+          deleteTarget
+            ? `${deleteTarget.number} будет удалена без возможности восстановления.`
+            : ''
+        }
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null)
+          }
+        }}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   )
 }

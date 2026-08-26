@@ -130,15 +130,13 @@ function SaleDocumentBody({ document }: { document: SaleDocument }) {
                 Печать
               </Button>
               {canRemove ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
+                <IconActionButton
+                  label="Удалить"
                   className="text-destructive hover:text-destructive"
                   onClick={() => setDeleteOpen(true)}
                 >
-                  Удалить
-                </Button>
+                  <Trash2 />
+                </IconActionButton>
               ) : null}
               {editable ? (
                 <Button

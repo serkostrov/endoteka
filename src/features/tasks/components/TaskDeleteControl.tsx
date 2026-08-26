@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { IconActionButton } from '@/components/shared/IconActionButton'
-import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
@@ -19,11 +18,10 @@ type TaskDeleteTarget = {
 
 type TaskDeleteControlProps = {
   task: TaskDeleteTarget
-  variant?: 'icon' | 'button'
   onDeleted?: () => void
 }
 
-export function TaskDeleteControl({ task, variant = 'icon', onDeleted }: TaskDeleteControlProps) {
+export function TaskDeleteControl({ task, onDeleted }: TaskDeleteControlProps) {
   const canDelete = useHasPermission(Permission.TasksDelete)
   const remove = useDeleteTask()
   const [open, setOpen] = useState(false)
@@ -45,31 +43,19 @@ export function TaskDeleteControl({ task, variant = 'icon', onDeleted }: TaskDel
 
   return (
     <>
-      {variant === 'button' ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
+      <div
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <IconActionButton
+          label="Удалить"
           className="text-destructive hover:text-destructive"
           onClick={() => setOpen(true)}
         >
-          Удалить
-        </Button>
-      ) : (
-        <div
-          onClick={(event) => event.stopPropagation()}
-          onKeyDown={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <IconActionButton
-            label="Удалить"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setOpen(true)}
-          >
-            <Trash2 />
-          </IconActionButton>
-        </div>
-      )}
+          <Trash2 />
+        </IconActionButton>
+      </div>
       <ConfirmDialog
         open={open}
         title="Удалить задачу"

@@ -1860,6 +1860,10 @@ export type Database = {
         Args: { target_count_id: string }
         Returns: undefined
       }
+      delete_inventory_count: {
+        Args: { target_count_id: string }
+        Returns: undefined
+      }
       list_inventory_counts: {
         Args: { status_filter?: string; page_number?: number; page_size?: number }
         Returns: {

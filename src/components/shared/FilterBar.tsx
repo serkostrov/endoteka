@@ -12,7 +12,7 @@ export function FilterBar({ children, end, className }: FilterBarProps) {
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-2',
+        'flex flex-wrap items-end gap-2',
         '[&_[data-slot=input]]:h-9',
         '[&_[data-slot=select-trigger]]:h-9!',
         '[&>button]:h-9!',

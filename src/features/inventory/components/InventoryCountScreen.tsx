@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { FilterBar } from '@/components/shared/FilterBar'
@@ -25,6 +26,7 @@ import {
   inventoryCountStatusLabels,
   inventoryCountStatusTone,
 } from '@/lib/constants/inventory'
+import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { formatDateTime } from '@/lib/utils/date'
@@ -36,6 +38,7 @@ import {
   useAddInventoryCountItem,
   useCancelInventoryCount,
   useCompleteInventoryCount,
+  useDeleteInventoryCount,
   useIncrementInventoryCountItem,
   useInventoryCount,
   useInventoryCountLines,
@@ -73,8 +76,11 @@ const countTabs = [
 ]
 
 function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
+  const navigate = useNavigate()
   const editable =
     document.status === InventoryCountStatus.Draft || document.status === InventoryCountStatus.InProgress
+  const canDelete = document.status !== InventoryCountStatus.Completed
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const [tab, setTab] = useState<(typeof countTabs)[number]['id']>('count')
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<InventoryCountLineFilter>(InventoryCountLineFilter.All)
@@ -91,6 +97,7 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
   const start = useStartInventoryCount(document.id)
   const cancel = useCancelInventoryCount(document.id)
   const complete = useCompleteInventoryCount(document.id)
+  const remove = useDeleteInventoryCount()
   const addItem = useAddInventoryCountItem(document.id)
   const increment = useIncrementInventoryCountItem(document.id)
   const removeLine = useRemoveInventoryCountLine(document.id)
@@ -122,6 +129,17 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
     try {
       await addItem.mutateAsync(item.id)
       toast.success(`Добавлено: ${item.name}`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function handleDelete() {
+    try {
+      await remove.mutateAsync(document.id)
+      toast.success('Документ удалён')
+      setDeleteOpen(false)
+      navigate(routes.inventoryCounts)
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -184,6 +202,15 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
                   Отменить
                 </Button>
               </>
+            ) : null}
+            {canDelete ? (
+              <IconActionButton
+                label="Удалить"
+                className="text-destructive hover:text-destructive"
+                onClick={() => setDeleteOpen(true)}
+              >
+                <Trash2 />
+              </IconActionButton>
             ) : null}
           </div>
         }
@@ -394,6 +421,15 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
           />
         </SectionCard>
       )}
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить инвентаризацию"
+        description={`${document.number} будет удалена без возможности восстановления.`}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   )
 }

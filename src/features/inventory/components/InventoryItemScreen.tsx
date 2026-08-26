@@ -4,10 +4,12 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
+import { Pencil, Trash2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -139,15 +141,13 @@ function ItemCardBody({
               </Button>
             ) : null}
             {canReceive ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
+              <IconActionButton
+                label="Удалить"
                 className="text-destructive hover:text-destructive"
                 onClick={() => setDeleteOpen(true)}
               >
-                Удалить
-              </Button>
+                <Trash2 />
+              </IconActionButton>
             ) : null}
           </div>
         }
@@ -239,9 +239,9 @@ function ItemDataSection({ item, canEdit }: { item: InventoryItem; canEdit: bool
       description={editing ? 'Цены справочника не меняют уже оприходованные партии.' : undefined}
       actions={
         canEdit && !editing ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Редактировать
-          </Button>
+          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
+            <Pencil />
+          </IconActionButton>
         ) : null
       }
     >
@@ -358,9 +358,9 @@ function ItemFieldsSection({ itemId, canEdit }: { itemId: string; canEdit: boole
       title="Дополнительные поля"
       actions={
         canEdit && !editing ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Редактировать
-          </Button>
+          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
+            <Pencil />
+          </IconActionButton>
         ) : null
       }
     >

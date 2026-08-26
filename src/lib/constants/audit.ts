@@ -77,6 +77,7 @@ export const auditActionLabels: Record<string, string> = {
   'inventory.count_started': 'Инвентаризация начата',
   'inventory.count_cancelled': 'Инвентаризация отменена',
   'inventory.count_completed': 'Инвентаризация проведена',
+  'inventory.count_deleted': 'Инвентаризация удалена',
   'sale.created': 'Продажа создана',
   'sale.confirmed': 'Продажа подтверждена',
   'sale.cancelled': 'Продажа отменена',
@@ -140,6 +141,7 @@ export const auditActionFilterGroups: { label: string; actions: string[] }[] = [
       'inventory.count_started',
       'inventory.count_completed',
       'inventory.count_cancelled',
+      'inventory.count_deleted',
     ],
   },
   {

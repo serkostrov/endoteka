@@ -4,11 +4,14 @@ import { useForm } from 'react-hook-form'
 import { useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
+import { Pencil } from 'lucide-react'
 
 import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { PageTabs } from '@/components/shared/PageTabs'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
@@ -28,11 +31,12 @@ import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/f
 import { CustomerFields } from './CustomerFields'
 import { customerKindLabel, customerFormSchema, nameLabel, type CustomerFormValues } from '../schemas'
 import { useCustomerCard, useUpdateCustomer } from '../hooks/use-customers'
-import type { Customer } from '../services/customers-service'
+import type { Customer, CustomerDevice, CustomerHistoryEvent, CustomerOrder } from '../services/customers-service'
+
+type CustomerTab = 'card' | 'devices' | 'orders' | 'history'
 
 export function CustomerDetailScreen() {
   const { id } = useParams()
-  const navigate = useNavigate()
   const cardQuery = useCustomerCard(id)
 
   if (cardQuery.isLoading) {
@@ -57,66 +61,107 @@ export function CustomerDetailScreen() {
         description={`${customerKindLabel(customer.kind)} · обновлён ${formatDateTime(customer.updatedAt)}`}
       />
 
-      <div className="grid items-stretch gap-4 lg:grid-cols-2">
-        <CustomerDataSection customer={customer} />
-        <CustomerFieldsSection customerId={customer.id} />
-      </div>
+      <CustomerCardTabs customer={customer} devices={devices} orders={orders} history={history} />
+    </div>
+  )
+}
 
-      <SectionCard title="Приборы" description="Приборы из заказов этого клиента и текущей привязки.">
-        <DataTable
-          caption="Приборы клиента"
-          data={devices}
-          getRowId={(row) => row.id}
-          emptyTitle="Приборов нет"
-          emptyDescription="Появятся, когда клиент сдаст эндоскоп в ремонт."
-          onRowClick={(row) => navigate(routes.device.replace(':id', row.id))}
-          columns={[
-            { id: 'serial', header: 'Серийный номер', cell: (row) => row.serialNumber },
-            { id: 'device', header: 'Модель', cell: (row) => row.label || '—' },
-            {
-              id: 'group',
-              header: 'Группа',
-              className: 'hidden md:table-cell',
-              cell: (row) => row.groupName || '—',
-            },
-          ]}
-        />
-      </SectionCard>
+function CustomerCardTabs({
+  customer,
+  devices,
+  orders,
+  history,
+}: {
+  customer: Customer
+  devices: CustomerDevice[]
+  orders: CustomerOrder[]
+  history: CustomerHistoryEvent[]
+}) {
+  const navigate = useNavigate()
+  const [tab, setTab] = useState<CustomerTab>('card')
 
-      <SectionCard title="Заказы" description="Обращения этой организации или физлица.">
-        <DataTable
-          caption="Заказы клиента"
-          data={orders}
-          getRowId={(row) => row.id}
-          emptyTitle="Заказов нет"
-          emptyDescription="Новые заказы появятся после приёмки."
-          onRowClick={(row) => navigate(routes.order.replace(':id', row.id))}
-          columns={[
-            { id: 'number', header: 'Номер', cell: (row) => row.number },
-            { id: 'device', header: 'Прибор', cell: (row) => row.deviceLabel || row.serialNumber || '—' },
-            { id: 'status', header: 'Статус', cell: (row) => row.statusName },
-            { id: 'created', header: 'Принят', cell: (row) => formatDate(row.createdAt) },
-          ]}
-        />
-      </SectionCard>
+  return (
+    <div className="space-y-4">
+      <PageTabs
+        aria-label="Разделы карточки клиента"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { id: 'card', label: 'Карточка' },
+          { id: 'devices', label: 'Приборы', count: devices.length },
+          { id: 'orders', label: 'Заказы', count: orders.length },
+          { id: 'history', label: 'История', count: history.length },
+        ]}
+      />
 
-      <SectionCard title="История" description="Создание и изменения карточки. Записи только для чтения.">
-        {history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Записей пока нет.</p>
-        ) : (
-          <ol className="space-y-3">
-            {history.map((event) => (
-              <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
-                <p className="text-sm font-medium">{event.summary}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatDateTime(event.createdAt)}
-                  {event.actorName ? ` · ${event.actorName}` : ''}
-                </p>
-              </li>
-            ))}
-          </ol>
-        )}
-      </SectionCard>
+      {tab === 'card' ? (
+        <div className="grid items-stretch gap-4 lg:grid-cols-2">
+          <CustomerDataSection customer={customer} />
+          <CustomerFieldsSection customerId={customer.id} />
+        </div>
+      ) : null}
+
+      {tab === 'devices' ? (
+        <SectionCard title="Приборы" description="Приборы из заказов этого клиента и текущей привязки.">
+          <DataTable
+            caption="Приборы клиента"
+            data={devices}
+            getRowId={(row) => row.id}
+            emptyTitle="Приборов нет"
+            emptyDescription="Появятся, когда клиент сдаст эндоскоп в ремонт."
+            onRowClick={(row) => navigate(routes.device.replace(':id', row.id))}
+            columns={[
+              { id: 'serial', header: 'Серийный номер', cell: (row) => row.serialNumber },
+              { id: 'device', header: 'Модель', cell: (row) => row.label || '—' },
+              {
+                id: 'group',
+                header: 'Группа',
+                className: 'hidden md:table-cell',
+                cell: (row) => row.groupName || '—',
+              },
+            ]}
+          />
+        </SectionCard>
+      ) : null}
+
+      {tab === 'orders' ? (
+        <SectionCard title="Заказы" description="Обращения этой организации или физлица.">
+          <DataTable
+            caption="Заказы клиента"
+            data={orders}
+            getRowId={(row) => row.id}
+            emptyTitle="Заказов нет"
+            emptyDescription="Новые заказы появятся после приёмки."
+            onRowClick={(row) => navigate(routes.order.replace(':id', row.id))}
+            columns={[
+              { id: 'number', header: 'Номер', cell: (row) => row.number },
+              { id: 'device', header: 'Прибор', cell: (row) => row.deviceLabel || row.serialNumber || '—' },
+              { id: 'status', header: 'Статус', cell: (row) => row.statusName },
+              { id: 'created', header: 'Принят', cell: (row) => formatDate(row.createdAt) },
+            ]}
+          />
+        </SectionCard>
+      ) : null}
+
+      {tab === 'history' ? (
+        <SectionCard title="История" description="Создание и изменения карточки. Записи только для чтения.">
+          {history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Записей пока нет.</p>
+          ) : (
+            <ol className="space-y-3">
+              {history.map((event) => (
+                <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
+                  <p className="text-sm font-medium">{event.summary}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDateTime(event.createdAt)}
+                    {event.actorName ? ` · ${event.actorName}` : ''}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          )}
+        </SectionCard>
+      ) : null}
     </div>
   )
 }
@@ -132,9 +177,9 @@ function CustomerDataSection({ customer }: { customer: Customer }) {
       className="h-full"
       actions={
         canUpdate && !editing ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Редактировать
-          </Button>
+          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
+            <Pencil />
+          </IconActionButton>
         ) : null
       }
     >
@@ -272,9 +317,9 @@ function CustomerFieldsSection({ customerId }: { customerId: string }) {
       className="h-full"
       actions={
         canUpdate && !editing ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Редактировать
-          </Button>
+          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
+            <Pencil />
+          </IconActionButton>
         ) : null
       }
     >

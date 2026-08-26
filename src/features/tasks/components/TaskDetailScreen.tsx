@@ -66,7 +66,7 @@ function TaskBody({ task }: { task: Task }) {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <TaskCompleteControl task={task} variant="button" />
-            <TaskDeleteControl task={task} variant="button" onDeleted={() => navigate(routes.tasks)} />
+            <TaskDeleteControl task={task} onDeleted={() => navigate(routes.tasks)} />
           </div>
         }
       />

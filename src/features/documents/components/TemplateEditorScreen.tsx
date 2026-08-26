@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { ArrowDown, ArrowUp, Printer, Trash2 } from 'lucide-react'
 
 import { ErrorState } from '@/components/shared/ErrorState'
+import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -177,9 +178,14 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
                 Лист печати
               </Link>
             </Button>
-            <Button type="button" variant="outline" size="sm" disabled={remove.isPending} onClick={() => void handleDelete()}>
-              Удалить
-            </Button>
+            <IconActionButton
+              label="Удалить"
+              className="text-destructive hover:text-destructive"
+              disabled={remove.isPending}
+              onClick={() => void handleDelete()}
+            >
+              <Trash2 />
+            </IconActionButton>
             <Button type="button" size="sm" disabled={update.isPending} onClick={() => void save()}>
               {update.isPending ? 'Сохранение…' : 'Сохранить'}
             </Button>

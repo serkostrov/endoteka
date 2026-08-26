@@ -291,6 +291,16 @@ export async function completeInventoryCount(id: string): Promise<void> {
   }
 }
 
+export async function deleteInventoryCount(id: string): Promise<void> {
+  const { error } = await getSupabase().rpc('delete_inventory_count', {
+    target_count_id: id,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить инвентаризацию.')
+  }
+}
+
 export async function addInventoryCountItem(countId: string, itemId: string): Promise<string> {
   const { data, error } = await getSupabase().rpc('add_inventory_count_item', {
     target_count_id: countId,
