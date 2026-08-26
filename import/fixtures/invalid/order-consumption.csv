@@ -1,0 +1,2 @@
+source_id,order_source_id,item_source_id,quantity
+cons-bad,ord-ok,missing-item,1

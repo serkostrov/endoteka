@@ -1,0 +1,4 @@
+source_id,code,name,article,barcode,category_code,unit_code,purchase_price,repair_price,retail_price
+item-1,N-1001,Уплотнительное кольцо 12,ART-12,2000000000011,spare_parts,pcs,120.50,0,190
+item-2,N-1002,Смазка силиконовая,ART-SM,2000000000012,consumables,pcs,80,0,140
+item-3,N-1003,Клапан биопсийный,ART-VL,,spare_parts,pcs,350,0,520

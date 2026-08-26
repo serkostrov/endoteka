@@ -1,0 +1,3 @@
+source_id,name,kind,inn,kpp,ogrn,phone,email,city,contact_name,notes
+cus-1,Клиника Север,organization,7701234567,770101001,1027700000001,+79990001111,north@clinic.local,Москва,Сидорова,постоянный клиент
+cus-2,ИП Волков,individual,771122334455,,,,,volkov@mail.local,Тула,Волков,

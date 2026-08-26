@@ -1,0 +1,3 @@
+source_id,item_source_id,item_code,quantity,purchase_price,supplier,receipt_date
+st-1,item-1,,10,120.50,Склад-источник,2024-01-15
+st-2,item-2,,4,80,Склад-источник,2024-01-15

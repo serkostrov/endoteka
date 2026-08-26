@@ -1,0 +1,28 @@
+# Git / IDE
+.git
+.github
+.cursor
+.vscode
+.idea
+
+# Dependencies and build
+node_modules
+dist
+coverage
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Not needed in the frontend image
+import
+supabase
+agent-transcripts
+terminals
+
+# Misc
+*.md
+!README.md
+*.log
+.DS_Store

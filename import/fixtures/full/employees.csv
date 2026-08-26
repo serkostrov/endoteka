@@ -1,0 +1,3 @@
+source_id,full_name,email,role_code,is_active
+emp-1,Иванов Иван,ivanov@endoteka.local,manager,true
+emp-2,Петрова Анна,petrova@endoteka.local,storekeeper,true

@@ -1,0 +1,3 @@
+source_id,code,name,category_code,unit_code,purchase_price
+item-ok,N-2001,Валидная позиция,spare_parts,pcs,10
+item-bad,N-2002,,spare_parts,pcs,10

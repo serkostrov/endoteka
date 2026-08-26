@@ -1,0 +1,3 @@
+source_id,number,customer_source_id,serial_number,status_code
+ord-ok,ЗК-2001,cus-ok,SN-OK-1,repair
+ord-bad,ЗК-2002,cus-ok,,repair

@@ -1,0 +1,3 @@
+source_id,number,customer_source_id,customer_inn,serial_number,model_source_id,claimed_malfunction,completeness,external_condition,deadline,status_code,employee_source_id,employee_email,created_at
+ord-1,ЗК-1001,cus-1,,SN-OLD-001,mod-1,Нет изображения,полный комплект,царапины корпуса,2024-02-01,repair,emp-1,,2024-01-20
+ord-2,ЗК-1002,cus-2,,SN-OLD-002,mod-2,Засвет,без чехла,,2024-03-01,issued,,petrova@endoteka.local,2024-02-02
