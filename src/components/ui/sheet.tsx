@@ -1,6 +1,7 @@
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { Dialog as SheetPrimitive } from "radix-ui"
+import type { FieldValues, UseFormHandleSubmit } from "react-hook-form"
 import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
@@ -31,8 +32,8 @@ export function useSheetDirty(dirty: boolean, save?: SheetSaveFn) {
   }, [ctx, dirty, hasSave, id])
 }
 
-export async function runSheetFormSave<T>(
-  handleSubmit: (onValid: (values: T) => Promise<void>) => (event?: unknown) => Promise<void>,
+export async function runSheetFormSave<T extends FieldValues>(
+  handleSubmit: UseFormHandleSubmit<T>,
   persist: (values: T) => Promise<void>,
 ) {
   let saved = false

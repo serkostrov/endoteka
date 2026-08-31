@@ -265,7 +265,7 @@ export function getBreadcrumbs(pathname: string, items: NavItem[] = flattenNavIt
       { label: 'Настройки', to: routes.settings },
       { label: 'Шаблоны документов', to: routes.documentTemplates },
     ]
-    if (print === 'print') {
+    if (print === 'print' && id) {
       return [
         ...templateCrumbs,
         { label: 'Макет', to: routes.documentTemplate.replace(':id', id) },
@@ -281,7 +281,9 @@ export function getBreadcrumbs(pathname: string, items: NavItem[] = flattenNavIt
 
   if (/^\/documents\/[^/]+\/print$/.test(pathname)) {
     const id = pathname.split('/')[2]
-    return [...crumbs, { label: 'Документ', to: routes.document.replace(':id', id) }, { label: 'Печать' }]
+    if (id) {
+      return [...crumbs, { label: 'Документ', to: routes.document.replace(':id', id) }, { label: 'Печать' }]
+    }
   }
 
   if (/^\/documents\/[^/]+$/.test(pathname)) {

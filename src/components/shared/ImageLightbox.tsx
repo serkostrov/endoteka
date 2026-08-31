@@ -41,12 +41,12 @@ export function ImageLightbox({
   const [copied, setCopied] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const current = items[Math.min(index, Math.max(items.length - 1, 0))]
+  const activeItem = items[Math.min(index, Math.max(items.length - 1, 0))]
 
   useEffect(() => {
     setRotation(0)
     setCopied(false)
-  }, [index, current?.src])
+  }, [index, activeItem?.src])
 
   useEffect(() => {
     if (!open) {
@@ -91,17 +91,19 @@ export function ImageLightbox({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [index, items.length, onIndexChange, open])
 
-  if (!current) {
+  if (!activeItem) {
     return null
   }
 
-  const title = current.title || current.alt || 'Фото'
+  const { src, alt, title: itemTitle } = activeItem
+  const item = activeItem
+  const title = itemTitle || alt || 'Фото'
   const canNavigate = items.length > 1 && onIndexChange
   const sideways = rotation % 180 !== 0
 
   async function copyLink() {
     try {
-      await navigator.clipboard.writeText(current.src)
+      await navigator.clipboard.writeText(src)
       setCopied(true)
       toast.success('Ссылка скопирована')
       window.setTimeout(() => setCopied(false), 1600)
@@ -112,7 +114,7 @@ export function ImageLightbox({
 
   async function downloadFile() {
     try {
-      const response = await fetch(current.src)
+      const response = await fetch(src)
       if (!response.ok) {
         throw new Error('Не удалось скачать файл.')
       }
@@ -136,7 +138,7 @@ export function ImageLightbox({
     }
     setDeleting(true)
     try {
-      await onDelete(current)
+      await onDelete(item)
       setConfirmDelete(false)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -201,8 +203,8 @@ export function ImageLightbox({
               </>
             ) : null}
             <img
-              src={current.src}
-              alt={current.alt || ''}
+              src={src}
+              alt={alt || ''}
               draggable={false}
               style={{ transform: `rotate(${rotation}deg)` }}
               className={cn(
@@ -218,7 +220,7 @@ export function ImageLightbox({
               <ViewerAction
                 label="Открыть"
                 icon={<SquareArrowOutUpRight className="size-4" />}
-                onClick={() => window.open(current.src, '_blank', 'noopener,noreferrer')}
+                onClick={() => window.open(src, '_blank', 'noopener,noreferrer')}
               />
               <ViewerAction
                 label="Копировать ссылку"
