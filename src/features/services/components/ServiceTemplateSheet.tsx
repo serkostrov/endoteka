@@ -29,7 +29,7 @@ export function ServiceTemplateSheet({
           <SheetDescription>Шаблон из справочника услуг.</SheetDescription>
         </SheetHeader>
         {templateQuery.isLoading ? (
-          <LoadingState title="Загрузка" className="py-12" />
+          <LoadingState label="Загрузка" className="py-12 min-h-0" />
         ) : (
           <ErrorState
             title="Услуга не найдена"
