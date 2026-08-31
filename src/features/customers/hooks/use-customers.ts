@@ -1,6 +1,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { queryKeys } from '@/lib/query-keys'
+import type { CustomerKind } from '@/lib/constants/customers'
 
 import {
   createCustomer,
@@ -13,10 +14,10 @@ import {
   type CustomerInput,
 } from '../services/customers-service'
 
-export function useCustomers(search: string, page: number, pageSize: number) {
+export function useCustomers(search: string, page: number, pageSize: number, kind?: CustomerKind) {
   return useQuery({
-    queryKey: queryKeys.customers.list({ search, page }),
-    queryFn: () => listCustomers(search, page, pageSize),
+    queryKey: queryKeys.customers.list({ search, page, kind }),
+    queryFn: () => listCustomers(search, page, pageSize, kind),
     placeholderData: keepPreviousData,
   })
 }

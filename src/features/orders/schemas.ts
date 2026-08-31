@@ -3,24 +3,9 @@ import { z } from 'zod'
 export const createOrderSchema = z.object({
   customerId: z.string().min(1, 'Выберите клиента'),
   deviceId: z.string().min(1, 'Выберите прибор'),
-  claimedMalfunction: z.string().trim().min(1, 'Укажите заявленную неисправность'),
-  completeness: z.string(),
-  externalCondition: z.string(),
-  deadline: z.string(),
-  responsibleId: z.string(),
 })
 
 export type CreateOrderFormValues = z.infer<typeof createOrderSchema>
-
-export const updateOrderRepairSchema = z.object({
-  claimedMalfunction: z.string().trim().min(1, 'Укажите заявленную неисправность'),
-  completeness: z.string(),
-  externalCondition: z.string(),
-  deadline: z.string(),
-  responsibleId: z.string(),
-})
-
-export type UpdateOrderRepairFormValues = z.infer<typeof updateOrderRepairSchema>
 
 export const attachmentUrlSchema = z.object({
   url: z

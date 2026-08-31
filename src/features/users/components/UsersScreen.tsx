@@ -69,16 +69,17 @@ export function UsersScreen() {
       <PageHeader
         title="Пользователи"
         description="Сотрудники сервисного центра, роли и статус доступа."
-        actions={
+      />
+
+      <FilterBar
+        end={
           canInvite ? (
             <Button type="button" onClick={() => setInviteOpen(true)}>
               Пригласить
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <SearchInput
           value={search}
           onChange={(next) => {

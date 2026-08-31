@@ -72,17 +72,18 @@ export function SalesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Продажи"
-        description="Счета внешним клиентам. Остаток списывается FIFO только после подтверждения."
-        actions={
+        description="Счета внешним клиентам. Остаток списывается только после подтверждения: сначала самые ранние поступления."
+      />
+
+      <FilterBar
+        end={
           canCreate ? (
             <Button type="button" disabled={create.isPending} onClick={() => void handleCreate()}>
               {create.isPending ? 'Создание…' : 'Новая продажа'}
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <SearchInput
           value={search}
           onChange={(next) => {

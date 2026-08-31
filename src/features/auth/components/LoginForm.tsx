@@ -8,6 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input'
 import { getErrorMessage } from '@/lib/errors'
 
+import { SavedAccountsOnLogin } from './AccountSwitcher'
 import { loginSchema, type LoginFormValues } from '../schemas'
 import { signInWithPassword } from '../services/auth-service'
 
@@ -34,6 +35,7 @@ export function LoginForm() {
   return (
     <Form {...form}>
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+        <SavedAccountsOnLogin />
         {formError ? (
           <Alert variant="destructive">
             <AlertTitle>Вход не выполнен</AlertTitle>

@@ -4,23 +4,26 @@ import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { DatePicker } from '@/components/shared/DatePicker'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
+import { Form, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { CustomerPicker } from '@/features/customers'
 import { DevicePicker } from '@/features/devices'
 import { useSerialSearch } from '@/features/devices/hooks/use-devices'
-import { DynamicFieldRenderer, buildEntityValuesSchema, saveDynamicFieldValues } from '@/features/dynamic-fields'
+import {
+  DynamicFieldRenderer,
+  DynamicFieldsGrid,
+  buildEntityValuesSchema,
+  filledFieldValues,
+  groupDynamicFields,
+  saveDynamicFieldValues,
+} from '@/features/dynamic-fields'
 import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
 import { useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
 import { useHasPermission } from '@/features/auth'
-import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
-import { FieldEntity } from '@/lib/constants/fields'
+import { FieldEntity, isOrderBuiltinField } from '@/lib/constants/fields'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
@@ -28,15 +31,13 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
 import { useCreateOrder, usePreviewOrderNumber } from '../hooks/use-orders'
+import { orderColumnsFromBuiltin, splitOrderFieldValues } from '../lib/order-card-fields'
 import { createOrderSchema, type CreateOrderFormValues } from '../schemas'
-
-const NONE = '__none__'
 
 export function CreateOrderScreen() {
   const navigate = useNavigate()
   const canUpdate = useHasPermission(Permission.OrdersUpdate)
   const previewQuery = usePreviewOrderNumber(true)
-  const employees = useActiveEmployees()
   const fieldsQuery = useDynamicFields(FieldEntity.Orders)
   const create = useCreateOrder()
   const createInFlight = useRef(false)
@@ -46,17 +47,13 @@ export function CreateOrderScreen() {
     () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
     [fieldsQuery.data],
   )
+  const fieldGroups = useMemo(() => groupDynamicFields(activeFields), [activeFields])
 
   const form = useForm<CreateOrderFormValues>({
     resolver: zodResolver(createOrderSchema),
     defaultValues: {
       customerId: '',
       deviceId: '',
-      claimedMalfunction: '',
-      completeness: '',
-      externalCondition: '',
-      deadline: '',
-      responsibleId: NONE,
     },
   })
 
@@ -79,9 +76,9 @@ export function CreateOrderScreen() {
     }
 
     const extraSchema = buildEntityValuesSchema(activeFields)
-    const extraParsed = extraSchema.safeParse(filledExtraValues(activeFields, extraValues))
+    const extraParsed = extraSchema.safeParse(filledFieldValues(activeFields, extraValues))
     if (!extraParsed.success) {
-      toast.error('Заполните дополнительные поля заказа.')
+      toast.error('Заполните обязательные поля заказа.')
       return
     }
 
@@ -91,20 +88,24 @@ export function CreateOrderScreen() {
       return
     }
 
+    const { builtin, extra } = splitOrderFieldValues(extraParsed.data)
+    const columns = orderColumnsFromBuiltin(builtin)
+
     createInFlight.current = true
     try {
       const orderId = await create.mutateAsync({
         customerId: values.customerId,
         deviceId,
-        claimedMalfunction: values.claimedMalfunction,
-        completeness: values.completeness,
-        externalCondition: values.externalCondition,
-        deadline: values.deadline || null,
-        responsibleId: values.responsibleId === NONE ? null : values.responsibleId,
+        claimedMalfunction: columns.claimedMalfunction,
+        completeness: columns.completeness,
+        externalCondition: '',
+        deadline: columns.deadline,
+        responsibleId: columns.responsibleId,
       })
 
-      if (canUpdate && activeFields.length > 0) {
-        await saveDynamicFieldValues(FieldEntity.Orders, orderId, extraParsed.data)
+      const extraFields = activeFields.filter((field) => !isOrderBuiltinField(field.code))
+      if (canUpdate && extraFields.length > 0) {
+        await saveDynamicFieldValues(FieldEntity.Orders, orderId, extra)
       }
 
       toast.success('Заказ создан')
@@ -143,7 +144,7 @@ export function CreateOrderScreen() {
                 <p className="text-lg font-semibold tracking-tight">{previewQuery.data || 'ЗК-…'}</p>
               </div>
 
-              <div className="grid items-start gap-4 md:grid-cols-2">
+              <div className="grid gap-4">
                 <FormField
                   control={form.control}
                   name="customerId"
@@ -192,123 +193,32 @@ export function CreateOrderScreen() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Приёмка">
-            <div className="grid gap-4">
-              <FormField
-                control={form.control}
-                name="claimedMalfunction"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Заявленная неисправность</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={4} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="completeness"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Комплектность</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} rows={3} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="externalCondition"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Внешнее состояние</FormLabel>
-                      <FormControl>
-                        <Textarea {...field} rows={3} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="deadline"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Срок</FormLabel>
-                      <FormControl>
-                        <DatePicker
-                          value={field.value ?? ''}
-                          onChange={field.onChange}
-                          onBlur={field.onBlur}
-                          name={field.name}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="responsibleId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Ответственный</FormLabel>
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <FormControl>
-                          <SelectTrigger className="w-full" aria-label="Ответственный">
-                            <SelectValue placeholder="Не назначен" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={NONE}>Не назначен</SelectItem>
-                          {(employees.data ?? []).map((employee) => (
-                            <SelectItem key={employee.id} value={employee.id}>
-                              {employee.fullName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-          </SectionCard>
-
-          {activeFields.length > 0 ? (
-            <SectionCard title="Дополнительные поля">
-              <div className="grid gap-4 md:grid-cols-2">
-                {activeFields.map((field) => (
+          {fieldGroups.map((group) => (
+            <SectionCard key={group.name} title={group.name}>
+              <DynamicFieldsGrid>
+                {group.fields.map((field) => (
                   <DynamicFieldRenderer
                     key={field.id}
                     field={field}
                     value={extraValues[field.code] ?? emptyFieldValue(field)}
                     onChange={(value) => setExtraValues((current) => ({ ...current, [field.code]: value }))}
-                    disabled={!canUpdate}
+                    disabled={!canUpdate && !isOrderBuiltinField(field.code)}
                   />
                 ))}
-              </div>
-              {canUpdate ? null : (
+              </DynamicFieldsGrid>
+              {canUpdate || !group.fields.some((field) => !isOrderBuiltinField(field.code)) ? null : (
                 <p className="mt-3 text-sm text-muted-foreground">
                   Дополнительные поля можно заполнить на карточке заказа после создания.
                 </p>
               )}
             </SectionCard>
-          ) : null}
+          ))}
 
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => navigate(routes.orders)}>
               Отмена
             </Button>
-            <Button type="submit" disabled={create.isPending}>
+            <Button type="submit" disabled={create.isPending || fieldsQuery.isPending}>
               {create.isPending ? 'Создание…' : 'Создать заказ'}
             </Button>
           </div>
@@ -316,15 +226,4 @@ export function CreateOrderScreen() {
       </Form>
     </div>
   )
-}
-
-function filledExtraValues(
-  fields: { code: string; fieldType: string }[],
-  values: Record<string, DynamicFieldValueData>,
-) {
-  const result: Record<string, DynamicFieldValueData> = {}
-  for (const field of fields) {
-    result[field.code] = values[field.code] ?? (field.fieldType === 'number' ? null : '')
-  }
-  return result
 }

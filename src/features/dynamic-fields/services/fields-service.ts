@@ -1,4 +1,12 @@
-import { isFieldType, type FieldType } from '@/lib/constants/fields'
+import {
+  defaultFieldLayout,
+  isFieldLayoutHeight,
+  isFieldLayoutWidth,
+  isFieldType,
+  type FieldLayoutHeight,
+  type FieldLayoutWidth,
+  type FieldType,
+} from '@/lib/constants/fields'
 import { toAppError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase/client'
 import type { DynamicFieldOptionRow, DynamicFieldRow, FieldEntitySummaryRow, Json } from '@/types/database'
@@ -35,6 +43,8 @@ export type DynamicFieldDefinition = {
   isActive: boolean
   sortOrder: number
   groupName: string
+  layoutWidth: FieldLayoutWidth
+  layoutHeight: FieldLayoutHeight
   createdAt: string
   updatedAt: string
   options: DynamicFieldOption[]
@@ -48,10 +58,12 @@ export type DynamicFieldInput = {
   fieldType: FieldType
   isRequired: boolean
   groupName?: string
+  layoutWidth?: FieldLayoutWidth
+  layoutHeight?: FieldLayoutHeight
   options: { code: string; label: string; isActive: boolean; sortOrder: number }[]
 }
 
-export type DynamicFieldValueData = string | number | null
+export type DynamicFieldValueData = string | number | boolean | null
 
 function mapEntity(row: FieldEntitySummaryRow): FieldEntitySummary {
   return {
@@ -79,6 +91,8 @@ function mapField(row: DynamicFieldRow, options: DynamicFieldOption[]): DynamicF
     return null
   }
 
+  const fallback = defaultFieldLayout(row.field_type)
+
   return {
     id: row.id,
     entityCode: row.entity_code,
@@ -89,6 +103,8 @@ function mapField(row: DynamicFieldRow, options: DynamicFieldOption[]): DynamicF
     isActive: row.is_active,
     sortOrder: row.sort_order,
     groupName: row.group_name,
+    layoutWidth: isFieldLayoutWidth(row.layout_width) ? row.layout_width : fallback.width,
+    layoutHeight: isFieldLayoutHeight(row.layout_height) ? row.layout_height : fallback.height,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     options,
@@ -188,10 +204,28 @@ export async function upsertDynamicField(input: DynamicFieldInput): Promise<void
     is_required: input.isRequired,
     options: input.options as unknown as Json,
     group_name: input.groupName ?? '',
+    layout_width: input.layoutWidth ?? defaultFieldLayout(input.fieldType).width,
+    layout_height: input.layoutHeight ?? defaultFieldLayout(input.fieldType).height,
   })
 
   if (error) {
     throw toAppError(error, 'Не удалось сохранить поле.')
+  }
+}
+
+export async function setDynamicFieldLayout(
+  fieldId: string,
+  layoutWidth: FieldLayoutWidth,
+  layoutHeight: FieldLayoutHeight,
+): Promise<void> {
+  const { error } = await getSupabase().rpc('set_dynamic_field_layout', {
+    target_id: fieldId,
+    next_width: layoutWidth,
+    next_height: layoutHeight,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось сохранить размер поля.')
   }
 }
 
@@ -266,16 +300,26 @@ export async function listDynamicFieldValues(
   const result: Record<string, DynamicFieldValueData> = {}
 
   for (const field of fields) {
-    result[field.code] = byFieldId.get(field.id) ?? (field.fieldType === 'number' ? null : '')
+    result[field.code] = byFieldId.get(field.id) ?? emptyStoredValue(field.fieldType)
   }
 
   return result
 }
 
 function parseFieldValue(value: Json): DynamicFieldValueData {
-  if (typeof value === 'string' || typeof value === 'number' || value === null) {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || value === null) {
     return value
   }
 
   return null
+}
+
+function emptyStoredValue(fieldType: string): DynamicFieldValueData {
+  if (fieldType === 'number') {
+    return null
+  }
+  if (fieldType === 'checkbox') {
+    return false
+  }
+  return ''
 }

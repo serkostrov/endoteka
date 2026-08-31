@@ -1,11 +1,178 @@
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { Dialog as SheetPrimitive } from "radix-ui"
+import { toast } from "sonner"
 
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
+import { getErrorMessage } from "@/lib/errors"
 import { cn } from "@/lib/utils"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+type SheetSaveFn = () => void | Promise<void>
+
+type SheetDirtyContextValue = {
+  setSourceDirty: (id: string, dirty: boolean, save?: SheetSaveFn | null) => void
+}
+
+const SheetDirtyContext = React.createContext<SheetDirtyContextValue | null>(null)
+
+export function useSheetDirty(dirty: boolean, save?: SheetSaveFn) {
+  const id = React.useId()
+  const ctx = React.useContext(SheetDirtyContext)
+  const saveRef = React.useRef(save)
+  saveRef.current = save
+  const hasSave = Boolean(save)
+
+  React.useLayoutEffect(() => {
+    if (!ctx) {
+      return
+    }
+    ctx.setSourceDirty(id, dirty, hasSave ? () => saveRef.current?.() : null)
+    return () => ctx.setSourceDirty(id, false, null)
+  }, [ctx, dirty, hasSave, id])
+}
+
+export async function runSheetFormSave<T>(
+  handleSubmit: (onValid: (values: T) => Promise<void>) => (event?: unknown) => Promise<void>,
+  persist: (values: T) => Promise<void>,
+) {
+  let saved = false
+  await handleSubmit(async (values) => {
+    await persist(values)
+    saved = true
+  })()
+  if (!saved) {
+    throw new Error("Проверьте поля формы")
+  }
+}
+
+function Sheet({
+  dirty = false,
+  onSave,
+  open,
+  onOpenChange,
+  children,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root> & {
+  dirty?: boolean
+  onSave?: SheetSaveFn
+}) {
+  const sources = React.useRef(new Map<string, { dirty: boolean; save: SheetSaveFn | null }>())
+  const [registeredDirty, setRegisteredDirty] = React.useState(false)
+  const [registeredCanSave, setRegisteredCanSave] = React.useState(false)
+  const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const blocked = dirty || registeredDirty
+  const canSaveAndExit = Boolean(onSave) || registeredCanSave
+  const onSaveRef = React.useRef(onSave)
+  onSaveRef.current = onSave
+
+  const syncSources = React.useCallback(() => {
+    let nextDirty = false
+    let nextCanSave = false
+    for (const source of sources.current.values()) {
+      if (!source.dirty) {
+        continue
+      }
+      nextDirty = true
+      if (source.save) {
+        nextCanSave = true
+      }
+    }
+    setRegisteredDirty(nextDirty)
+    setRegisteredCanSave(nextCanSave)
+  }, [])
+
+  const setSourceDirty = React.useCallback(
+    (id: string, value: boolean, save?: SheetSaveFn | null) => {
+      if (!value && !save) {
+        sources.current.delete(id)
+      } else {
+        sources.current.set(id, { dirty: value, save: save ?? null })
+      }
+      syncSources()
+    },
+    [syncSources],
+  )
+
+  const context = React.useMemo(() => ({ setSourceDirty }), [setSourceDirty])
+
+  React.useEffect(() => {
+    if (open === false) {
+      setConfirmOpen(false)
+      setSaving(false)
+    }
+  }, [open])
+
+  function closeSheet() {
+    sources.current.clear()
+    setRegisteredDirty(false)
+    setRegisteredCanSave(false)
+    setConfirmOpen(false)
+    setSaving(false)
+    onOpenChange?.(false)
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      onOpenChange?.(true)
+      return
+    }
+    if (blocked) {
+      setConfirmOpen(true)
+      return
+    }
+    closeSheet()
+  }
+
+  async function saveAndExit() {
+    const saves = [...sources.current.values()]
+      .filter((source) => source.dirty && source.save)
+      .map((source) => source.save as SheetSaveFn)
+
+    setSaving(true)
+    try {
+      if (onSaveRef.current) {
+        await onSaveRef.current()
+      } else {
+        for (const save of saves) {
+          await save()
+        }
+      }
+      closeSheet()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <SheetDirtyContext.Provider value={context}>
+      <SheetPrimitive.Root data-slot="sheet" open={open} onOpenChange={handleOpenChange} {...props}>
+        {children}
+      </SheetPrimitive.Root>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Несохранённые изменения"
+        description="Есть несохранённые изменения. Точно хотите выйти или остаться?"
+        confirmLabel="Выйти"
+        cancelLabel="Остаться"
+        extraAction={
+          canSaveAndExit
+            ? {
+                label: "Сохранить и выйти",
+                onClick: () => void saveAndExit(),
+                isPending: saving,
+              }
+            : undefined
+        }
+        overlayClassName="z-[80]"
+        className="z-[80]"
+        onOpenChange={setConfirmOpen}
+        onConfirm={closeSheet}
+      />
+    </SheetDirtyContext.Provider>
+  )
 }
 
 function SheetTrigger({

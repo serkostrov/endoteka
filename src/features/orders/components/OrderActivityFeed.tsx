@@ -1,18 +1,27 @@
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { FileText, Paperclip } from 'lucide-react'
-import { useEffect, useMemo, useRef } from 'react'
+import { Calendar, FileText, Link2, ListTodo, User } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { OpenableImage } from '@/components/shared/ImageLightbox'
 import { LoadingState } from '@/components/shared/LoadingState'
-import { useHasPermission } from '@/features/auth'
+import { StatusBadge } from '@/components/shared/StatusBadge'
+import { useHasPermission, useCurrentUser } from '@/features/auth'
 import { useAddOrderJournalNote, useOrderJournal } from '@/features/diagnostics/hooks/use-diagnostics'
 import { formatJournalValue, type OrderJournalEvent } from '@/features/diagnostics/services/diagnostics-service'
+import { CreateTaskDialog } from '@/features/tasks/components/CreateTaskDialog'
+import { TaskCompleteControl } from '@/features/tasks/components/TaskCompleteControl'
+import { TaskDetailSheet } from '@/features/tasks/components/TaskDetailSheet'
+import { useTasks } from '@/features/tasks/hooks/use-tasks'
+import { taskDueHint, type TaskListItem } from '@/features/tasks/services/tasks-service'
 import { OrderJournalEventType } from '@/lib/constants/orders'
 import { Permission } from '@/lib/constants/permissions'
+import { TaskJournalEvent, taskPriorityLabels, taskPriorityTone } from '@/lib/constants/tasks'
 import { getErrorMessage } from '@/lib/errors'
 import { toDate } from '@/lib/utils/date'
+import { cn } from '@/lib/utils'
 import type { Json } from '@/types/database'
 
 import { useOrderAttachments, useUploadOrderFile } from '../hooks/use-orders'
@@ -22,17 +31,41 @@ import { OrderJournalComposer } from './OrderJournalComposer'
 
 type OrderActivityFeedProps = {
   orderId: string
+  orderNumber?: string
 }
 
-export function OrderActivityFeed({ orderId }: OrderActivityFeedProps) {
+export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedProps) {
+  const user = useCurrentUser()
   const canWrite =
     useHasPermission(Permission.OrdersUpdate) || useHasPermission(Permission.OrdersCreate)
+  const canCreateTask = useHasPermission(Permission.TasksCreate)
+  const canReadTasks = useHasPermission(Permission.TasksRead)
   const historyQuery = useOrderJournal(orderId)
   const attachmentsQuery = useOrderAttachments(orderId)
+  const tasksQuery = useTasks(
+    {
+      search: '',
+      assigneeId: 'all',
+      status: 'all',
+      priority: 'all',
+      due: 'all',
+      linked: 'all',
+      orderId,
+      page: 1,
+      pageSize: 100,
+    },
+    canReadTasks,
+  )
   const addNote = useAddOrderJournalNote(orderId)
   const upload = useUploadOrderFile(orderId)
   const scrollerRef = useRef<HTMLDivElement>(null)
+  const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const events = useMemo(() => [...(historyQuery.data ?? [])].reverse(), [historyQuery.data])
+  const tasks = useMemo(
+    () => new Map((tasksQuery.data?.items ?? []).map((task) => [task.id, task])),
+    [tasksQuery.data],
+  )
 
   useEffect(() => {
     const node = scrollerRef.current
@@ -50,21 +83,22 @@ export function OrderActivityFeed({ orderId }: OrderActivityFeedProps) {
     return <ErrorState description={getErrorMessage(historyQuery.error)} />
   }
 
-  const groups = groupByDay(events)
+  const groups = groupEventsByDay(events)
   const attachments = new Map((attachmentsQuery.data ?? []).map((item) => [item.id, item]))
+  const showComposer = canWrite || canCreateTask
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="border-b px-3 py-2">
-        <p className="text-sm font-medium">Журнал</p>
-        <p className="text-xs text-muted-foreground">Комментарии, статусы и файлы заказа</p>
+        <p className="text-sm font-medium">История</p>
+        <p className="text-xs text-muted-foreground">События, фото, ссылки и задачи заказа</p>
       </div>
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {events.length === 0 ? (
           <EmptyState
             className="border-0 bg-transparent py-8"
             title="Событий нет"
-            description="Напишите событие или прикрепите фото — запись появится здесь."
+            description="Напишите событие, прикрепите фото или создайте задачу."
           />
         ) : (
           <div className="space-y-5">
@@ -83,15 +117,17 @@ export function OrderActivityFeed({ orderId }: OrderActivityFeedProps) {
                           {toDate(event.createdAt) ? format(toDate(event.createdAt) as Date, 'HH:mm') : ''}
                         </span>
                       </div>
-                      <p
-                        className={
-                          event.eventType === OrderJournalEventType.Comment
-                            ? 'text-sm whitespace-pre-wrap'
-                            : 'text-sm'
-                        }
-                      >
-                        {event.summary}
-                      </p>
+                      {isTaskJournalEvent(event.eventType) ? null : (
+                        <p
+                          className={
+                            event.eventType === OrderJournalEventType.Comment
+                              ? 'text-sm whitespace-pre-wrap'
+                              : 'text-sm'
+                          }
+                        >
+                          {event.summary}
+                        </p>
+                      )}
                       {event.actorName ? (
                         <p className="mt-0.5 text-xs text-muted-foreground">{event.actorName}</p>
                       ) : null}
@@ -106,7 +142,13 @@ export function OrderActivityFeed({ orderId }: OrderActivityFeedProps) {
                       ) : null}
                       <JournalAttachmentPreview
                         event={event}
-                        attachment={attachments.get(attachmentIdFromPayload(event.payload) ?? '')}
+                        attachment={attachments.get(payloadString(event.payload, 'attachment_id') ?? '')}
+                      />
+                      <JournalTaskPreview
+                        event={event}
+                        task={tasks.get(payloadString(event.payload, 'task_id') ?? '')}
+                        currentUserId={user?.id}
+                        onOpen={(taskId) => setOpenTaskId(taskId)}
                       />
                     </li>
                   ))}
@@ -116,7 +158,7 @@ export function OrderActivityFeed({ orderId }: OrderActivityFeedProps) {
           </div>
         )}
       </div>
-      {canWrite ? (
+      {showComposer ? (
         <OrderJournalComposer
           pending={addNote.isPending || upload.isPending}
           onSubmit={async ({ text, files }) => {
@@ -127,8 +169,26 @@ export function OrderActivityFeed({ orderId }: OrderActivityFeedProps) {
               await addNote.mutateAsync(text)
             }
           }}
+          onCreateTask={canCreateTask ? () => setCreateTaskOpen(true) : undefined}
         />
       ) : null}
+      {canCreateTask ? (
+        <CreateTaskDialog
+          open={createTaskOpen}
+          onOpenChange={setCreateTaskOpen}
+          presetOrderId={orderId}
+          presetOrderNumber={orderNumber}
+        />
+      ) : null}
+      <TaskDetailSheet
+        taskId={openTaskId}
+        open={Boolean(openTaskId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOpenTaskId(null)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -149,14 +209,11 @@ function JournalAttachmentPreview({
   }
 
   if (attachment.kind === 'photo' && attachment.signedUrl) {
+    const label = attachment.fileName || attachment.caption || 'Фото'
     return (
-      <a className="mt-2 block w-fit" href={attachment.signedUrl} target="_blank" rel="noreferrer">
-        <img
-          src={attachment.signedUrl}
-          alt={attachment.fileName || attachment.caption || 'Фото'}
-          className="size-16 rounded-md object-cover"
-        />
-      </a>
+      <div className="mt-2 w-fit">
+        <OpenableImage src={attachment.signedUrl} alt={label} title={label} className="size-16" />
+      </div>
     )
   }
 
@@ -172,21 +229,111 @@ function JournalAttachmentPreview({
       rel="noreferrer"
       className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
     >
-      {attachment.kind === 'pdf' ? <FileText className="size-3" /> : <Paperclip className="size-3" />}
-      {attachment.fileName || attachment.caption || 'Открыть'}
+      {attachment.kind === 'pdf' ? <FileText className="size-3" /> : <Link2 className="size-3" />}
+      {attachment.fileName || attachment.caption || attachment.url || 'Открыть'}
     </a>
   )
 }
 
-function attachmentIdFromPayload(payload: Json): string | null {
+function JournalTaskPreview({
+  event,
+  task,
+  currentUserId,
+  onOpen,
+}: {
+  event: OrderJournalEvent
+  task: TaskListItem | undefined
+  currentUserId: string | undefined
+  onOpen: (taskId: string) => void
+}) {
+  if (!isTaskJournalEvent(event.eventType)) {
+    return null
+  }
+
+  const deleted = event.eventType === TaskJournalEvent.Deleted
+  const canOpenSheet = Boolean(task && currentUserId && task.createdBy === currentUserId)
+
+  if (task && !deleted) {
+    const due = taskDueHint(task.dueDate, task.completed)
+    return (
+      <div
+        role={canOpenSheet ? 'button' : undefined}
+        tabIndex={canOpenSheet ? 0 : undefined}
+        className={cn(
+          'mt-2 w-full rounded-md border bg-background px-2.5 py-2 text-left',
+          canOpenSheet && 'cursor-pointer hover:bg-accent/40',
+          task.completed && 'opacity-80',
+        )}
+        onClick={canOpenSheet ? () => onOpen(task.id) : undefined}
+        onKeyDown={
+          canOpenSheet
+            ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  onOpen(task.id)
+                }
+              }
+            : undefined
+        }
+      >
+        <div className="flex items-start gap-2">
+          <TaskCompleteControl task={task} />
+          <div className="min-w-0 flex-1">
+            <p className={cn('text-sm font-medium', task.completed && 'text-muted-foreground line-through')}>
+              {task.title}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <User className="size-3" />
+                {task.assigneeName || 'не назначен'}
+              </span>
+              {due ? (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1',
+                    due.tone === 'danger' && 'text-destructive',
+                    due.tone === 'warning' && 'text-warning',
+                  )}
+                >
+                  <Calendar className="size-3" />
+                  {due.label}
+                </span>
+              ) : null}
+              <StatusBadge tone={taskPriorityTone(task.priority)}>{taskPriorityLabels[task.priority]}</StatusBadge>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-2 flex items-start gap-2 rounded-md border bg-muted/40 px-2.5 py-2">
+      <ListTodo className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+      <div className="min-w-0">
+        <p className="text-sm">{event.summary}</p>
+      </div>
+    </div>
+  )
+}
+
+function isTaskJournalEvent(eventType: string) {
+  return (
+    eventType === TaskJournalEvent.Created ||
+    eventType === TaskJournalEvent.Completed ||
+    eventType === TaskJournalEvent.Deleted
+  )
+}
+
+function payloadString(payload: Json, key: string): string | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null
   }
-  const value = payload.attachment_id
+  const value = payload[key]
   return typeof value === 'string' ? value : null
 }
 
-function groupByDay(events: OrderJournalEvent[]) {
+function groupEventsByDay(events: OrderJournalEvent[]) {
   const groups: { label: string; events: OrderJournalEvent[] }[] = []
 
   for (const event of events) {

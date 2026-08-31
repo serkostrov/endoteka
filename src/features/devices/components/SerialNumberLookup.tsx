@@ -1,15 +1,14 @@
-import { Plus } from 'lucide-react'
 import { type KeyboardEvent, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 
 import { SearchInput } from '@/components/shared/SearchInput'
-import { SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
+import { SearchEmptyCreate, SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
 import { Button } from '@/components/ui/button'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDate } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 
-import { classificationLabel } from '../classification'
+import { deviceSerialLine, deviceTitle } from '../classification'
 import { EditDeviceDialog } from './EditDeviceDialog'
 import { WarrantyBadge } from './WarrantyBadge'
 import type { DeviceLookup, DeviceSearchItem, SerialSearchResult } from '../services/devices-service'
@@ -24,6 +23,8 @@ type SerialNumberLookupProps = {
   onCreateRequest?: (serial: string) => void
   onSelectItem?: (item: DeviceSearchItem) => void
   createLabel?: string
+  framed?: boolean
+  label?: string
 }
 
 export function SerialNumberLookup({
@@ -35,7 +36,9 @@ export function SerialNumberLookup({
   allowCreate = false,
   onCreateRequest,
   onSelectItem,
-  createLabel = 'Новый прибор',
+  createLabel = 'Новый',
+  framed = false,
+  label,
 }: SerialNumberLookupProps) {
   const [open, setOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -44,88 +47,94 @@ export function SerialNumberLookup({
   const searching = (result.isFetching || isDebouncing) && !matched
   const showPanel = open && !matched
 
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
-      {matched ? (
-        <DeviceLookupCard
-          device={matched}
-          disabled={disabled}
-          onClear={() => {
-            setEditOpen(false)
-            setOpen(false)
-            onChange('')
-          }}
-          onOpen={() => setEditOpen(true)}
-        />
-      ) : (
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <SearchSuggestOverlay
-              open={showPanel}
-              onOpenChange={setOpen}
-              panel={
-                <div className="max-h-64 overflow-auto">
-                  {result.error ? (
-                    <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(result.error)}</p>
-                  ) : searching && items.length === 0 ? (
-                    <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
-                  ) : items.length === 0 ? (
-                    <p className="px-3 py-4 text-sm text-muted-foreground">Приборы не найдены</p>
-                  ) : (
-                    <ul>
-                      {items.map((item) => (
-                        <SerialResultItem
-                          key={item.id}
-                          item={item}
-                          disabled={disabled}
-                          onSelect={() => {
-                            if (onSelectItem) {
-                              onSelectItem(item)
-                            } else {
-                              onChange(item.serialNumber)
-                            }
-                            setOpen(false)
-                          }}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              }
-            >
-              <SearchInput
-                value={value}
-                onChange={(next) => {
-                  onChange(next)
-                  setOpen(true)
-                }}
-                onFocus={() => setOpen(true)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Escape') {
-                    setOpen(false)
-                  }
-                }}
-                disabled={disabled}
-                label="Серийный номер"
-                placeholder="Серийный номер"
-                className="max-w-none"
-              />
-            </SearchSuggestOverlay>
-          </div>
-          {allowCreate ? (
-            <Button
-              type="button"
-              variant="outline"
-              className="h-9 shrink-0"
+  const body = matched ? (
+    <DeviceLookupCard
+      device={matched}
+      disabled={disabled}
+      onClear={() => {
+        setEditOpen(false)
+        setOpen(false)
+        onChange('')
+      }}
+      onOpen={() => setEditOpen(true)}
+    />
+  ) : (
+    <SearchSuggestOverlay
+      open={showPanel}
+      onOpenChange={setOpen}
+      panel={
+        <div className="max-h-64 overflow-auto">
+          {result.error ? (
+            <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(result.error)}</p>
+          ) : searching && items.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
+          ) : items.length === 0 ? (
+            <SearchEmptyCreate
+              message="Приборы не найдены"
+              actionLabel={createLabel}
               disabled={disabled}
-              aria-label={createLabel}
-              onClick={() => onCreateRequest?.(value.trim())}
-            >
-              <Plus className="size-4" />
-              Новый
-            </Button>
-          ) : null}
+              onCreate={
+                allowCreate
+                  ? () => {
+                      setOpen(false)
+                      onCreateRequest?.(value.trim())
+                    }
+                  : undefined
+              }
+            />
+          ) : (
+            <ul>
+              {items.map((item) => (
+                <SerialResultItem
+                  key={item.id}
+                  item={item}
+                  disabled={disabled}
+                  onSelect={() => {
+                    if (onSelectItem) {
+                      onSelectItem(item)
+                    } else {
+                      onChange(item.serialNumber)
+                    }
+                    setOpen(false)
+                  }}
+                />
+              ))}
+            </ul>
+          )}
         </div>
+      }
+    >
+      <SearchInput
+        value={value}
+        onChange={(next) => {
+          onChange(next)
+          setOpen(true)
+        }}
+        onClick={() => setOpen(true)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            setOpen(false)
+          }
+        }}
+        disabled={disabled}
+        label="Серийный номер"
+        placeholder="Серийный номер"
+        className="max-w-none"
+      />
+    </SearchSuggestOverlay>
+  )
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {framed ? (
+        <section className="rounded-xl border bg-card p-4">
+          {label ? (
+            <p className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+          ) : null}
+          {body}
+        </section>
+      ) : (
+        body
       )}
       <EditDeviceDialog
         device={matched}
@@ -166,19 +175,21 @@ export function DeviceLookupCard({
   return (
     <div
       className={cn(
-        'flex flex-1 flex-col space-y-3 rounded-md border bg-card px-3 py-3 text-left',
-        clickable && 'cursor-pointer transition-colors hover:bg-muted/40',
+        'space-y-3 text-left',
+        clickable && 'cursor-pointer rounded-md transition-colors hover:bg-muted/40',
       )}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
-      aria-label={clickable ? `Открыть прибор ${device.serialNumber}` : undefined}
+      aria-label={clickable ? `Открыть прибор ${deviceTitle(device)}` : undefined}
       onClick={clickable ? onOpen : undefined}
       onKeyDown={onCardKeyDown}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">СН {device.serialNumber}</p>
-          <p className="truncate text-xs text-muted-foreground">{classificationLabel(device)}</p>
+          <p className="truncate text-sm font-medium">{deviceTitle(device)}</p>
+          {device.serialNumber ? (
+            <p className="truncate text-xs text-muted-foreground">{deviceSerialLine(device.serialNumber)}</p>
+          ) : null}
         </div>
         {showClear && onClear ? (
           <Button
@@ -196,27 +207,29 @@ export function DeviceLookupCard({
         ) : null}
       </div>
 
-      <div className="grid gap-2 text-sm sm:grid-cols-2">
-        <div>
-          <p className="text-xs text-muted-foreground">Гарантия</p>
-          <div className="mt-1">
+      <dl className="space-y-2 text-sm">
+        <div className="space-y-0.5">
+          <dt className="text-muted-foreground">Гарантия</dt>
+          <dd>
             <WarrantyBadge warranty={device.warranty} />
-          </div>
+          </dd>
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">Последний заказ</p>
-          {latest ? (
-            <p>
-              {latest.number} · {latest.statusName}
-              <span className="block text-xs text-muted-foreground">
-                {latest.customerName} · {formatDate(latest.createdAt)}
-              </span>
-            </p>
-          ) : (
-            <p className="text-muted-foreground">Ремонтов ещё не было</p>
-          )}
+        <div className="space-y-0.5">
+          <dt className="text-muted-foreground">Последний заказ</dt>
+          <dd>
+            {latest ? (
+              <p>
+                {latest.number} · {latest.statusName}
+                <span className="block text-xs text-muted-foreground">
+                  {latest.customerName} · {formatDate(latest.createdAt)}
+                </span>
+              </p>
+            ) : (
+              <p className="text-muted-foreground">Ремонтов ещё не было</p>
+            )}
+          </dd>
         </div>
-      </div>
+      </dl>
 
       {repairs.length > 0 ? (
         <div>
@@ -255,9 +268,9 @@ function SerialResultItem({
         onMouseDown={(event) => event.preventDefault()}
         onClick={onSelect}
       >
-        <span className="font-medium">{item.serialNumber}</span>
+        <span className="font-medium">{deviceTitle(item)}</span>
         <span className="text-xs text-muted-foreground">
-          {[item.label, item.groupName].filter(Boolean).join(' · ') || 'Прибор'}
+          {deviceSerialLine(item.serialNumber) || item.groupName || 'Прибор'}
         </span>
       </button>
     </li>

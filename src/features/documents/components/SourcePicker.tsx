@@ -6,6 +6,7 @@ import { ItemSearchField } from '@/features/inventory/components/ItemSearchField
 import { useOrders } from '@/features/orders/hooks/use-orders'
 import { useSales } from '@/features/sales/hooks/use-sales'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { deviceSerialLine } from '@/features/devices/classification'
 import { DocumentSourceType, type DocumentSourceType as SourceType } from '@/lib/constants/documents'
 import { SALES_SEARCH_DEBOUNCE_MS } from '@/lib/constants/sales'
 import { getErrorMessage } from '@/lib/errors'
@@ -98,7 +99,9 @@ function OrderSourcePicker({
             >
               <span className="font-medium">{order.number}</span>
               <span className="text-xs text-muted-foreground">
-                {order.customerName} · {order.serialNumber}
+                {order.customerName}
+                {order.deviceLabel ? ` · ${order.deviceLabel}` : ''}
+                {order.serialNumber ? ` · ${deviceSerialLine(order.serialNumber)}` : ''}
               </span>
             </button>
           </li>

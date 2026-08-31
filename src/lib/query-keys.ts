@@ -31,7 +31,7 @@ export const queryKeys = {
   },
   customers: {
     all: ['customers'] as const,
-    list: (filters: { search: string; page: number }) => ['customers', 'list', filters] as const,
+    list: (filters: { search: string; page: number; kind?: string }) => ['customers', 'list', filters] as const,
     search: (filters: { query: string; page: number }) => ['customers', 'search', filters] as const,
     detail: (id: string) => ['customers', 'detail', id] as const,
     inn: (inn: string) => ['customers', 'inn', inn] as const,
@@ -74,6 +74,12 @@ export const queryKeys = {
       ['inventory', 'count-lines', id, filters] as const,
     countStatement: (id: string) => ['inventory', 'count-statement', id] as const,
     orderUsage: (orderId: string) => ['inventory', 'order', orderId] as const,
+  },
+  services: {
+    all: ['services'] as const,
+    templates: (filters: { search: string; page: number; activeOnly: boolean }) =>
+      ['services', 'templates', filters] as const,
+    orderLines: (orderId: string) => ['services', 'order', orderId] as const,
   },
   sales: {
     all: ['sales'] as const,

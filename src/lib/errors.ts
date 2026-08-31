@@ -63,6 +63,10 @@ export function toAppError(error: unknown, fallback = 'Не удалось вы�
       return new AppError('invalid_credentials', AUTH_MESSAGES.invalid_credentials, error)
     }
 
+    if (lowered.includes('auth session missing')) {
+      return new AppError('session_missing', 'Сессия не найдена. Войдите ещё раз.', error)
+    }
+
     if (!isInternalErrorMessage(error.message)) {
       return new AppError(code ?? 'APP', error.message, error)
     }

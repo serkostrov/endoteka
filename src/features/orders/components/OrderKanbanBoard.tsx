@@ -309,7 +309,7 @@ function OrderKanbanCard({
         </CardField>
         <CardField label="Клиент">{order.customerName}</CardField>
         <CardField label="Прибор">{order.deviceLabel}</CardField>
-        <CardField label="Серийный номер">{order.serialNumber}</CardField>
+        <CardField label="Серийный номер">{order.serialNumber || '—'}</CardField>
         <CardField label="Ответственный">{order.responsibleName || 'Не назначен'}</CardField>
       </dl>
     </article>

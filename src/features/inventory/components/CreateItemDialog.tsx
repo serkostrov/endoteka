@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
@@ -9,11 +9,13 @@ import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  runSheetFormSave,
 } from '@/components/ui/sheet'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
@@ -27,9 +29,15 @@ type CreateItemDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (item: InventoryItem) => void
+  initialQuery?: string
 }
 
-export function CreateItemDialog({ open, onOpenChange, onCreated }: CreateItemDialogProps) {
+export function CreateItemDialog({
+  open,
+  onOpenChange,
+  onCreated,
+  initialQuery = '',
+}: CreateItemDialogProps) {
   const create = useCreateInventoryItem()
   const [duplicateId, setDuplicateId] = useState<string | null>(null)
   const form = useForm<InventoryItemFormValues>({
@@ -37,14 +45,22 @@ export function CreateItemDialog({ open, onOpenChange, onCreated }: CreateItemDi
     defaultValues: emptyInventoryItemFormValues,
   })
 
-  async function onSubmit(values: InventoryItemFormValues) {
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    form.reset({
+      ...emptyInventoryItemFormValues,
+      name: initialQuery.trim(),
+    })
+    setDuplicateId(null)
+  }, [form, initialQuery, open])
+
+  async function persist(values: InventoryItemFormValues) {
     try {
       const id = await create.mutateAsync(values)
       const card = await getInventoryItemCard(id)
       toast.success('Позиция создана')
-      form.reset(emptyInventoryItemFormValues)
-      setDuplicateId(null)
-      onOpenChange(false)
       if (card) {
         onCreated?.(card.item)
       }
@@ -52,15 +68,29 @@ export function CreateItemDialog({ open, onOpenChange, onCreated }: CreateItemDi
       if (isInventoryDuplicateError(error)) {
         setDuplicateId(error.existingItemId)
         form.setError('name', { message: error.message })
-        return
+      } else {
+        form.setError('name', { message: getErrorMessage(error) })
       }
-      form.setError('name', { message: getErrorMessage(error) })
+      throw error
+    }
+  }
+
+  async function onSubmit(values: InventoryItemFormValues) {
+    try {
+      await persist(values)
+      form.reset(emptyInventoryItemFormValues)
+      setDuplicateId(null)
+      onOpenChange(false)
+    } catch {
+      return
     }
   }
 
   return (
     <Sheet
       open={open}
+      dirty={form.formState.isDirty}
+      onSave={() => runSheetFormSave(form.handleSubmit, persist)}
       onOpenChange={(next) => {
         if (!next) {
           form.reset(emptyInventoryItemFormValues)
@@ -90,9 +120,11 @@ export function CreateItemDialog({ open, onOpenChange, onCreated }: CreateItemDi
             ) : null}
             <ItemFields form={form} />
             <SheetFooter className="px-0">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Отмена
-              </Button>
+              <SheetClose asChild>
+                <Button type="button" variant="outline">
+                  Отмена
+                </Button>
+              </SheetClose>
               <Button type="submit" disabled={create.isPending}>
                 {create.isPending ? 'Сохранение…' : 'Создать'}
               </Button>

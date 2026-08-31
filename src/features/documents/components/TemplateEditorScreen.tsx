@@ -1,14 +1,22 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { ArrowDown, ArrowUp, Printer, Trash2 } from 'lucide-react'
+import { Eye, Pencil, Printer, Trash2 } from 'lucide-react'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -20,25 +28,12 @@ import {
 } from '@/lib/constants/documents'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
-import { cn } from '@/lib/utils'
 
-import { PlaceholderComposer, PlaceholderField, PlaceholderKeySelect } from './PlaceholderComposer'
 import { TemplateRenderer } from './TemplateRenderer'
+import { TinyMceDocumentEditor } from './TinyMceDocumentEditor'
 import { useDeleteDocumentTemplate, useDocumentTemplate, useUpdateDocumentTemplate } from '../hooks/use-documents'
-import {
-  SAMPLE_LINES,
-  SAMPLE_PARTS,
-  SAMPLE_PLACEHOLDER_VALUES,
-  placeholderRegistry,
-  type PlaceholderInsertContext,
-} from '../placeholders'
-import {
-  TableSource,
-  TemplateBlockType,
-  createBlock,
-  type TableBlock,
-  type TemplateBlock,
-} from '../template-schema'
+import { htmlTemplateBody, templateHtml } from '../html-template'
+import { SAMPLE_LINES, SAMPLE_PARTS, SAMPLE_PLACEHOLDER_VALUES } from '../placeholders'
 import type { DocumentTemplate } from '../services/documents-service'
 
 const sampleContext = {
@@ -46,25 +41,6 @@ const sampleContext = {
   parts: SAMPLE_PARTS,
   lines: SAMPLE_LINES,
 }
-
-const editorTabs = [
-  { id: 'editor', label: 'Редактор' },
-  { id: 'preview', label: 'Просмотр' },
-  { id: 'print', label: 'Печать' },
-] as const
-
-type EditorTab = (typeof editorTabs)[number]['id']
-
-const blockButtons: { type: TemplateBlockType; label: string }[] = [
-  { type: TemplateBlockType.Heading, label: 'Заголовок' },
-  { type: TemplateBlockType.Paragraph, label: 'Абзац' },
-  { type: TemplateBlockType.Text, label: 'Текст' },
-  { type: TemplateBlockType.Table, label: 'Таблица' },
-  { type: TemplateBlockType.Image, label: 'Картинка' },
-  { type: TemplateBlockType.Placeholder, label: 'Поле' },
-  { type: TemplateBlockType.Qr, label: 'QR' },
-  { type: TemplateBlockType.Barcode, label: 'Штрихкод' },
-]
 
 export function TemplateEditorScreen() {
   const { id } = useParams()
@@ -90,13 +66,15 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
   const update = useUpdateDocumentTemplate(template.id)
   const remove = useDeleteDocumentTemplate()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<EditorTab>('editor')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [name, setName] = useState(template.name)
   const [kind, setKind] = useState(template.kind)
   const [pageSize, setPageSize] = useState(template.pageSize)
-  const [blocks, setBlocks] = useState<TemplateBlock[]>(template.body)
-  const [selectedId, setSelectedId] = useState(template.body[0]?.id ?? '')
-  const selected = blocks.find((block) => block.id === selectedId) ?? null
+  const initialHtml = useMemo(() => templateHtml(template.body), [template.body])
+  const [html, setHtml] = useState(initialHtml)
+  const htmlBlockId = template.body.find((block) => block.type === 'html')?.id
 
   async function save() {
     try {
@@ -104,7 +82,7 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
         name,
         kind,
         pageSize: kind === DocumentKind.Label ? DocumentPageSize.Label : pageSize,
-        body: blocks,
+        body: htmlTemplateBody(html, htmlBlockId),
       })
       toast.success('Шаблон сохранён')
     } catch (error) {
@@ -116,375 +94,165 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
     try {
       await remove.mutateAsync(template.id)
       toast.success('Шаблон удалён')
+      setDeleteOpen(false)
       navigate(routes.documentTemplates)
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
   }
 
-  function addBlock(type: TemplateBlockType) {
-    const next = createBlock(type)
-    setBlocks((current) => [...current, next])
-    setSelectedId(next.id)
-  }
-
-  function patchBlock(next: TemplateBlock) {
-    setBlocks((current) => current.map((block) => (block.id === next.id ? next : block)))
-  }
-
-  function moveBlock(id: string, direction: -1 | 1) {
-    setBlocks((current) => {
-      const index = current.findIndex((block) => block.id === id)
-      const target = index + direction
-      if (index < 0 || target < 0 || target >= current.length) {
-        return current
-      }
-      const copy = [...current]
-      const [item] = copy.splice(index, 1)
-      if (!item) {
-        return current
-      }
-      copy.splice(target, 0, item)
-      return copy
-    })
-  }
-
-  function removeBlock(id: string) {
-    setBlocks((current) => current.filter((block) => block.id !== id))
-    if (selectedId === id) {
-      setSelectedId('')
-    }
-  }
-
-  const sheet = (
-    <TemplateRenderer
-      blocks={blocks}
-      context={sampleContext}
-      pageSize={kind === DocumentKind.Label ? 'label' : pageSize}
-    />
-  )
-
   return (
-    <div className="space-y-4">
+    <div className="flex h-[calc(100dvh-1.5rem)] min-h-0 flex-col gap-3 md:h-[calc(100dvh-2rem)]">
       <PageHeader
-        className="print:hidden"
+        className="mb-0 shrink-0 print:hidden sm:items-center"
         title={name || 'Шаблон'}
-        description="Блоки и плейсхолдеры из списка. HTML и произвольные запросы к базе недоступны."
+        description="Поля подставятся при выпуске документа."
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
+              <Eye className="size-4" />
+              Предпросмотр
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link to={routes.documentTemplatePrint.replace(':id', template.id)}>
                 <Printer className="size-4" />
-                Лист печати
+                Печать
               </Link>
             </Button>
-            <IconActionButton
-              label="Удалить"
-              className="text-destructive hover:text-destructive"
-              disabled={remove.isPending}
-              onClick={() => void handleDelete()}
-            >
-              <Trash2 />
+            <IconActionButton label="Редактировать" size="icon-sm" onClick={() => setSettingsOpen(true)}>
+              <Pencil />
             </IconActionButton>
             <Button type="button" size="sm" disabled={update.isPending} onClick={() => void save()}>
               {update.isPending ? 'Сохранение…' : 'Сохранить'}
             </Button>
+            <IconActionButton
+              label="Удалить"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              disabled={remove.isPending}
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 />
+            </IconActionButton>
           </div>
         }
       />
 
-      <div className="print:hidden flex gap-1 overflow-x-auto border-b">
-        {editorTabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={cn(
-              'shrink-0 border-b-2 px-3 py-2 text-sm',
-              tab === item.id
-                ? 'border-primary font-medium text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      <TinyMceDocumentEditor value={html} onChange={setHtml} />
 
-      {tab === 'editor' ? (
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="space-y-4">
-            <SectionCard title="Свойства">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="space-y-2 md:col-span-3">
-                  <Label htmlFor="template-name">Название</Label>
-                  <Input id="template-name" value={name} onChange={(event) => setName(event.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Тип</Label>
-                  <Select
-                    value={kind}
-                    onValueChange={(value) => setKind(value as DocumentKind)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.values(DocumentKind).map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {documentKindLabels[code]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Формат</Label>
-                  <Select
-                    value={kind === DocumentKind.Label ? DocumentPageSize.Label : pageSize}
-                    onValueChange={(value) => setPageSize(value as DocumentPageSize)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.values(DocumentPageSize).map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {documentPageSizeLabels[code]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Блоки" description="Добавьте кусок документа, затем заполните его справа.">
-              <div className="mb-3 flex flex-wrap gap-2">
-                {blockButtons.map((item) => (
-                  <Button key={item.type} type="button" variant="outline" size="sm" onClick={() => addBlock(item.type)}>
-                    {item.label}
-                  </Button>
-                ))}
-              </div>
-              <ul className="divide-y rounded-md border">
-                {blocks.map((block, index) => (
-                  <li key={block.id} className="flex items-center gap-2 px-2 py-1">
-                    <button
-                      type="button"
-                      className={cn(
-                        'min-w-0 flex-1 rounded px-2 py-1 text-left text-sm',
-                        selectedId === block.id ? 'bg-accent font-medium' : 'hover:bg-muted',
-                      )}
-                      onClick={() => setSelectedId(block.id)}
-                    >
-                      {blockLabel(block)}
-                    </button>
-                    <Button type="button" variant="ghost" size="icon-xs" onClick={() => moveBlock(block.id, -1)} disabled={index === 0}>
-                      <ArrowUp className="size-3" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      onClick={() => moveBlock(block.id, 1)}
-                      disabled={index === blocks.length - 1}
-                    >
-                      <ArrowDown className="size-3" />
-                    </Button>
-                    <Button type="button" variant="ghost" size="icon-xs" onClick={() => removeBlock(block.id)}>
-                      <Trash2 className="size-3" />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            </SectionCard>
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="flex max-h-[90vh] flex-col gap-3 overflow-hidden sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Предпросмотр</DialogTitle>
+            <DialogDescription>
+              Поля заполнены примерами. Несохранённые правки тоже видны.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-white">
+            {previewOpen ? (
+              <TemplateRenderer
+                blocks={htmlTemplateBody(html, htmlBlockId)}
+                context={sampleContext}
+                pageSize={kind === DocumentKind.Label ? DocumentPageSize.Label : pageSize}
+                variant="canvas"
+              />
+            ) : null}
           </div>
-
-          <SectionCard title="Настройка блока">
-            {selected ? <BlockFields block={selected} onChange={patchBlock} /> : (
-              <p className="text-sm text-muted-foreground">Выберите блок слева.</p>
-            )}
-          </SectionCard>
-        </div>
-      ) : null}
-
-      {tab === 'preview' ? (
-        <div className="overflow-auto rounded-md border bg-muted/30 p-4">{sheet}</div>
-      ) : null}
-
-      {tab === 'print' ? (
-        <div className="space-y-4">
-          <div className="print:hidden">
-            <Button type="button" onClick={() => window.print()}>
-              <Printer className="size-4" />
-              Печать
-            </Button>
-          </div>
-          {sheet}
-        </div>
-      ) : null}
+        </DialogContent>
+      </Dialog>
+      <SettingsDialog
+        open={settingsOpen}
+        name={name}
+        kind={kind}
+        pageSize={pageSize}
+        onNameChange={setName}
+        onKindChange={setKind}
+        onPageSizeChange={setPageSize}
+        onOpenChange={setSettingsOpen}
+      />
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить шаблон"
+        description={`${template.name} будет удалён без возможности восстановления.`}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   )
 }
 
-function blockLabel(block: TemplateBlock) {
-  if (block.type === 'heading') {
-    return `Заголовок: ${block.text || '…'}`
-  }
-  if (block.type === 'paragraph') {
-    return `Абзац: ${block.text.slice(0, 40) || '…'}`
-  }
-  if (block.type === 'text') {
-    return `Текст: ${block.text.slice(0, 40) || '…'}`
-  }
-  if (block.type === 'table') {
-    return 'Таблица'
-  }
-  if (block.type === 'image') {
-    return 'Картинка'
-  }
-  if (block.type === 'placeholder') {
-    return `Поле: ${placeholderRegistry[block.key].label}`
-  }
-  if (block.type === 'qr') {
-    return 'QR-код'
-  }
-  return 'Штрихкод'
-}
-
-function BlockFields({
-  block,
-  onChange,
+function SettingsDialog({
+  open,
+  name,
+  kind,
+  pageSize,
+  onNameChange,
+  onKindChange,
+  onPageSizeChange,
+  onOpenChange,
 }: {
-  block: TemplateBlock
-  onChange: (block: TemplateBlock) => void
+  open: boolean
+  name: string
+  kind: DocumentKind
+  pageSize: DocumentPageSize
+  onNameChange: (value: string) => void
+  onKindChange: (value: DocumentKind) => void
+  onPageSizeChange: (value: DocumentPageSize) => void
+  onOpenChange: (open: boolean) => void
 }) {
   return (
-    <div className="space-y-3">
-      {block.type === 'heading' ? (
-        <>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Свойства шаблона</DialogTitle>
+          <DialogDescription>Название, тип и формат листа. Сохраняются вместе с макетом.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
           <div className="space-y-2">
-            <Label>Уровень</Label>
-            <Select value={String(block.level)} onValueChange={(value) => onChange({ ...block, level: Number(value) as 1 | 2 | 3 })}>
+            <Label htmlFor="template-name">Название</Label>
+            <Input id="template-name" value={name} onChange={(event) => onNameChange(event.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Тип</Label>
+            <Select value={kind} onValueChange={(value) => onKindChange(value as DocumentKind)}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="1">H1</SelectItem>
-                <SelectItem value="2">H2</SelectItem>
-                <SelectItem value="3">H3</SelectItem>
+                {Object.values(DocumentKind).map((code) => (
+                  <SelectItem key={code} value={code}>
+                    {documentKindLabels[code]}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          <PlaceholderField key={`${block.id}-text`} label="Текст" value={block.text} onChange={(text) => onChange({ ...block, text })} />
-        </>
-      ) : null}
-
-      {block.type === 'paragraph' || block.type === 'text' ? (
-        <PlaceholderField
-          key={`${block.id}-text`}
-          label="Текст"
-          value={block.text}
-          onChange={(text) => onChange({ ...block, text })}
-          multiline
-        />
-      ) : null}
-
-      {block.type === 'image' ? (
-        <>
-          <PlaceholderField key={`${block.id}-url`} label="URL картинки" value={block.url} onChange={(url) => onChange({ ...block, url })} />
-          <PlaceholderField key={`${block.id}-alt`} label="Подпись" value={block.alt} onChange={(alt) => onChange({ ...block, alt })} />
-        </>
-      ) : null}
-
-      {block.type === 'placeholder' ? (
-        <PlaceholderKeySelect value={block.key} onChange={(key) => onChange({ ...block, key })} />
-      ) : null}
-
-      {block.type === 'qr' || block.type === 'barcode' ? (
-        <PlaceholderField key={`${block.id}-value`} label="Значение" value={block.value} onChange={(value) => onChange({ ...block, value })} />
-      ) : null}
-
-      {block.type === 'table' ? <TableFields block={block} onChange={onChange} /> : null}
-    </div>
-  )
-}
-
-function tableValueContext(source: TableSource): PlaceholderInsertContext {
-  if (source === TableSource.OrderParts) {
-    return 'parts'
-  }
-  if (source === TableSource.SaleLines) {
-    return 'lines'
-  }
-  return 'document'
-}
-
-function TableFields({ block, onChange }: { block: TableBlock; onChange: (block: TemplateBlock) => void }) {
-  const valueContext = tableValueContext(block.source)
-
-  return (
-    <div className="space-y-3">
-      <div className="space-y-2">
-        <Label>Источник строк</Label>
-        <Select value={block.source} onValueChange={(value) => onChange({ ...block, source: value as TableSource })}>
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={TableSource.Manual}>Свои строки</SelectItem>
-            <SelectItem value={TableSource.OrderParts}>Запчасти заказа</SelectItem>
-            <SelectItem value={TableSource.SaleLines}>Строки накладной</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      {block.headers.map((header, index) => (
-        <div key={`${block.id}-col-${index}`} className="space-y-2 rounded-md border p-2">
-          <PlaceholderField
-            label={`Колонка ${index + 1}`}
-            value={header}
-            onChange={(value) => {
-              const headers = [...block.headers]
-              headers[index] = value
-              onChange({ ...block, headers })
-            }}
-          />
-          {block.source !== TableSource.Manual ? (
-            <PlaceholderField
-              label="Значение строки"
-              value={block.columns[index] ?? ''}
-              onChange={(value) => {
-                const columns = [...block.columns]
-                columns[index] = value
-                onChange({ ...block, columns })
-              }}
-              context={valueContext}
-            />
+          {kind !== DocumentKind.Label ? (
+            <div className="space-y-2">
+              <Label>Формат</Label>
+              <Select value={pageSize} onValueChange={(value) => onPageSizeChange(value as DocumentPageSize)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.values(DocumentPageSize).map((code) => (
+                    <SelectItem key={code} value={code}>
+                      {documentPageSizeLabels[code]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           ) : null}
         </div>
-      ))}
-      {block.source === TableSource.Manual
-        ? block.cells.map((row, rowIndex) => (
-            <div key={`${block.id}-row-${rowIndex}`} className="grid gap-2 md:grid-cols-2">
-              {row.map((cell, cellIndex) => (
-                <PlaceholderComposer
-                  key={`${block.id}-cell-${rowIndex}-${cellIndex}`}
-                  value={cell}
-                  aria-label={`Строка ${rowIndex + 1}, колонка ${cellIndex + 1}`}
-                  onChange={(value) => {
-                    const cells = block.cells.map((item) => [...item])
-                    const target = cells[rowIndex]
-                    if (target) {
-                      target[cellIndex] = value
-                    }
-                    onChange({ ...block, cells })
-                  }}
-                />
-              ))}
-            </div>
-          ))
-        : null}
-    </div>
+        <DialogFooter>
+          <Button type="button" onClick={() => onOpenChange(false)}>
+            Готово
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

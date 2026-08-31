@@ -19,9 +19,10 @@ type TaskDeleteTarget = {
 type TaskDeleteControlProps = {
   task: TaskDeleteTarget
   onDeleted?: () => void
+  size?: 'icon' | 'icon-sm'
 }
 
-export function TaskDeleteControl({ task, onDeleted }: TaskDeleteControlProps) {
+export function TaskDeleteControl({ task, onDeleted, size = 'icon-sm' }: TaskDeleteControlProps) {
   const canDelete = useHasPermission(Permission.TasksDelete)
   const remove = useDeleteTask()
   const [open, setOpen] = useState(false)
@@ -33,29 +34,28 @@ export function TaskDeleteControl({ task, onDeleted }: TaskDeleteControlProps) {
   async function handleDelete() {
     try {
       await remove.mutateAsync({ id: task.id, orderId: task.orderId })
+      onDeleted?.()
       toast.success('Задача удалена')
       setOpen(false)
-      onDeleted?.()
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
   }
 
   return (
-    <>
-      <div
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
+    <div
+      onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      <IconActionButton
+        label="Удалить"
+        size={size}
+        className="text-destructive hover:text-destructive"
+        onClick={() => setOpen(true)}
       >
-        <IconActionButton
-          label="Удалить"
-          className="text-destructive hover:text-destructive"
-          onClick={() => setOpen(true)}
-        >
-          <Trash2 />
-        </IconActionButton>
-      </div>
+        <Trash2 />
+      </IconActionButton>
       <ConfirmDialog
         open={open}
         title="Удалить задачу"
@@ -65,6 +65,6 @@ export function TaskDeleteControl({ task, onDeleted }: TaskDeleteControlProps) {
         onOpenChange={setOpen}
         onConfirm={() => void handleDelete()}
       />
-    </>
+    </div>
   )
 }

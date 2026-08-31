@@ -10,8 +10,10 @@ import {
   listDynamicFieldValues,
   reorderDynamicFields,
   setDynamicFieldActive,
+  setDynamicFieldLayout,
   upsertDynamicField,
   deleteDynamicField,
+  type DynamicFieldDefinition,
   type DynamicFieldInput,
 } from '../services/fields-service'
 
@@ -62,6 +64,41 @@ export function useUpsertDynamicField(entityCode: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.byEntity(entityCode) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.entities })
+    },
+  })
+}
+
+export function useSetDynamicFieldLayout(entityCode: string) {
+  const queryClient = useQueryClient()
+  const queryKey = queryKeys.fields.byEntity(entityCode)
+
+  return useMutation({
+    mutationFn: ({
+      fieldId,
+      layoutWidth,
+      layoutHeight,
+    }: {
+      fieldId: string
+      layoutWidth: DynamicFieldDefinition['layoutWidth']
+      layoutHeight: DynamicFieldDefinition['layoutHeight']
+    }) => setDynamicFieldLayout(fieldId, layoutWidth, layoutHeight),
+    onMutate: async ({ fieldId, layoutWidth, layoutHeight }) => {
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<DynamicFieldDefinition[]>(queryKey)
+      queryClient.setQueryData<DynamicFieldDefinition[]>(queryKey, (current) =>
+        current?.map((field) =>
+          field.id === fieldId ? { ...field, layoutWidth, layoutHeight } : field,
+        ),
+      )
+      return { previous }
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous)
+      }
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey })
     },
   })
 }

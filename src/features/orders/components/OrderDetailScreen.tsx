@@ -1,18 +1,13 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ChevronDown, Printer } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
+import { Trash2 } from 'lucide-react'
 
 import { PageNavControls } from '@/app/layouts/PageNavControls'
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import {
   Sheet,
   SheetContent,
@@ -20,14 +15,10 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { CreateDocumentDialog } from '@/features/documents/components/CreateDocumentDialog'
-import { OrderDocumentsTab } from '@/features/documents'
-import { useDocuments } from '@/features/documents/hooks/use-documents'
-import { OrderTasksTab } from '@/features/tasks'
-import { OrderPartsTab } from '@/features/inventory'
 import { useHasPermission } from '@/features/auth'
+import { OrderWorkScopeTab } from '@/features/services'
+import { useOrderServiceLines } from '@/features/services/hooks/use-services'
 import { useOrderInventoryUsage } from '@/features/inventory/hooks/use-inventory'
-import { DocumentSourceType } from '@/lib/constants/documents'
 import { formatMoney } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
@@ -39,17 +30,16 @@ import { OrderAttachmentsTab } from './OrderAttachmentsTab'
 import { OrderDeadlineHint } from './OrderBadges'
 import { OrderDiagnosticsTab } from './OrderDiagnosticsTab'
 import { OrderOverviewTab } from './OrderOverviewTab'
+import { OrderPrintMenu } from './OrderPrintMenu'
 import { OrderStatusMenu } from './OrderStatusActions'
-import { useOrder } from '../hooks/use-orders'
+import { useDeleteOrder, useOrder } from '../hooks/use-orders'
 import type { OrderDetail } from '../services/orders-service'
 
 const tabs = [
   { id: 'overview', label: 'Общая информация' },
   { id: 'diagnostics', label: 'Диагностика' },
-  { id: 'parts', label: 'Запчасти' },
-  { id: 'documents', label: 'Документы' },
+  { id: 'work', label: 'Состав работы' },
   { id: 'files', label: 'Файлы' },
-  { id: 'tasks', label: 'Задачи' },
 ] as const
 
 type TabId = (typeof tabs)[number]['id']
@@ -84,13 +74,28 @@ export function OrderDetailSheet({
           <SheetTitle>Карточка заказа</SheetTitle>
           <SheetDescription>Просмотр и редактирование заказа. Доска остаётся на фоне.</SheetDescription>
         </SheetHeader>
-        {open && orderId ? <OrderDetailPanel key={orderId} orderId={orderId} layout="sheet" /> : null}
+        {open && orderId ? (
+          <OrderDetailPanel
+            key={orderId}
+            orderId={orderId}
+            layout="sheet"
+            onDeleted={() => onOpenChange(false)}
+          />
+        ) : null}
       </SheetContent>
     </Sheet>
   )
 }
 
-function OrderDetailPanel({ orderId, layout }: { orderId: string | undefined; layout: 'page' | 'sheet' }) {
+function OrderDetailPanel({
+  orderId,
+  layout,
+  onDeleted,
+}: {
+  orderId: string | undefined
+  layout: 'page' | 'sheet'
+  onDeleted?: () => void
+}) {
   const [tab, setTab] = useState<TabId>('overview')
   const orderQuery = useOrder(orderId)
 
@@ -107,7 +112,15 @@ function OrderDetailPanel({ orderId, layout }: { orderId: string | undefined; la
     return <ErrorState description="Заказ не найден." />
   }
 
-  return <OrderDetailCard order={order} layout={layout} tab={tab} onTabChange={setTab} />
+  return (
+    <OrderDetailCard
+      order={order}
+      layout={layout}
+      tab={tab}
+      onTabChange={setTab}
+      onDeleted={onDeleted}
+    />
+  )
 }
 
 function OrderDetailCard({
@@ -115,13 +128,34 @@ function OrderDetailCard({
   layout,
   tab,
   onTabChange,
+  onDeleted,
 }: {
   order: OrderDetail
   layout: 'page' | 'sheet'
   tab: TabId
   onTabChange: (tab: TabId) => void
+  onDeleted?: () => void
 }) {
+  const navigate = useNavigate()
+  const canDelete = useHasPermission(Permission.OrdersDelete)
+  const remove = useDeleteOrder()
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const inSheet = layout === 'sheet'
+
+  async function handleDelete() {
+    try {
+      await remove.mutateAsync(order.id)
+      toast.success(`Заказ ${order.number} удалён`)
+      setDeleteOpen(false)
+      if (onDeleted) {
+        onDeleted()
+      } else {
+        navigate(routes.orders)
+      }
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
 
   return (
     <div
@@ -133,33 +167,27 @@ function OrderDetailCard({
     >
       <div className={cn('flex flex-col lg:flex-row', inSheet && 'h-full min-h-0')}>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className={cn('border-b px-4 py-3', inSheet && 'pr-12')}>
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-2">
-                <h1 className="truncate text-lg font-semibold tracking-tight">Заказ {order.number}</h1>
-              </div>
-              <OrderDeadlineHint order={order} />
-            </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <OrderStatusMenu orderId={order.id} statusCode={order.statusCode} statusName={order.statusName} />
-              <div className="flex flex-wrap items-center gap-1">
-                <OrderPrintMenu orderId={order.id} orderNumber={order.number} />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button type="button" variant="outline" size="sm">
-                      Действия
-                      <ChevronDown className="size-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem asChild>
-                      <Link to={routes.customer.replace(':id', order.customerId)}>Открыть клиента</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link to={routes.device.replace(':id', order.deviceId)}>Открыть прибор</Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+          <header className={cn('border-b px-4 py-2.5', inSheet && 'pr-12')}>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+              <h1 className="truncate text-lg font-semibold tracking-tight">Заказ {order.number}</h1>
+              <OrderStatusMenu
+                compact
+                orderId={order.id}
+                statusCode={order.statusCode}
+                statusName={order.statusName}
+              />
+              <OrderDeadlineHint order={order} className="h-6" />
+              <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                <OrderPrintMenu orderId={order.id} />
+                {canDelete ? (
+                  <IconActionButton
+                    label="Удалить заказ"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 />
+                  </IconActionButton>
+                ) : null}
               </div>
             </div>
           </header>
@@ -184,13 +212,9 @@ function OrderDetailCard({
 
           <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {tab === 'overview' ? <OrderOverviewTab order={order} /> : null}
-            {tab === 'diagnostics' ? (
-              <OrderDiagnosticsTab orderId={order.id} statusCode={order.statusCode} />
-            ) : null}
-            {tab === 'parts' ? <OrderPartsTab orderId={order.id} /> : null}
-            {tab === 'documents' ? <OrderDocumentsTab orderId={order.id} orderNumber={order.number} /> : null}
+            {tab === 'diagnostics' ? <OrderDiagnosticsTab orderId={order.id} /> : null}
+            {tab === 'work' ? <OrderWorkScopeTab orderId={order.id} /> : null}
             {tab === 'files' ? <OrderAttachmentsTab orderId={order.id} /> : null}
-            {tab === 'tasks' ? <OrderTasksTab orderId={order.id} orderNumber={order.number} /> : null}
           </div>
 
           <OrderCardFooter orderId={order.id} />
@@ -203,73 +227,30 @@ function OrderDetailCard({
           )}
         >
           <div className={inSheet ? 'min-h-0 flex-1' : 'lg:h-[calc(100dvh-8rem)]'}>
-            <OrderActivityFeed orderId={order.id} />
+            <OrderActivityFeed orderId={order.id} orderNumber={order.number} />
           </div>
         </aside>
       </div>
-    </div>
-  )
-}
 
-function OrderPrintMenu({ orderId, orderNumber }: { orderId: string; orderNumber: string }) {
-  const canRead = useHasPermission(Permission.DocumentsRead)
-  const canCreate = useHasPermission(Permission.DocumentsCreate)
-  const [createOpen, setCreateOpen] = useState(false)
-  const documentsQuery = useDocuments({
-    search: '',
-    kind: 'all',
-    sourceType: DocumentSourceType.Order,
-    sourceId: orderId,
-    page: 1,
-    pageSize: 20,
-  })
-  const documents = documentsQuery.data?.items ?? []
-
-  if (!canRead && !canCreate) {
-    return null
-  }
-
-  return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="sm" aria-label="Печать">
-            <Printer className="size-4" />
-            <ChevronDown className="size-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64">
-          {documents.length === 0 ? (
-            <DropdownMenuItem disabled>Документов пока нет</DropdownMenuItem>
-          ) : (
-            documents.map((document) => (
-              <DropdownMenuItem key={document.id} asChild>
-                <Link to={routes.documentPrint.replace(':id', document.id)}>{document.title || document.number}</Link>
-              </DropdownMenuItem>
-            ))
-          )}
-          {canCreate ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setCreateOpen(true)}>Создать документ</DropdownMenuItem>
-            </>
-          ) : null}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <CreateDocumentDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        presetSourceType={DocumentSourceType.Order}
-        presetSourceId={orderId}
-        presetSourceLabel={orderNumber}
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить заказ"
+        description={`Заказ ${order.number} будет удалён безвозвратно. Списания со склада останутся в журнале.`}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
       />
-    </>
+    </div>
   )
 }
 
 function OrderCardFooter({ orderId }: { orderId: string }) {
   const usageQuery = useOrderInventoryUsage(orderId)
-  const total = (usageQuery.data ?? []).reduce((sum, row) => sum + Math.abs(row.quantity) * row.unitPrice, 0)
+  const servicesQuery = useOrderServiceLines(orderId)
+  const partsTotal = (usageQuery.data ?? []).reduce((sum, row) => sum + Math.abs(row.quantity) * row.unitPrice, 0)
+  const servicesTotal = (servicesQuery.data ?? []).reduce((sum, row) => sum + row.quantity * row.unitPrice, 0)
+  const total = partsTotal + servicesTotal
 
   return (
     <footer className="flex items-center justify-end border-t px-4 py-3">

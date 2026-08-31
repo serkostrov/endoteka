@@ -10,6 +10,7 @@ export const inventoryUnitCodes: InventoryUnitCode[] = [InventoryUnitCode.Pcs, I
 export const InventoryMovementType = {
   Receipt: 'receipt',
   RepairConsumption: 'repair_consumption',
+  RepairReturn: 'repair_return',
   Sale: 'sale',
   InventoryAdjustment: 'inventory_adjustment',
 } as const
@@ -19,6 +20,7 @@ export type InventoryMovementType = (typeof InventoryMovementType)[keyof typeof 
 export const inventoryMovementTypeLabels: Record<InventoryMovementType, string> = {
   receipt: 'Приход',
   repair_consumption: 'Израсходован в ремонт',
+  repair_return: 'Возврат из ремонта',
   sale: 'Продан',
   inventory_adjustment: 'Инвентаризация',
 }
@@ -28,7 +30,7 @@ export function isInventoryMovementType(value: string): value is InventoryMoveme
 }
 
 export const INVENTORY_PAGE_SIZE = 20
-export const INVENTORY_PICKER_PAGE_SIZE = 24
+export const INVENTORY_PICKER_PAGE_SIZE = 50
 export const INVENTORY_COUNT_LINE_PAGE_SIZE = 50
 export const INVENTORY_SEARCH_DEBOUNCE_MS = 300
 export const INVENTORY_SEARCH_MIN_LENGTH = 2

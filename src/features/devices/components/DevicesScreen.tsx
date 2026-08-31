@@ -18,6 +18,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { formatDate } from '@/lib/utils/date'
 
+import { deviceSerialLine, deviceTitle } from '../classification'
 import { CreateDeviceDialog } from './CreateDeviceDialog'
 import { EditDeviceDialog } from './EditDeviceDialog'
 import { WarrantyBadge } from './WarrantyBadge'
@@ -57,17 +58,18 @@ export function DevicesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Приборы"
-        description="Эндоскопы по серийному номеру. История ремонтов не зависит от текущего клиента."
-        actions={
+        description="Карточки эндоскопов: тип, производитель и модель. История ремонтов не зависит от текущего клиента."
+      />
+
+      <FilterBar
+        end={
           canCreate ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
               Новый прибор
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <SearchInput
           value={search}
           onChange={(next) => {
@@ -90,14 +92,8 @@ export function DevicesScreen() {
         onRowClick={(row) => navigate(routes.device.replace(':id', row.id))}
         pagination={{ page, pageCount, onPageChange: setPage }}
         columns={[
+          { id: 'device', header: 'Прибор', cell: (row) => deviceTitle(row) },
           { id: 'serial', header: 'Серийный номер', cell: (row) => row.serialNumber },
-          { id: 'device', header: 'Классификация', cell: (row) => row.label },
-          {
-            id: 'group',
-            header: 'Группа',
-            className: 'hidden md:table-cell',
-            cell: (row) => row.groupName || '—',
-          },
           {
             id: 'warranty',
             header: 'Гарантия',
@@ -154,7 +150,7 @@ export function DevicesScreen() {
         title="Удалить прибор"
         description={
           deleteTarget
-            ? `${deleteTarget.serialNumber} будет удалён. Если по нему есть заказы, удаление не пройдёт.`
+            ? `${deviceTitle(deleteTarget)}. ${deviceSerialLine(deleteTarget.serialNumber)} будет удалён. Если по нему есть заказы, удаление не пройдёт.`
             : ''
         }
         confirmLabel="Удалить"

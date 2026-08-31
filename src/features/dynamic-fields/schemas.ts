@@ -1,6 +1,14 @@
 import { z } from 'zod'
 
-import { FieldType, fieldTypes } from '@/lib/constants/fields'
+import {
+  FieldType,
+  fieldLayoutHeights,
+  fieldLayoutWidths,
+  fieldTypes,
+  resolvedFieldType,
+  type FieldLayoutHeight,
+  type FieldLayoutWidth,
+} from '@/lib/constants/fields'
 
 import type { DynamicFieldDefinition, DynamicFieldValueData } from './services/fields-service'
 
@@ -17,6 +25,8 @@ export const dynamicFieldFormSchema = z
     fieldType: z.enum(fieldTypes as [FieldType, ...FieldType[]]),
     isRequired: z.boolean(),
     groupName: z.string().max(80, 'Слишком длинное название группы'),
+    layoutWidth: z.enum(fieldLayoutWidths as [FieldLayoutWidth, ...FieldLayoutWidth[]]),
+    layoutHeight: z.enum(fieldLayoutHeights as [FieldLayoutHeight, ...FieldLayoutHeight[]]),
     options: z.array(fieldOptionFormSchema),
   })
   .superRefine((value, ctx) => {
@@ -35,29 +45,46 @@ export const dynamicFieldFormSchema = z
 
 export type DynamicFieldFormValues = z.infer<typeof dynamicFieldFormSchema>
 
-export function buildFieldValueSchema(field: DynamicFieldDefinition) {
-  if (field.fieldType === FieldType.Text) {
-    const schema = z.string()
-    return field.isRequired ? schema.min(1, 'Заполните поле') : schema
-  }
+function requiredText(message: string) {
+  return z.string().trim().min(1, message)
+}
 
-  if (field.fieldType === FieldType.Number) {
+export function buildFieldValueSchema(field: DynamicFieldDefinition) {
+  const fieldType = resolvedFieldType(field)
+
+  if (fieldType === FieldType.Number) {
     return field.isRequired
       ? z.number({ error: 'Укажите число' })
       : z.union([z.number(), z.null()])
   }
 
-  const activeCodes = field.options.filter((option) => option.isActive).map((option) => option.code)
-  if (activeCodes.length === 0) {
-    return field.isRequired ? z.string().min(1, 'Выберите значение') : z.string()
+  if (fieldType === FieldType.Checkbox) {
+    return field.isRequired ? z.literal(true, { error: 'Отметьте поле' }) : z.boolean()
   }
 
-  const allowed = z.string().refine((value) => activeCodes.includes(value), 'Выберите значение из списка')
-  return field.isRequired ? allowed : z.union([allowed, z.literal('')])
+  if (fieldType === FieldType.Select) {
+    const activeCodes = field.options.filter((option) => option.isActive).map((option) => option.code)
+    if (activeCodes.length === 0) {
+      return field.isRequired ? z.string().min(1, 'Выберите значение') : z.string()
+    }
+
+    const allowed = z.string().refine((value) => activeCodes.includes(value), 'Выберите значение из списка')
+    return field.isRequired ? allowed : z.union([allowed, z.literal('')])
+  }
+
+  if (fieldType === FieldType.Date) {
+    return field.isRequired ? requiredText('Укажите дату') : z.string()
+  }
+
+  if (fieldType === FieldType.Employee) {
+    return field.isRequired ? requiredText('Выберите сотрудника') : z.string()
+  }
+
+  return field.isRequired ? requiredText('Заполните поле') : z.string()
 }
 
 export function buildEntityValuesSchema(fields: DynamicFieldDefinition[]) {
-  const shape: Record<string, z.ZodType<DynamicFieldValueData | string>> = {}
+  const shape: Record<string, z.ZodType<DynamicFieldValueData | string | boolean>> = {}
 
   for (const field of fields.filter((item) => item.isActive)) {
     shape[field.code] = buildFieldValueSchema(field)
@@ -67,11 +94,36 @@ export function buildEntityValuesSchema(fields: DynamicFieldDefinition[]) {
 }
 
 export function emptyFieldValue(field: DynamicFieldDefinition): DynamicFieldValueData {
-  if (field.fieldType === FieldType.Number) {
+  const fieldType = resolvedFieldType(field)
+  if (fieldType === FieldType.Number) {
     return null
   }
-
+  if (fieldType === FieldType.Checkbox) {
+    return false
+  }
   return ''
+}
+
+export function filledFieldValues(
+  fields: { code: string; fieldType: string }[],
+  values: Record<string, DynamicFieldValueData>,
+) {
+  const result: Record<string, DynamicFieldValueData> = {}
+  for (const field of fields) {
+    const current = values[field.code]
+    if (current !== undefined) {
+      result[field.code] = current
+      continue
+    }
+    if (field.fieldType === FieldType.Number) {
+      result[field.code] = null
+    } else if (field.fieldType === FieldType.Checkbox) {
+      result[field.code] = false
+    } else {
+      result[field.code] = ''
+    }
+  }
+  return result
 }
 
 export function formatFieldValue(field: DynamicFieldDefinition, value: DynamicFieldValueData): string {
@@ -79,7 +131,13 @@ export function formatFieldValue(field: DynamicFieldDefinition, value: DynamicFi
     return '—'
   }
 
-  if (field.fieldType === FieldType.Select) {
+  const fieldType = resolvedFieldType(field)
+
+  if (fieldType === FieldType.Checkbox) {
+    return value === true ? 'Да' : 'Нет'
+  }
+
+  if (fieldType === FieldType.Select) {
     const option = field.options.find((item) => item.code === value)
     return option?.label ?? String(value)
   }

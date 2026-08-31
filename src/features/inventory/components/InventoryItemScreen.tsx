@@ -16,12 +16,21 @@ import { SectionCard } from '@/components/shared/SectionCard'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
-import { DynamicFieldRenderer, DynamicFieldValue, saveDynamicFieldValues } from '@/features/dynamic-fields'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  useSheetDirty,
+  runSheetFormSave,
+} from '@/components/ui/sheet'
+import { DynamicFieldRenderer, DynamicFieldValue, DynamicFieldsGrid, saveDynamicFieldValues } from '@/features/dynamic-fields'
 import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
 import { useHasPermission } from '@/features/auth'
 import { useCreateSale } from '@/features/sales/hooks/use-sales'
-import { FieldEntity } from '@/lib/constants/fields'
+import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
 import {
   formatMoney,
   formatQuantity,
@@ -48,10 +57,46 @@ import {
 
 export function InventoryItemScreen() {
   const { id } = useParams()
-  const cardQuery = useInventoryItemCard(id)
+  return <InventoryItemView itemId={id} variant="page" />
+}
+
+export function InventoryItemSheet({
+  itemId,
+  open,
+  onOpenChange,
+}: {
+  itemId: string | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-xl">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Позиция склада</SheetTitle>
+          <SheetDescription>Карточка, цены и дополнительные поля номенклатуры.</SheetDescription>
+        </SheetHeader>
+        {open && itemId ? (
+          <div className="p-4 pr-12">
+            <InventoryItemView key={itemId} itemId={itemId} variant="sheet" />
+          </div>
+        ) : null}
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function InventoryItemView({
+  itemId,
+  variant,
+}: {
+  itemId: string | undefined
+  variant: 'page' | 'sheet'
+}) {
+  const cardQuery = useInventoryItemCard(itemId)
 
   if (cardQuery.isLoading) {
-    return <LoadingState label="Загрузка позиции" />
+    return <LoadingState label="Загрузка позиции" className={variant === 'sheet' ? 'min-h-40' : undefined} />
   }
 
   if (cardQuery.error) {
@@ -63,17 +108,19 @@ export function InventoryItemScreen() {
     return <ErrorState description="Позиция не найдена." />
   }
 
-  return <ItemCardBody item={card.item} batches={card.batches} movements={card.movements} />
+  return <ItemCardBody item={card.item} batches={card.batches} movements={card.movements} variant={variant} />
 }
 
 function ItemCardBody({
   item,
   batches,
   movements,
+  variant,
 }: {
   item: InventoryItem
   batches: InventoryBatch[]
   movements: InventoryMovement[]
+  variant: 'page' | 'sheet'
 }) {
   const navigate = useNavigate()
   const canReceive = useHasPermission(Permission.InventoryReceive)
@@ -95,68 +142,77 @@ function ItemCardBody({
     }
   }
 
+  const subtitle = `${item.code}${item.article ? ` · ${item.article}` : ''} · остаток ${formatQuantity(item.stockQuantity)} ${item.unitName}`
+
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={item.name}
-        description={`${item.code}${item.article ? ` · ${item.article}` : ''} · остаток ${formatQuantity(item.stockQuantity)} ${item.unitName}`}
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {canCreateSale ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={createSale.isPending}
-                onClick={() => {
-                  createSale.mutate(
-                    { seedItemId: item.id },
-                    {
-                      onSuccess: (saleId) => navigate(routes.sale.replace(':id', saleId)),
-                      onError: (error) => toast.error(getErrorMessage(error)),
-                    },
-                  )
-                }}
-              >
-                Продажа
-              </Button>
-            ) : null}
-            {canCount ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={createCount.isPending}
-                onClick={() => {
-                  createCount.mutate(
-                    { seedMode: InventoryCountSeedMode.Empty, seedItemId: item.id },
-                    {
-                      onSuccess: (countId) => navigate(routes.inventoryCount.replace(':id', countId)),
-                      onError: (error) => toast.error(getErrorMessage(error)),
-                    },
-                  )
-                }}
-              >
-                Инвентаризация
-              </Button>
-            ) : null}
-            {canReceive ? (
-              <IconActionButton
-                label="Удалить"
-                className="text-destructive hover:text-destructive"
-                onClick={() => setDeleteOpen(true)}
-              >
-                <Trash2 />
-              </IconActionButton>
-            ) : null}
-          </div>
-        }
-      />
+      {variant === 'page' ? (
+        <PageHeader
+          title={item.name}
+          description={subtitle}
+          actions={
+            <div className="flex flex-wrap gap-2">
+              {canCreateSale ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={createSale.isPending}
+                  onClick={() => {
+                    createSale.mutate(
+                      { seedItemId: item.id },
+                      {
+                        onSuccess: (saleId) => navigate(routes.sale.replace(':id', saleId)),
+                        onError: (error) => toast.error(getErrorMessage(error)),
+                      },
+                    )
+                  }}
+                >
+                  Продажа
+                </Button>
+              ) : null}
+              {canCount ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={createCount.isPending}
+                  onClick={() => {
+                    createCount.mutate(
+                      { seedMode: InventoryCountSeedMode.Empty, seedItemId: item.id },
+                      {
+                        onSuccess: (countId) => navigate(routes.inventoryCount.replace(':id', countId)),
+                        onError: (error) => toast.error(getErrorMessage(error)),
+                      },
+                    )
+                  }}
+                >
+                  Инвентаризация
+                </Button>
+              ) : null}
+              {canReceive ? (
+                <IconActionButton
+                  label="Удалить"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 />
+                </IconActionButton>
+              ) : null}
+            </div>
+          }
+        />
+      ) : (
+        <div className="pr-2">
+          <h2 className="text-lg font-semibold tracking-tight">{item.name}</h2>
+          <p className="text-muted-foreground mt-1 text-sm">{subtitle}</p>
+        </div>
+      )}
 
       <ItemDataSection item={item} canEdit={canReceive} />
       <ItemFieldsSection itemId={item.id} canEdit={canReceive} />
 
-      <SectionCard title="Остаток по партиям" description="Списание идёт FIFO: сначала самые ранние поступления.">
+      <SectionCard title="Остаток по партиям" description="Списание: сначала самые ранние поступления.">
         <DataTable
           caption="Партии"
           data={batches}
@@ -173,6 +229,7 @@ function ItemCardBody({
         />
       </SectionCard>
 
+      {variant === 'page' ? (
       <SectionCard title="Движения" description="Журнал нельзя править. Каждая запись указывает, куда ушёл товар.">
         <DataTable
           caption="Движения"
@@ -216,16 +273,19 @@ function ItemCardBody({
           ]}
         />
       </SectionCard>
+      ) : null}
 
-      <ConfirmDialog
-        open={deleteOpen}
-        title="Удалить позицию"
-        description={`${item.name} будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.`}
-        confirmLabel="Удалить"
-        isPending={remove.isPending}
-        onOpenChange={setDeleteOpen}
-        onConfirm={() => void handleDelete()}
-      />
+      {variant === 'page' ? (
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить позицию"
+          description={`${item.name} будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.`}
+          confirmLabel="Удалить"
+          isPending={remove.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => void handleDelete()}
+        />
+      ) : null}
     </div>
   )
 }
@@ -282,6 +342,12 @@ function ItemEditForm({ item, onDone }: { item: InventoryItem; onDone: () => voi
       retailPrice: item.retailPrice,
     },
   })
+  useSheetDirty(form.formState.isDirty, () =>
+    runSheetFormSave(form.handleSubmit, async (values) => {
+      await update.mutateAsync(values)
+      toast.success('Позиция сохранена')
+    }),
+  )
 
   async function onSubmit(values: InventoryItemFormValues) {
     try {
@@ -326,6 +392,7 @@ function ItemFieldsSection({ itemId, canEdit }: { itemId: string; canEdit: boole
   const [extraDraft, setExtraDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
   const extraValues = extraDraft ?? valuesQuery.data ?? {}
   const [saving, setSaving] = useState(false)
+  useSheetDirty(editing && extraDraft !== null, extraDraft ? () => saveExtra() : undefined)
 
   if (activeFields.length === 0) {
     return null
@@ -348,6 +415,7 @@ function ItemFieldsSection({ itemId, canEdit }: { itemId: string; canEdit: boole
       toast.success('Поля сохранены')
     } catch (error) {
       toast.error(getErrorMessage(error))
+      throw error
     } finally {
       setSaving(false)
     }
@@ -366,7 +434,7 @@ function ItemFieldsSection({ itemId, canEdit }: { itemId: string; canEdit: boole
     >
       {editing ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <DynamicFieldsGrid>
             {activeFields.map((field) => (
               <DynamicFieldRenderer
                 key={field.id}
@@ -377,7 +445,7 @@ function ItemFieldsSection({ itemId, canEdit }: { itemId: string; canEdit: boole
                 }
               />
             ))}
-          </div>
+          </DynamicFieldsGrid>
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={cancelEdit} disabled={saving}>
               Отмена
@@ -388,9 +456,9 @@ function ItemFieldsSection({ itemId, canEdit }: { itemId: string; canEdit: boole
           </div>
         </>
       ) : (
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <dl className="grid grid-cols-12 gap-3 text-sm">
           {activeFields.map((field) => (
-            <div key={field.id}>
+            <div key={field.id} className={fieldLayoutWidthClass(field)}>
               <dt className="text-muted-foreground">{field.name}</dt>
               <dd className="mt-0.5 font-medium">
                 <DynamicFieldValue field={field} value={extraValues[field.code] ?? emptyFieldValue(field)} />

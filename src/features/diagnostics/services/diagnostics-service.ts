@@ -35,8 +35,6 @@ export type OrderJournalEvent = {
 
 export type SaveDiagnosticsInput = {
   orderId: string
-  conclusion: string
-  engineerId: string | null
   fieldValues: Record<string, DynamicFieldValueData>
 }
 
@@ -106,8 +104,8 @@ export async function saveOrderDiagnostics(input: SaveDiagnosticsInput): Promise
 
   const { error } = await getSupabase().rpc('save_order_diagnostics', {
     target_order_id: input.orderId,
-    conclusion: input.conclusion,
-    target_engineer_id: input.engineerId,
+    conclusion: '',
+    target_engineer_id: null,
     field_values: payload,
   })
 

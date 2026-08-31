@@ -33,7 +33,7 @@ export const permissionModules: PermissionModule[] = [
   },
   {
     resource: 'customers',
-    label: 'Клиенты',
+    label: 'Контакты',
     cells: {
       read: Permission.CustomersRead,
       create: Permission.CustomersCreate,

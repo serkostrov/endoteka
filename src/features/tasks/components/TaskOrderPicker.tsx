@@ -4,6 +4,7 @@ import { SearchInput } from '@/components/shared/SearchInput'
 import { Button } from '@/components/ui/button'
 import { useOrders } from '@/features/orders/hooks/use-orders'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { deviceSerialLine } from '@/features/devices/classification'
 import { TASK_SEARCH_DEBOUNCE_MS } from '@/lib/constants/tasks'
 import { getErrorMessage } from '@/lib/errors'
 
@@ -42,7 +43,13 @@ export function TaskOrderPicker({ orderId, orderNumber, onChange }: TaskOrderPic
 
   return (
     <div className="space-y-2">
-      <SearchInput value={query} onChange={setQuery} label="Поиск заказа" placeholder="Номер, клиент или серийный номер" />
+      <SearchInput
+        value={query}
+        onChange={setQuery}
+        className="max-w-none"
+        label="Поиск заказа"
+        placeholder="Номер, клиент или серийный номер"
+      />
       {ordersQuery.error ? <p className="text-sm text-destructive">{getErrorMessage(ordersQuery.error)}</p> : null}
       <ul className="divide-y rounded-md border">
         {(ordersQuery.data?.items ?? []).map((order) => (
@@ -54,7 +61,9 @@ export function TaskOrderPicker({ orderId, orderNumber, onChange }: TaskOrderPic
             >
               <span className="font-medium">{order.number}</span>
               <span className="text-xs text-muted-foreground">
-                {order.customerName} · {order.serialNumber}
+                {order.customerName}
+                {order.deviceLabel ? ` · ${order.deviceLabel}` : ''}
+                {order.serialNumber ? ` · ${deviceSerialLine(order.serialNumber)}` : ''}
               </span>
             </button>
           </li>

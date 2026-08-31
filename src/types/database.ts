@@ -111,6 +111,8 @@ type Row = {
     is_active: boolean
     sort_order: number
     group_name: string
+    layout_width: string
+    layout_height: string
     created_at: string
     updated_at: string
   }
@@ -458,6 +460,7 @@ type Row = {
   inventory_receipts: {
     id: string
     supplier: string
+    supplier_id: string | null
     receipt_date: string
     notes: string
     created_by: string | null
@@ -498,6 +501,37 @@ type Row = {
     reference_id: string
     created_by: string | null
     created_at: string
+  }
+  order_part_lines: {
+    id: string
+    order_id: string
+    item_id: string
+    quantity: number
+    unit_price: number
+    created_by: string | null
+    created_at: string
+    updated_at: string
+  }
+  service_templates: {
+    id: string
+    name: string
+    description: string
+    unit_price: number
+    is_active: boolean
+    created_by: string | null
+    created_at: string
+    updated_at: string
+  }
+  order_service_lines: {
+    id: string
+    order_id: string
+    template_id: string | null
+    name: string
+    quantity: number
+    unit_price: number
+    created_by: string | null
+    created_at: string
+    updated_at: string
   }
   inventory_counts: {
     id: string
@@ -822,6 +856,8 @@ export type Database = {
           is_active?: boolean
           sort_order?: number
           group_name?: string
+          layout_width?: string
+          layout_height?: string
           created_at?: string
           updated_at?: string
         }
@@ -833,6 +869,8 @@ export type Database = {
           is_active?: boolean
           sort_order?: number
           group_name?: string
+          layout_width?: string
+          layout_height?: string
         }
         Relationships: []
       }
@@ -1075,6 +1113,24 @@ export type Database = {
       }
       inventory_movements: {
         Row: Row['inventory_movements']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      order_part_lines: {
+        Row: Row['order_part_lines']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      service_templates: {
+        Row: Row['service_templates']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      order_service_lines: {
+        Row: Row['order_service_lines']
         Insert: never
         Update: never
         Relationships: []
@@ -1324,8 +1380,14 @@ export type Database = {
           is_required?: boolean
           options?: Json
           group_name?: string
+          layout_width?: string
+          layout_height?: string
         }
         Returns: string
+      }
+      set_dynamic_field_layout: {
+        Args: { target_id: string; next_width: string; next_height: string }
+        Returns: undefined
       }
       set_dynamic_field_active: {
         Args: { target_id: string; next_active: boolean }
@@ -1392,6 +1454,7 @@ export type Database = {
           page_number?: number
           page_size?: number
           active_only?: boolean
+          kind_filter?: string | null
         }
         Returns: {
           id: string
@@ -1469,6 +1532,14 @@ export type Database = {
         }
         Returns: string
       }
+      delete_order: {
+        Args: { target_order_id: string }
+        Returns: undefined
+      }
+      delete_order_attachment: {
+        Args: { target_attachment_id: string }
+        Returns: undefined
+      }
       update_order: {
         Args: {
           target_order_id: string
@@ -1516,7 +1587,7 @@ export type Database = {
       save_order_diagnostics: {
         Args: {
           target_order_id: string
-          conclusion: string
+          conclusion?: string
           target_engineer_id?: string | null
           field_values?: Json
         }
@@ -1770,11 +1841,22 @@ export type Database = {
         }[]
       }
       receive_inventory: {
-        Args: { supplier_name: string; doc_receipt_date: string; doc_notes: string; lines: Json }
+        Args: {
+          supplier_name: string
+          doc_receipt_date: string
+          doc_notes: string
+          lines: Json
+          supplier_customer_id?: string | null
+        }
         Returns: string
       }
       consume_inventory_for_order: {
-        Args: { target_order_id: string; target_item_id: string; consume_quantity: number }
+        Args: {
+          target_order_id: string
+          target_item_id: string
+          consume_quantity: number
+          line_unit_price?: number | null
+        }
         Returns: Json
       }
       consume_inventory_for_sale: {
@@ -1812,6 +1894,10 @@ export type Database = {
         Args: { target_receipt_id: string }
         Returns: Json
       }
+      delete_inventory_receipt: {
+        Args: { target_receipt_id: string; delete_mode: string }
+        Returns: undefined
+      }
       list_inventory_adjustments: {
         Args: { page_number?: number; page_size?: number }
         Returns: {
@@ -1827,6 +1913,14 @@ export type Database = {
       get_order_inventory_usage: {
         Args: { target_order_id: string }
         Returns: Json
+      }
+      set_order_part_line: {
+        Args: { target_line_id: string; line_quantity: number; line_unit_price: number }
+        Returns: undefined
+      }
+      remove_order_part_line: {
+        Args: { target_line_id: string }
+        Returns: undefined
       }
       create_inventory_count: {
         Args: { seed_mode?: string; seed_item_id?: string | null }
@@ -2177,6 +2271,63 @@ export type Database = {
           target_reference_id: string
         }
         Returns: Json
+      }
+      search_service_templates: {
+        Args: {
+          search_query?: string
+          page_number?: number
+          page_size?: number
+          active_only?: boolean
+        }
+        Returns: {
+          id: string
+          name: string
+          description: string
+          unit_price: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+          total_count: number
+        }[]
+      }
+      create_service_template: {
+        Args: { template_name: string; template_description?: string; template_unit_price?: number }
+        Returns: string
+      }
+      update_service_template: {
+        Args: {
+          target_id: string
+          template_name: string
+          template_description?: string
+          template_unit_price?: number
+          template_is_active?: boolean
+        }
+        Returns: undefined
+      }
+      delete_service_template: {
+        Args: { target_id: string }
+        Returns: undefined
+      }
+      get_order_service_lines: {
+        Args: { target_order_id: string }
+        Returns: Json
+      }
+      add_order_service_line: {
+        Args: {
+          target_order_id: string
+          target_template_id: string
+          line_quantity: number
+          line_unit_price: number
+        }
+        Returns: string
+      }
+      set_order_service_line: {
+        Args: { target_line_id: string; line_quantity: number; line_unit_price: number }
+        Returns: undefined
+      }
+      remove_order_service_line: {
+        Args: { target_line_id: string }
+        Returns: undefined
       }
     }
     Enums: {

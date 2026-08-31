@@ -54,7 +54,7 @@ export function SalePrintDocument({ document }: { document: SaleDocument }) {
 
       {document.status === 'confirmed' && document.lines.some((line) => line.allocations.length > 0) ? (
         <section className="space-y-2">
-          <h2 className="text-sm font-medium">Партии FIFO</h2>
+          <h2 className="text-sm font-medium">Партии</h2>
           <ul className="space-y-1 text-sm">
             {document.lines.flatMap((line) =>
               line.allocations.map((allocation) => (

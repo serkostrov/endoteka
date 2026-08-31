@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { Navigate, createBrowserRouter, RouterProvider, useParams } from 'react-router-dom'
 
 import { GuestOnly } from '@/app/guards/GuestOnly'
 import { RequireAuth } from '@/app/guards/RequireAuth'
@@ -50,11 +50,22 @@ const FieldEntitiesPage = lazyNamedPage(() => import('@/pages/FieldEntitiesPage'
 const EntityFieldsPage = lazyNamedPage(() => import('@/pages/EntityFieldsPage'), 'EntityFieldsPage')
 const OrderWorkflowPage = lazyNamedPage(() => import('@/pages/OrderWorkflowPage'), 'OrderWorkflowPage')
 const OrderStatusesPage = lazyNamedPage(() => import('@/pages/OrderStatusesPage'), 'OrderStatusesPage')
+const ServiceTemplatesPage = lazyNamedPage(() => import('@/pages/ServiceTemplatesPage'), 'ServiceTemplatesPage')
 const NotificationSettingsPage = lazyNamedPage(
   () => import('@/pages/NotificationSettingsPage'),
   'NotificationSettingsPage',
 )
 const AuditLogPage = lazyNamedPage(() => import('@/pages/AuditLogPage'), 'AuditLogPage')
+
+function LegacyDocumentTemplateRedirect() {
+  const { id } = useParams()
+  return <Navigate to={routes.documentTemplate.replace(':id', id ?? '')} replace />
+}
+
+function LegacyDocumentTemplatePrintRedirect() {
+  const { id } = useParams()
+  return <Navigate to={routes.documentTemplatePrint.replace(':id', id ?? '')} replace />
+}
 
 const router = createBrowserRouter([
   {
@@ -148,6 +159,9 @@ const router = createBrowserRouter([
               { path: routes.documentTemplates, element: <DocumentTemplatesPage /> },
               { path: routes.documentTemplate, element: <DocumentTemplatePage /> },
               { path: routes.documentTemplatePrint, element: <DocumentTemplatePrintPage /> },
+              { path: '/documents/templates/:id/print', element: <LegacyDocumentTemplatePrintRedirect /> },
+              { path: '/documents/templates/:id', element: <LegacyDocumentTemplateRedirect /> },
+              { path: '/documents/templates', element: <Navigate to={routes.documentTemplates} replace /> },
             ],
           },
           {
@@ -180,6 +194,7 @@ const router = createBrowserRouter([
               { path: routes.settingsOrders, element: <OrderWorkflowPage /> },
               { path: routes.settingsOrderStatuses, element: <OrderStatusesPage /> },
               { path: routes.settingsNotifications, element: <NotificationSettingsPage /> },
+              { path: routes.settingsServiceTemplates, element: <ServiceTemplatesPage /> },
             ],
           },
           {

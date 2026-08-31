@@ -9,11 +9,14 @@ import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  runSheetFormSave,
+  useSheetDirty,
 } from '@/components/ui/sheet'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
@@ -60,6 +63,12 @@ function EditItemForm({ item, onDone }: { item: InventoryItem; onDone: () => voi
       retailPrice: item.retailPrice,
     },
   })
+  useSheetDirty(form.formState.isDirty, () =>
+    runSheetFormSave(form.handleSubmit, async (values) => {
+      await update.mutateAsync(values)
+      toast.success('Позиция сохранена')
+    }),
+  )
 
   async function onSubmit(values: InventoryItemFormValues) {
     try {
@@ -91,9 +100,11 @@ function EditItemForm({ item, onDone }: { item: InventoryItem; onDone: () => voi
         ) : null}
         <ItemFields form={form} excludeItemId={item.id} />
         <SheetFooter className="px-0">
-          <Button type="button" variant="outline" onClick={onDone}>
-            Отмена
-          </Button>
+          <SheetClose asChild>
+            <Button type="button" variant="outline">
+              Отмена
+            </Button>
+          </SheetClose>
           <Button type="submit" disabled={update.isPending}>
             {update.isPending ? 'Сохранение…' : 'Сохранить'}
           </Button>

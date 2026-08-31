@@ -12,8 +12,11 @@ export function orderJournalEventTypeLabel(eventType: string) {
   if (eventType === TaskJournalEvent.Created || eventType === TaskJournalEvent.Completed || eventType === TaskJournalEvent.Deleted) {
     return 'Задача'
   }
-  if (eventType === 'parts_consumed') {
+  if (eventType === 'parts_consumed' || eventType === 'parts_returned') {
     return 'Склад'
+  }
+  if (eventType === 'service_added' || eventType === 'service_removed') {
+    return 'Услуга'
   }
   if (eventType === 'responsible_assigned') {
     return 'Назначение'

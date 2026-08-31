@@ -1,23 +1,27 @@
 import { Link } from 'react-router-dom'
-import { BookOpen, Bell, ClipboardList, SlidersHorizontal } from 'lucide-react'
+import { BookOpen, Bell, ClipboardList, FileStack, SlidersHorizontal } from 'lucide-react'
 
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
+import { useHasPermission } from '@/features/auth'
+import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 
 export function SettingsHubScreen() {
+  const canEditTemplates = useHasPermission(Permission.DocumentsEditTemplates)
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Настройки"
-        description="Справочники, маршрут заказов и дополнительные поля карточек. Менять состав может только сотрудник с правом изменения настроек."
+        description="Справочники, шаблоны документов, маршрут заказов и дополнительные поля карточек. Менять состав может только сотрудник с правом изменения настроек."
       />
 
       <div className="grid gap-4 md:grid-cols-2">
         <SectionCard
           title="Параметры"
-          description="Статусы заказов, бренды, модели, единицы измерения и другие словари."
+          description="Статусы заказов, бренды, модели, шаблоны услуг, единицы измерения и другие словари."
           actions={
             <Button asChild variant="outline" size="sm">
               <Link to={routes.settingsReferences}>Открыть</Link>
@@ -26,7 +30,7 @@ export function SettingsHubScreen() {
         >
           <div className="flex items-start gap-3 text-sm text-muted-foreground">
             <BookOpen className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-            <p>Статусы заказов, справочники и значения для форм. Колонки доски берутся из статусов.</p>
+            <p>Статусы заказов, справочники, шаблоны услуг и значения для форм. Колонки доски берутся из статусов.</p>
           </div>
         </SectionCard>
 
@@ -59,6 +63,23 @@ export function SettingsHubScreen() {
             <p>Типы: текст, число и список. Поля можно скрыть, не удаляя уже введённые данные.</p>
           </div>
         </SectionCard>
+
+        {canEditTemplates ? (
+          <SectionCard
+            title="Шаблоны документов"
+            description="Печатные формы, акты и этикетки. Макет правится в редакторе."
+            actions={
+              <Button asChild variant="outline" size="sm">
+                <Link to={routes.documentTemplates}>Открыть</Link>
+              </Button>
+            }
+          >
+            <div className="flex items-start gap-3 text-sm text-muted-foreground">
+              <FileStack className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p>Документы по заказу создаются во вкладке заказа. Здесь настраиваются только шаблоны.</p>
+            </div>
+          </SectionCard>
+        ) : null}
 
         <SectionCard
           title="Уведомления"

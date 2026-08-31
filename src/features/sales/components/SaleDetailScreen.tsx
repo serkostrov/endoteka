@@ -85,7 +85,7 @@ function SaleDocumentBody({ document }: { document: SaleDocument }) {
   async function handleConfirm() {
     try {
       await confirm.mutateAsync()
-      toast.success('Продажа подтверждена, остаток списан FIFO')
+      toast.success('Продажа подтверждена, остаток списан: сначала самые ранние поступления.')
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -249,7 +249,7 @@ function SaleDocumentBody({ document }: { document: SaleDocument }) {
 
         <SectionCard
           title="Позиции"
-          description={editable ? 'Остаток проверяется до подтверждения. Списание FIFO — одной транзакцией.' : undefined}
+          description={editable ? 'Остаток проверяется до подтверждения. Списание: сначала самые ранние поступления.' : undefined}
           actions={<p className="text-sm font-medium">Итого {formatMoney(document.total)}</p>}
         >
           <DataTable

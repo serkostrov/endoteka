@@ -10,15 +10,18 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  runSheetFormSave,
+  useSheetDirty,
 } from '@/components/ui/sheet'
 import { useHasPermission } from '@/features/auth'
-import { DynamicFieldRenderer, saveDynamicFieldValues } from '@/features/dynamic-fields'
-import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
+import { DynamicFieldRenderer, DynamicFieldsGrid, saveDynamicFieldValues } from '@/features/dynamic-fields'
+import { emptyFieldValue, filledFieldValues } from '@/features/dynamic-fields/schemas'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
 import { FieldEntity } from '@/lib/constants/fields'
 import { Permission } from '@/lib/constants/permissions'
@@ -29,7 +32,7 @@ import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/f
 
 import { DeviceClassificationFields } from './DeviceClassificationFields'
 import { WarrantyBadge } from './WarrantyBadge'
-import { CLASSIFICATION_NONE, emptyToNull } from '../classification'
+import { CLASSIFICATION_NONE, deviceSerialLine, deviceTitle, emptyToNull } from '../classification'
 import { useUpdateDevice } from '../hooks/use-devices'
 import { deviceClassificationSchema, type DeviceClassificationFormValues } from '../schemas'
 import type { Device, DeviceLookup } from '../services/devices-service'
@@ -45,8 +48,11 @@ export function EditDeviceDialog({ device, open, onOpenChange }: EditDeviceDialo
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Прибор {device?.serialNumber ?? ''}</SheetTitle>
-          <SheetDescription>Серийный номер нельзя менять. Классификация и поля сохраняются сразу.</SheetDescription>
+          <SheetTitle>{device ? deviceTitle(device) : 'Прибор'}</SheetTitle>
+          <SheetDescription>
+            {device ? `${deviceSerialLine(device.serialNumber)}. ` : ''}
+            Серийный номер нельзя менять. Классификация и поля сохраняются сразу.
+          </SheetDescription>
         </SheetHeader>
         {device ? <EditDeviceForm key={device.id} device={device} onDone={() => onOpenChange(false)} /> : null}
       </SheetContent>
@@ -78,26 +84,32 @@ function EditDeviceForm({ device, onDone }: { device: Device; onDone: () => void
       modificationId: device.modificationId ?? CLASSIFICATION_NONE,
     },
   })
+  useSheetDirty(form.formState.isDirty || Object.keys(extraValues).length > 0, () =>
+    runSheetFormSave(form.handleSubmit, persistDevice),
+  )
 
-  async function onSubmit(values: DeviceClassificationFormValues) {
+  async function persistDevice(values: DeviceClassificationFormValues) {
     if (!canUpdate) {
-      onDone()
       return
     }
 
+    await update.mutateAsync({
+      deviceId: device.id,
+      groupId: emptyToNull(values.groupId),
+      brandId: emptyToNull(values.brandId),
+      modelId: emptyToNull(values.modelId),
+      modificationId: emptyToNull(values.modificationId),
+    })
+    if (activeFields.length > 0) {
+      await saveDynamicFieldValues(FieldEntity.Devices, device.id, filledFieldValues(activeFields, extra))
+      await queryClient.invalidateQueries({ queryKey: queryKeys.fields.values(FieldEntity.Devices, device.id) })
+    }
+    toast.success('Прибор сохранён')
+  }
+
+  async function onSubmit(values: DeviceClassificationFormValues) {
     try {
-      await update.mutateAsync({
-        deviceId: device.id,
-        groupId: emptyToNull(values.groupId),
-        brandId: emptyToNull(values.brandId),
-        modelId: emptyToNull(values.modelId),
-        modificationId: emptyToNull(values.modificationId),
-      })
-      if (activeFields.length > 0) {
-        await saveDynamicFieldValues(FieldEntity.Devices, device.id, filledExtra(activeFields, extra))
-        await queryClient.invalidateQueries({ queryKey: queryKeys.fields.values(FieldEntity.Devices, device.id) })
-      }
-      toast.success('Прибор сохранён')
+      await persistDevice(values)
       onDone()
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -130,7 +142,7 @@ function EditDeviceForm({ device, onDone }: { device: Device; onDone: () => void
         <DeviceClassificationFields form={form} disabled={!canUpdate} />
 
         {activeFields.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <DynamicFieldsGrid>
             {activeFields.map((field) => (
               <DynamicFieldRenderer
                 key={field.id}
@@ -140,7 +152,7 @@ function EditDeviceForm({ device, onDone }: { device: Device; onDone: () => void
                 disabled={!canUpdate}
               />
             ))}
-          </div>
+          </DynamicFieldsGrid>
         ) : null}
 
         {repairs.length > 0 ? (
@@ -160,9 +172,11 @@ function EditDeviceForm({ device, onDone }: { device: Device; onDone: () => void
         ) : null}
 
         <SheetFooter className="px-0">
-          <Button type="button" variant="outline" onClick={onDone}>
-            {canUpdate ? 'Отмена' : 'Закрыть'}
-          </Button>
+          <SheetClose asChild>
+            <Button type="button" variant="outline">
+              {canUpdate ? 'Отмена' : 'Закрыть'}
+            </Button>
+          </SheetClose>
           {canUpdate ? (
             <Button type="submit" disabled={update.isPending || (activeFields.length > 0 && valuesQuery.isLoading)}>
               {update.isPending ? 'Сохранение…' : 'Сохранить'}
@@ -179,15 +193,4 @@ function asLookup(device: Device): DeviceLookup | null {
     return null
   }
   return device as DeviceLookup
-}
-
-function filledExtra(
-  fields: { code: string; fieldType: string }[],
-  values: Record<string, DynamicFieldValueData>,
-) {
-  const result: Record<string, DynamicFieldValueData> = {}
-  for (const field of fields) {
-    result[field.code] = values[field.code] ?? (field.fieldType === 'number' ? null : '')
-  }
-  return result
 }

@@ -17,9 +17,10 @@ type TaskCompleteTarget = {
 type TaskCompleteControlProps = {
   task: TaskCompleteTarget
   variant?: 'checkbox' | 'button'
+  size?: 'sm' | 'default'
 }
 
-export function TaskCompleteControl({ task, variant = 'checkbox' }: TaskCompleteControlProps) {
+export function TaskCompleteControl({ task, variant = 'checkbox', size = 'sm' }: TaskCompleteControlProps) {
   const canUpdate = useHasPermission(Permission.TasksUpdate)
   const complete = useSetTaskCompleted()
   const pending = complete.isPending
@@ -38,7 +39,7 @@ export function TaskCompleteControl({ task, variant = 'checkbox' }: TaskComplete
 
   if (variant === 'button') {
     return (
-      <Button type="button" size="sm" disabled={!canUpdate || pending} onClick={() => void toggle()}>
+      <Button type="button" size={size} disabled={!canUpdate || pending} onClick={() => void toggle()}>
         {pending ? 'Сохранение…' : task.completed ? 'Вернуть в работу' : 'Выполнена'}
       </Button>
     )

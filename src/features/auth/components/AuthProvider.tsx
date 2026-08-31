@@ -5,7 +5,7 @@ import { getSupabase } from '@/lib/supabase/client'
 import type { AuthUser } from '@/types/auth'
 
 import { AuthContext, type AuthStatus } from '../auth-context'
-import { getCurrentUser } from '../services/auth-service'
+import { getCurrentUser, persistAuthSession } from '../services/auth-service'
 
 type AuthState = {
   status: AuthStatus
@@ -52,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      void persistAuthSession(session)
       window.setTimeout(() => {
         void refreshUser()
       }, 0)

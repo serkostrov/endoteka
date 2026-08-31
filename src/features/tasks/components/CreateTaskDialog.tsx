@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  useSheetDirty,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentUser, useHasPermission } from '@/features/auth'
@@ -25,6 +27,7 @@ import {
   taskPriorityLabels,
 } from '@/lib/constants/tasks'
 import { getErrorMessage } from '@/lib/errors'
+import { localDateTimeToIso } from '@/lib/utils/date'
 
 import { TaskOrderPicker } from './TaskOrderPicker'
 import { useCreateTask } from '../hooks/use-tasks'
@@ -85,23 +88,34 @@ function CreateTaskForm({
     orderId: presetOrderId ?? null,
     orderNumber: presetOrderNumber ?? '',
   })
+  const dirty =
+    title.trim() !== '' ||
+    body.trim() !== '' ||
+    dueDate !== '' ||
+    assigneeId !== (user?.id ?? TASK_ASSIGNEE_NONE) ||
+    priority !== TaskPriority.Normal ||
+    (!presetOrderId && order.orderId !== null)
+  useSheetDirty(dirty, persist)
 
-  async function submit() {
+  async function persist() {
     const trimmed = title.trim()
     if (!trimmed) {
-      toast.error('Укажите задачу')
-      return
+      throw new Error('Укажите задачу')
     }
+    await create.mutateAsync({
+      title: trimmed,
+      body: body.trim(),
+      assigneeId: assigneeId === TASK_ASSIGNEE_NONE ? null : assigneeId,
+      dueDate: localDateTimeToIso(dueDate),
+      priority: isTaskPriority(priority) ? priority : TaskPriority.Normal,
+      orderId: presetOrderId ?? order.orderId,
+    })
+    toast.success('Задача создана')
+  }
+
+  async function submit() {
     try {
-      await create.mutateAsync({
-        title: trimmed,
-        body: body.trim(),
-        assigneeId: assigneeId === TASK_ASSIGNEE_NONE ? null : assigneeId,
-        dueDate: dueDate || null,
-        priority: isTaskPriority(priority) ? priority : TaskPriority.Normal,
-        orderId: presetOrderId ?? order.orderId,
-      })
-      toast.success('Задача создана')
+      await persist()
       onOpenChange(false)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -173,7 +187,7 @@ function CreateTaskForm({
       </div>
       <div className="space-y-2">
         <Label htmlFor="task-due">Срок</Label>
-        <DatePicker id="task-due" value={dueDate} onChange={setDueDate} />
+        <DatePicker id="task-due" withTime value={dueDate} onChange={setDueDate} />
       </div>
       {presetOrderId ? (
         <p className="text-sm text-muted-foreground">Заказ {presetOrderNumber || presetOrderId}</p>
@@ -184,9 +198,11 @@ function CreateTaskForm({
         </div>
       ) : null}
       <SheetFooter className="px-0">
-        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-          Отмена
-        </Button>
+        <SheetClose asChild>
+          <Button type="button" variant="outline">
+            Отмена
+          </Button>
+        </SheetClose>
         <Button type="submit" disabled={create.isPending}>
           {create.isPending ? 'Создание…' : 'Создать'}
         </Button>

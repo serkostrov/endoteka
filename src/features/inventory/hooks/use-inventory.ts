@@ -28,6 +28,7 @@ import {
   consumeInventoryForOrder,
   createInventoryItem,
   deleteInventoryItem,
+  deleteInventoryReceipt,
   findInventoryItemByName,
   findInventoryItemsByBarcode,
   getInventoryItemCard,
@@ -36,11 +37,16 @@ import {
   listInventoryAdjustments,
   listInventoryReceipts,
   receiveInventory,
+  removeOrderPartLine,
   searchInventoryItems,
+  setOrderPartLine,
   updateInventoryItem,
   type InventoryItemInput,
+  type InventoryReceiptDeleteMode,
   type ReceiptLineInput,
 } from '../services/inventory-service'
+
+export type { InventoryReceiptDeleteMode }
 
 export function useInventoryStock(search: string, page: number, pageSize: number, stockFilter = 'all') {
   return useQuery({
@@ -93,6 +99,25 @@ export function useInventoryReceipt(id: string | undefined) {
     queryKey: id ? queryKeys.inventory.receipt(id) : queryKeys.inventory.all,
     queryFn: () => getInventoryReceipt(id ?? ''),
     enabled: Boolean(id),
+  })
+}
+
+export function useDeleteInventoryReceipt() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, mode }: { id: string; mode: InventoryReceiptDeleteMode }) =>
+      deleteInventoryReceipt(id, mode),
+    onSuccess: async (_data, { id, mode }) => {
+      queryClient.removeQueries({ queryKey: queryKeys.inventory.receipt(id) })
+      await Promise.all([
+        invalidateInventory(queryClient),
+        queryClient.invalidateQueries({ queryKey: queryKeys.customers.all }),
+      ])
+      if (mode === 'reverse') {
+        await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
+      }
+    },
   })
 }
 
@@ -159,12 +184,14 @@ export function useReceiveInventory() {
   return useMutation({
     mutationFn: (input: {
       supplier: string
+      supplierId?: string | null
       receiptDate: string
       notes: string
       lines: ReceiptLineInput[]
     }) => receiveInventory(input),
     onSuccess: async () => {
       await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.customers.all })
     },
   })
 }
@@ -173,8 +200,33 @@ export function useConsumeInventoryForOrder(orderId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (input: { itemId: string; quantity: number }) =>
-      consumeInventoryForOrder(orderId, input.itemId, input.quantity),
+    mutationFn: (input: { itemId: string; quantity: number; unitPrice: number }) =>
+      consumeInventoryForOrder(orderId, input.itemId, input.quantity, input.unitPrice),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.orderUsage(orderId) })
+    },
+  })
+}
+
+export function useSetOrderPartLine(orderId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { lineId: string; quantity: number; unitPrice: number }) =>
+      setOrderPartLine(input.lineId, input.quantity, input.unitPrice),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.orderUsage(orderId) })
+    },
+  })
+}
+
+export function useRemoveOrderPartLine(orderId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (lineId: string) => removeOrderPartLine(lineId),
     onSuccess: async () => {
       await invalidateInventory(queryClient)
       await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.orderUsage(orderId) })

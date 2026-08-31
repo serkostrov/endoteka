@@ -17,6 +17,8 @@ type DevicePickerProps = {
   isDebouncing?: boolean
   onCreated?: (device: Device) => void
   onSelectDevice?: (item: DeviceSearchItem) => void
+  framed?: boolean
+  label?: string
 }
 
 export function DevicePicker({
@@ -28,6 +30,8 @@ export function DevicePicker({
   isDebouncing = false,
   onCreated,
   onSelectDevice,
+  framed = false,
+  label,
 }: DevicePickerProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const canCreate = useHasPermission(Permission.DevicesCreate)
@@ -46,6 +50,8 @@ export function DevicePicker({
           onSerialChange(item.serialNumber)
           onSelectDevice?.(item)
         }}
+        framed={framed}
+        label={label}
       />
       <CreateDeviceDialog
         key={createOpen ? `open-${serial}` : 'closed'}

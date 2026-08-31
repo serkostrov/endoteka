@@ -6,6 +6,8 @@ import {
   addOrderAttachmentUrl,
   changeOrderStatus,
   createOrder,
+  deleteOrder,
+  deleteOrderAttachment,
   getAvailableOrderTransitions,
   getOrder,
   getOrderAppSettings,
@@ -119,6 +121,22 @@ export function useCreateOrder() {
   })
 }
 
+export function useDeleteOrder() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (orderId: string) => deleteOrder(orderId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.devices.all })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.all })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.documents.all })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.notifications.all })
+    },
+  })
+}
+
 export function useUpdateOrder(orderId: string) {
   const queryClient = useQueryClient()
 
@@ -176,6 +194,19 @@ export function useUploadOrderFile(orderId: string) {
   return useMutation({
     mutationFn: ({ file, caption }: { file: File; caption: string }) =>
       uploadOrderFile(orderId, file, caption),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.attachments(orderId) })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) })
+    },
+  })
+}
+
+export function useDeleteOrderAttachment(orderId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, filePath }: { id: string; filePath: string | null }) =>
+      deleteOrderAttachment(id, filePath),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.attachments(orderId) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) })

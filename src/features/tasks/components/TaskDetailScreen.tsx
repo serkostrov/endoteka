@@ -25,8 +25,9 @@ import {
   taskPriorityTone,
 } from '@/lib/constants/tasks'
 import { getErrorMessage } from '@/lib/errors'
-import { formatDateTime } from '@/lib/utils/date'
+import { formatDateTime, localDateTimeToIso } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
+import { useSheetDirty } from '@/components/ui/sheet'
 
 import { TaskCompleteControl } from './TaskCompleteControl'
 import { TaskDeleteControl } from './TaskDeleteControl'
@@ -35,6 +36,7 @@ import { formatTaskDueDate, isTaskOverdue, type Task } from '../services/tasks-s
 
 export function TaskDetailScreen() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const taskQuery = useTask(id)
 
   if (taskQuery.isLoading) {
@@ -50,26 +52,62 @@ export function TaskDetailScreen() {
     return <ErrorState description="Задача не найдена." />
   }
 
-  return <TaskBody task={task} />
+  return <TaskDetailView task={task} onDeleted={() => navigate(routes.tasks)} />
 }
 
-function TaskBody({ task }: { task: Task }) {
-  const navigate = useNavigate()
+export function TaskDetailView({
+  task,
+  onDeleted,
+  showOrderLink = true,
+  layout = 'page',
+}: {
+  task: Task
+  onDeleted?: () => void
+  showOrderLink?: boolean
+  layout?: 'page' | 'sheet'
+}) {
+  return <TaskBody task={task} onDeleted={onDeleted} showOrderLink={showOrderLink} layout={layout} />
+}
+
+function TaskBody({
+  task,
+  onDeleted,
+  showOrderLink = true,
+  layout = 'page',
+}: {
+  task: Task
+  onDeleted?: () => void
+  showOrderLink?: boolean
+  layout?: 'page' | 'sheet'
+}) {
   const canUpdate = useHasPermission(Permission.TasksUpdate)
   const overdue = isTaskOverdue(task.dueDate, task.completed)
+  const actions = (
+    <div className="flex flex-wrap items-center gap-2">
+      <TaskCompleteControl task={task} variant="button" />
+      <TaskDeleteControl task={task} onDeleted={onDeleted} />
+    </div>
+  )
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={task.title}
-        description={task.completed ? 'Выполнена' : overdue ? 'Просрочена' : 'Открыта'}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <TaskCompleteControl task={task} variant="button" />
-            <TaskDeleteControl task={task} onDeleted={() => navigate(routes.tasks)} />
+      {layout === 'page' ? (
+        <PageHeader
+          title={task.title}
+          description={task.completed ? 'Выполнена' : overdue ? 'Просрочена' : 'Открыта'}
+          actions={actions}
+        />
+      ) : (
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="text-base font-semibold">{task.title}</p>
+            <p className="text-sm text-muted-foreground">
+              {task.completed ? 'Выполнена' : overdue ? 'Просрочена' : 'Открыта'}
+            </p>
           </div>
-        }
-      />
+          {actions}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <StatusBadge tone={task.completed ? 'success' : overdue ? 'danger' : 'neutral'}>
@@ -77,9 +115,13 @@ function TaskBody({ task }: { task: Task }) {
         </StatusBadge>
         <StatusBadge tone={taskPriorityTone(task.priority)}>{taskPriorityLabels[task.priority]}</StatusBadge>
         {task.orderId && task.orderNumber ? (
-          <Link to={routes.order.replace(':id', task.orderId)} className="text-primary hover:underline">
-            Заказ {task.orderNumber}
-          </Link>
+          showOrderLink ? (
+            <Link to={routes.order.replace(':id', task.orderId)} className="text-primary hover:underline">
+              Заказ {task.orderNumber}
+            </Link>
+          ) : (
+            <span className="text-muted-foreground">Заказ {task.orderNumber}</span>
+          )
         ) : (
           <span className="text-muted-foreground">Без заказа</span>
         )}
@@ -110,28 +152,38 @@ function TaskBody({ task }: { task: Task }) {
 
 function TaskEditForm({ task }: { task: Task }) {
   const employees = useActiveEmployees()
-  const update = useUpdateTask(task.id)
+  const update = useUpdateTask(task.id, task.orderId)
   const [title, setTitle] = useState(task.title)
   const [body, setBody] = useState(task.body)
   const [assigneeId, setAssigneeId] = useState(task.assigneeId ?? TASK_ASSIGNEE_NONE)
   const [dueDate, setDueDate] = useState(task.dueDate ?? '')
   const [priority, setPriority] = useState(task.priority)
+  const dirty =
+    title !== task.title ||
+    body !== task.body ||
+    assigneeId !== (task.assigneeId ?? TASK_ASSIGNEE_NONE) ||
+    dueDate !== (task.dueDate ?? '') ||
+    priority !== task.priority
+  useSheetDirty(dirty, persist)
 
-  async function submit() {
+  async function persist() {
     const trimmed = title.trim()
     if (!trimmed) {
-      toast.error('Укажите задачу')
-      return
+      throw new Error('Укажите задачу')
     }
+    await update.mutateAsync({
+      title: trimmed,
+      body: body.trim(),
+      assigneeId: assigneeId === TASK_ASSIGNEE_NONE ? null : assigneeId,
+      dueDate: localDateTimeToIso(dueDate),
+      priority,
+    })
+    toast.success('Сохранено')
+  }
+
+  async function submit() {
     try {
-      await update.mutateAsync({
-        title: trimmed,
-        body: body.trim(),
-        assigneeId: assigneeId === TASK_ASSIGNEE_NONE ? null : assigneeId,
-        dueDate: dueDate || null,
-        priority,
-      })
-      toast.success('Сохранено')
+      await persist()
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -191,7 +243,7 @@ function TaskEditForm({ task }: { task: Task }) {
           </div>
           <div className="space-y-2">
             <Label htmlFor="task-edit-due">Срок</Label>
-            <DatePicker id="task-edit-due" value={dueDate} onChange={setDueDate} />
+            <DatePicker id="task-edit-due" withTime value={dueDate} onChange={setDueDate} />
           </div>
         </div>
         <Button type="submit" disabled={update.isPending}>

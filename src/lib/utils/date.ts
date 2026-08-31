@@ -40,6 +40,24 @@ export function toIsoDate(value: Date): string {
   return format(value, DATE_ISO_FORMAT)
 }
 
+export function toLocalDateTimeValue(value: Date): string {
+  const pad = (part: number) => String(part).padStart(2, '0')
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}`
+}
+
+export function localDateTimeToIso(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(trimmed)) {
+    const date = new Date(trimmed)
+    return Number.isNaN(date.getTime()) ? null : date.toISOString()
+  }
+  const date = parseDateInput(trimmed)
+  return date ? date.toISOString() : null
+}
+
 export function formatDate(value: Date | string): string {
   const date = toDate(value)
   if (!date) {

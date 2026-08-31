@@ -1,0 +1,3 @@
+export const SERVICE_PAGE_SIZE = 20
+export const SERVICE_PICKER_PAGE_SIZE = 50
+export const SERVICE_SEARCH_DEBOUNCE_MS = 300

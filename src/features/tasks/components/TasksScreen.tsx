@@ -118,18 +118,7 @@ export function TasksScreen() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="Задачи"
-        description="Назначения, сроки и контроль работ."
-        actions={
-          canCreate ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
-              <Plus className="size-4" />
-              Задача
-            </Button>
-          ) : null
-        }
-      />
+      <PageHeader title="Задачи" description="Назначения, сроки и контроль работ." />
 
       <div className="flex gap-1 border-b">
         {statusTabs.map((item) => (
@@ -152,7 +141,16 @@ export function TasksScreen() {
         ))}
       </div>
 
-      <FilterBar>
+      <FilterBar
+        end={
+          canCreate ? (
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" />
+              Задача
+            </Button>
+          ) : null
+        }
+      >
         <SegmentedFilter
           aria-label="Назначение"
           value={assignmentChip}

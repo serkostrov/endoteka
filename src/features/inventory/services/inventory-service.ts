@@ -140,6 +140,12 @@ export type InventoryAdjustmentListItem = {
   quantity: number
 }
 
+export type OrderPartBatch = {
+  receiptDate: string
+  supplier: string
+  quantity: number
+}
+
 export type OrderInventoryUsage = {
   id: string
   itemId: string
@@ -150,9 +156,7 @@ export type OrderInventoryUsage = {
   unitName: string
   quantity: number
   unitPrice: number
-  batchId: string
-  batchReceiptDate: string
-  batchSupplier: string
+  batches: OrderPartBatch[]
   actorName: string
   createdAt: string
 }
@@ -434,6 +438,7 @@ export async function deleteInventoryItem(itemId: string): Promise<void> {
 
 export async function receiveInventory(input: {
   supplier: string
+  supplierId?: string | null
   receiptDate: string
   notes: string
   lines: ReceiptLineInput[]
@@ -447,6 +452,7 @@ export async function receiveInventory(input: {
       quantity: line.quantity,
       purchase_price: line.purchasePrice,
     })),
+    supplier_customer_id: input.supplierId ?? null,
   })
 
   if (error) {
@@ -460,15 +466,43 @@ export async function consumeInventoryForOrder(
   orderId: string,
   itemId: string,
   quantity: number,
+  unitPrice?: number,
 ): Promise<void> {
   const { error } = await getSupabase().rpc('consume_inventory_for_order', {
     target_order_id: orderId,
     target_item_id: itemId,
     consume_quantity: quantity,
+    line_unit_price: unitPrice ?? null,
   })
 
   if (error) {
     throw toAppError(error, 'Не удалось списать позицию в заказ.')
+  }
+}
+
+export async function setOrderPartLine(
+  lineId: string,
+  quantity: number,
+  unitPrice: number,
+): Promise<void> {
+  const { error } = await getSupabase().rpc('set_order_part_line', {
+    target_line_id: lineId,
+    line_quantity: quantity,
+    line_unit_price: unitPrice,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось изменить запчасть в заказе.')
+  }
+}
+
+export async function removeOrderPartLine(lineId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('remove_order_part_line', {
+    target_line_id: lineId,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить запчасть из заказа.')
   }
 }
 
@@ -561,6 +595,22 @@ export async function getInventoryReceipt(id: string): Promise<InventoryReceiptD
   }
 }
 
+export type InventoryReceiptDeleteMode = 'hide' | 'reverse'
+
+export async function deleteInventoryReceipt(
+  receiptId: string,
+  mode: InventoryReceiptDeleteMode,
+): Promise<void> {
+  const { error } = await getSupabase().rpc('delete_inventory_receipt', {
+    target_receipt_id: receiptId,
+    delete_mode: mode,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить приход.')
+  }
+}
+
 export async function listInventoryAdjustments(page: number, pageSize: number) {
   const { data, error } = await getSupabase().rpc('list_inventory_adjustments', {
     page_number: page,
@@ -615,9 +665,21 @@ export async function getOrderInventoryUsage(orderId: string): Promise<OrderInve
         unitName: asString(item.unit_name),
         quantity: asNumber(item.quantity),
         unitPrice: asNumber(item.unit_price),
-        batchId: asString(item.batch_id),
-        batchReceiptDate: asString(item.batch_receipt_date),
-        batchSupplier: asString(item.batch_supplier),
+        batches: Array.isArray(item.batches)
+          ? item.batches.flatMap((batch) => {
+              const row = asRecord(batch)
+              if (!row) {
+                return []
+              }
+              return [
+                {
+                  receiptDate: asString(row.receipt_date),
+                  supplier: asString(row.supplier),
+                  quantity: asNumber(row.quantity),
+                },
+              ]
+            })
+          : [],
         actorName: asString(item.actor_name),
         createdAt: asString(item.created_at),
       },

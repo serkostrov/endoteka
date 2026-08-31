@@ -11,6 +11,7 @@ export const TemplateBlockType = {
   Placeholder: 'placeholder',
   Qr: 'qr',
   Barcode: 'barcode',
+  Html: 'html',
 } as const
 
 export type TemplateBlockType = (typeof TemplateBlockType)[keyof typeof TemplateBlockType]
@@ -76,6 +77,12 @@ export type BarcodeBlock = {
   value: string
 }
 
+export type HtmlBlock = {
+  id: string
+  type: 'html'
+  html: string
+}
+
 export type TemplateBlock =
   | HeadingBlock
   | ParagraphBlock
@@ -85,6 +92,7 @@ export type TemplateBlock =
   | PlaceholderBlock
   | QrBlock
   | BarcodeBlock
+  | HtmlBlock
 
 export type DocumentContext = {
   values: Record<string, string>
@@ -175,6 +183,9 @@ export function parseTemplateBlock(value: unknown): TemplateBlock | null {
   if (row.type === TemplateBlockType.Barcode) {
     return { id: row.id, type: 'barcode', value: asString(row.value) }
   }
+  if (row.type === TemplateBlockType.Html) {
+    return { id: row.id, type: 'html', html: asString(row.html) }
+  }
 
   return null
 }
@@ -217,8 +228,35 @@ export function parseDocumentContext(value: Json | unknown): DocumentContext {
 }
 
 export function emptyTemplateBody(): TemplateBlock[] {
-  return [{ id: crypto.randomUUID(), type: 'heading', level: 1, text: 'Новый шаблон' }]
+  return [createHtmlBlock(DEFAULT_TEMPLATE_HTML)]
 }
+
+export function createHtmlBlock(html: string): HtmlBlock {
+  return { id: crypto.randomUUID(), type: 'html', html }
+}
+
+const DEFAULT_TEMPLATE_HTML = `<p style="text-align: center;"><strong>{{company.name}}</strong></p>
+<hr>
+<p style="text-align: center;"><strong>АКТ ПРИЁМА-ПЕРЕДАЧИ {{order.number}}</strong></p>
+<p>г. {{customer.city}} ________________________________________________________________ {{document.issuedAt}}</p>
+<p>Клиент: <span class="doc-field">{{customer.name}}</span></p>
+<p>Прибор: <span class="doc-field">{{device.label}}</span></p>
+<p>Серийный номер: <span class="doc-field">{{device.serialNumber}}</span></p>
+<p>Сопроводительная записка: <span class="doc-field">{{order.claimedMalfunction}}</span></p>
+<p>Комплектация: <span class="doc-field">{{order.completeness}}</span></p>
+<p>&nbsp;</p>
+<table style="width: 100%; border-collapse: collapse;">
+<tbody>
+<tr>
+<td style="width: 50%;">Сдал</td>
+<td style="width: 50%;">Принял</td>
+</tr>
+<tr>
+<td>________________ / ________________</td>
+<td>________________ / ________________</td>
+</tr>
+</tbody>
+</table>`
 
 export function createBlock(type: TemplateBlockType): TemplateBlock {
   const id = crypto.randomUUID()

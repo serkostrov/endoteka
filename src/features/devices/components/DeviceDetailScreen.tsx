@@ -16,11 +16,11 @@ import { PageTabs } from '@/components/shared/PageTabs'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
-import { DynamicFieldRenderer, DynamicFieldValue, saveDynamicFieldValues } from '@/features/dynamic-fields'
+import { DynamicFieldRenderer, DynamicFieldValue, DynamicFieldsGrid, saveDynamicFieldValues } from '@/features/dynamic-fields'
 import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
 import { useHasPermission } from '@/features/auth'
-import { FieldEntity } from '@/lib/constants/fields'
+import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
@@ -30,7 +30,7 @@ import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/f
 
 import { DeviceClassificationFields } from './DeviceClassificationFields'
 import { WarrantyBadge } from './WarrantyBadge'
-import { CLASSIFICATION_NONE, classificationLabel, emptyToNull } from '../classification'
+import { CLASSIFICATION_NONE, deviceSerialLine, deviceTitle, emptyToNull } from '../classification'
 import { useDeleteDevice, useDeviceCard, useUpdateDevice } from '../hooks/use-devices'
 import { deviceClassificationSchema, type DeviceClassificationFormValues } from '../schemas'
 import type { DeviceCard, DeviceLookup, DeviceWarranty } from '../services/devices-service'
@@ -81,8 +81,8 @@ function DeviceCardBody({ card }: { card: DeviceCard }) {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={device.serialNumber}
-        description={classificationLabel(device)}
+        title={deviceTitle(device)}
+        description={deviceSerialLine(device.serialNumber)}
         actions={
           canDelete ? (
             <IconActionButton
@@ -193,7 +193,7 @@ function DeviceCardBody({ card }: { card: DeviceCard }) {
       <ConfirmDialog
         open={deleteOpen}
         title="Удалить прибор"
-        description={`${device.serialNumber} будет удалён. Если по нему есть заказы, удаление не пройдёт.`}
+        description={`${deviceTitle(device)}. ${deviceSerialLine(device.serialNumber)} будет удалён. Если по нему есть заказы, удаление не пройдёт.`}
         confirmLabel="Удалить"
         isPending={remove.isPending}
         onOpenChange={setDeleteOpen}
@@ -210,7 +210,7 @@ function ClassificationSection({ deviceId, device }: { deviceId: string; device:
   return (
     <SectionCard
       title="Классификация"
-      description="Группа, бренд, модель и модификация из справочников."
+      description="Тип прибора, производитель, модель и модификация из справочников."
       className="h-full"
       actions={
         canUpdate && !editing ? (
@@ -224,8 +224,8 @@ function ClassificationSection({ deviceId, device }: { deviceId: string; device:
         <ClassificationEditForm deviceId={deviceId} device={device} onDone={() => setEditing(false)} />
       ) : (
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
-          <Info label="Группа" value={device.groupName} />
-          <Info label="Бренд" value={device.brandName} />
+          <Info label="Тип прибора" value={device.groupName} />
+          <Info label="Производитель" value={device.brandName} />
           <Info label="Модель" value={device.modelName} />
           <Info label="Модификация" value={device.modificationName} />
         </dl>
@@ -348,7 +348,7 @@ function DeviceFieldsSection({ deviceId }: { deviceId: string }) {
     >
       {editing ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <DynamicFieldsGrid>
             {activeFields.map((field) => (
               <DynamicFieldRenderer
                 key={field.id}
@@ -359,7 +359,7 @@ function DeviceFieldsSection({ deviceId }: { deviceId: string }) {
                 }
               />
             ))}
-          </div>
+          </DynamicFieldsGrid>
           <div className="mt-4 flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={cancelEdit} disabled={saving}>
               Отмена
@@ -370,9 +370,9 @@ function DeviceFieldsSection({ deviceId }: { deviceId: string }) {
           </div>
         </>
       ) : (
-        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+        <dl className="grid grid-cols-12 gap-3 text-sm">
           {activeFields.map((field) => (
-            <div key={field.id}>
+            <div key={field.id} className={fieldLayoutWidthClass(field)}>
               <dt className="text-muted-foreground">{field.name}</dt>
               <dd className="mt-0.5 font-medium">
                 <DynamicFieldValue field={field} value={extraValues[field.code] ?? emptyFieldValue(field)} />

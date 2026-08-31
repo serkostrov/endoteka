@@ -77,7 +77,7 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
             type="button"
             variant="ghost"
             size={compact ? 'xs' : 'sm'}
-            className={cn('gap-1 px-1.5', compact && 'h-auto py-0.5')}
+            className={cn('gap-1 px-1', compact && 'h-6 py-0')}
             onClick={(event) => event.stopPropagation()}
             aria-label={`Статус: ${statusName}`}
           >

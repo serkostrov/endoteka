@@ -162,19 +162,17 @@ export function ReferenceSetScreen() {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={set.name}
-        description={set.description ?? 'Значения этого справочника.'}
-        actions={
+      <PageHeader title={set.name} description={set.description ?? 'Значения этого справочника.'} />
+
+      <FilterBar
+        end={
           canUpdate ? (
             <Button type="button" onClick={openCreate}>
               Добавить
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <SearchInput value={search} onChange={setSearch} label="Поиск по справочнику" placeholder="Название" />
         <Select value={status} onValueChange={(value) => setStatus(value as typeof status)}>
           <SelectTrigger aria-label="Фильтр по статусу">

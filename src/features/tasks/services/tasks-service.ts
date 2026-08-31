@@ -1,6 +1,6 @@
 import { isTaskPriority, type TaskPriority } from '@/lib/constants/tasks'
 import { toAppError } from '@/lib/errors'
-import { formatDate } from '@/lib/utils/date'
+import { formatDate, formatDateTime, toDate, toLocalDateTimeValue } from '@/lib/utils/date'
 import { getSupabase } from '@/lib/supabase/client'
 import type { Json } from '@/types/database'
 
@@ -76,7 +76,8 @@ function mapDueDate(value: string | null | undefined) {
   if (!value) {
     return null
   }
-  return value.slice(0, 10)
+  const date = toDate(value)
+  return date ? toLocalDateTimeValue(date) : null
 }
 
 function mapListItem(row: {
@@ -240,21 +241,38 @@ export async function setTaskCompleted(id: string, completed: boolean): Promise<
 }
 
 export function formatTaskDueDate(value: string) {
-  return formatDate(value)
+  const date = toDate(value)
+  if (!date) {
+    return '—'
+  }
+  if (date.getHours() === 0 && date.getMinutes() === 0 && !value.includes('T') && value.length <= 10) {
+    return formatDate(date)
+  }
+  return formatDateTime(date)
 }
 
 export function isTaskOverdue(dueDate: string | null, completed: boolean) {
   if (!dueDate || completed) {
     return false
   }
-  return dueDate < todayStamp()
+  const date = toDate(dueDate)
+  return Boolean(date && date.getTime() < Date.now())
 }
 
 export function isTaskDueToday(dueDate: string | null, completed: boolean) {
   if (!dueDate || completed) {
     return false
   }
-  return dueDate === todayStamp()
+  const date = toDate(dueDate)
+  if (!date) {
+    return false
+  }
+  const today = new Date()
+  return (
+    date.getFullYear() === today.getFullYear() &&
+    date.getMonth() === today.getMonth() &&
+    date.getDate() === today.getDate()
+  )
 }
 
 export function taskDueHint(dueDate: string | null, completed: boolean) {
@@ -262,30 +280,35 @@ export function taskDueHint(dueDate: string | null, completed: boolean) {
     return null
   }
 
-  const today = todayStamp()
-  const days = dateStampDiff(dueDate, today)
-
-  if (completed) {
-    return { label: formatDate(dueDate), tone: 'muted' as const }
+  const date = toDate(dueDate)
+  if (!date) {
+    return null
   }
 
-  if (days < 0) {
-    return { label: `${formatDate(dueDate)} (−${Math.abs(days)} дн.)`, tone: 'danger' as const }
+  const label = formatTaskDueDate(dueDate)
+  const days = calendarDayDiff(date, new Date())
+
+  if (completed) {
+    return { label, tone: 'muted' as const }
+  }
+
+  if (isTaskOverdue(dueDate, false) && days < 0) {
+    return { label: `${label} (−${Math.abs(days)} дн.)`, tone: 'danger' as const }
+  }
+
+  if (isTaskOverdue(dueDate, false)) {
+    return { label: `${label} · просрочено`, tone: 'danger' as const }
   }
 
   if (days === 0) {
-    return { label: `${formatDate(dueDate)} · сегодня`, tone: 'warning' as const }
+    return { label: `${label} · сегодня`, tone: 'warning' as const }
   }
 
-  return { label: formatDate(dueDate), tone: 'muted' as const }
+  return { label, tone: 'muted' as const }
 }
 
-function todayStamp() {
-  const today = new Date()
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-}
-
-function dateStampDiff(left: string, right: string) {
-  const toUtc = (value: string) => Date.parse(`${value}T00:00:00Z`)
-  return Math.round((toUtc(left) - toUtc(right)) / 86_400_000)
+function calendarDayDiff(left: Date, right: Date) {
+  const start = Date.UTC(left.getFullYear(), left.getMonth(), left.getDate())
+  const end = Date.UTC(right.getFullYear(), right.getMonth(), right.getDate())
+  return Math.round((start - end) / 86_400_000)
 }

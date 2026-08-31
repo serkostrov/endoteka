@@ -1,38 +1,47 @@
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
-import { DatePicker } from '@/components/shared/DatePicker'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { useHasPermission } from '@/features/auth'
 import { CustomerPicker } from '@/features/customers'
 import { DevicePicker } from '@/features/devices'
 import { useSerialSearch } from '@/features/devices/hooks/use-devices'
-import { DynamicFieldRenderer, DynamicFieldValue, groupDynamicFields, saveDynamicFieldValues } from '@/features/dynamic-fields'
+import {
+  DynamicFieldRenderer,
+  DynamicFieldValue,
+  DynamicFieldsGrid,
+  buildEntityValuesSchema,
+  filledFieldValues,
+  groupDynamicFields,
+  saveDynamicFieldValues,
+} from '@/features/dynamic-fields'
 import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
-import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
-import { FieldEntity } from '@/lib/constants/fields'
+import { FieldEntity, OrderBuiltinField, fieldLayoutWidthClass, isOrderBuiltinField } from '@/lib/constants/fields'
+import { deviceSerialLine } from '@/features/devices/classification'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
+import { cn } from '@/lib/utils'
+import { useAutosave } from '@/hooks/use-autosave'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { queryKeys } from '@/lib/query-keys'
 import { useQueryClient } from '@tanstack/react-query'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
 import { useUpdateOrder } from '../hooks/use-orders'
-import { updateOrderRepairSchema, type UpdateOrderRepairFormValues } from '../schemas'
+import type { UpdateOrderInput } from '../services/orders-service'
+import {
+  canEditOrderCardField,
+  mergeOrderCardValues,
+  orderColumnsFromBuiltin,
+  sameOrderDate,
+  splitOrderFieldValues,
+} from '../lib/order-card-fields'
 import type { OrderDetail } from '../services/orders-service'
-
-const NONE = '__none__'
 
 type OrderOverviewTabProps = {
   order: OrderDetail
@@ -41,7 +50,6 @@ type OrderOverviewTabProps = {
 export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
   const canUpdate = useHasPermission(Permission.OrdersUpdate)
   const canAssign = useHasPermission(Permission.OrdersAssign)
-  const employees = useActiveEmployees()
   const update = useUpdateOrder(order.id)
   const queryClient = useQueryClient()
   const fieldsQuery = useDynamicFields(FieldEntity.Orders)
@@ -52,55 +60,107 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
   )
   const fieldGroups = useMemo(() => groupDynamicFields(activeFields), [activeFields])
   const [extraDraft, setExtraDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
-  const extraValues = extraDraft ?? valuesQuery.data ?? {}
-  const [savingFields, setSavingFields] = useState(false)
-
-  const form = useForm<UpdateOrderRepairFormValues>({
-    resolver: zodResolver(updateOrderRepairSchema),
-    values: toFormValues(order),
-  })
-
-  async function onSubmit(values: UpdateOrderRepairFormValues) {
-    try {
-      await update.mutateAsync({
-        orderId: order.id,
-        claimedMalfunction: canEditRepair ? values.claimedMalfunction : undefined,
-        completeness: canEditRepair ? values.completeness : undefined,
-        externalCondition: canEditRepair ? values.externalCondition : undefined,
-        deadline: canEditRepair ? values.deadline || null : undefined,
-        changeDeadline: canEditRepair,
-        responsibleId: canEditResponsible ? (values.responsibleId === NONE ? null : values.responsibleId) : undefined,
-        changeResponsible: canEditResponsible,
-      })
-      toast.success('Заказ сохранён')
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
-  }
-
-  async function saveExtra() {
-    setSavingFields(true)
-    try {
-      await saveDynamicFieldValues(FieldEntity.Orders, order.id, extraValues)
-      setExtraDraft(null)
-      await queryClient.invalidateQueries({ queryKey: queryKeys.fields.values(FieldEntity.Orders, order.id) })
-      toast.success('Дополнительные поля сохранены')
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    } finally {
-      setSavingFields(false)
-    }
-  }
-
+  const lastSavedKey = useRef<string | null>(null)
+  const cardValues = extraDraft ?? mergeOrderCardValues(order, valuesQuery.data ?? {})
   const canEditRepair = canUpdate
   const canEditResponsible = canUpdate || canAssign
+  const canSaveFields =
+    activeFields.length > 0 &&
+    (canUpdate || activeFields.some((field) => field.code === OrderBuiltinField.Responsible && canAssign))
+
+  const persistCard = useCallback(
+    async (draft: Record<string, DynamicFieldValueData>) => {
+      const values = { ...mergeOrderCardValues(order, valuesQuery.data ?? {}), ...draft }
+      const key = JSON.stringify(filledFieldValues(activeFields, values))
+      if (key === lastSavedKey.current) {
+        return
+      }
+
+      const parsed = buildEntityValuesSchema(activeFields).safeParse(filledFieldValues(activeFields, values))
+      if (!parsed.success) {
+        return
+      }
+
+      const { builtin, extra } = splitOrderFieldValues(parsed.data)
+      const columns = orderColumnsFromBuiltin(builtin)
+      const activeCodes = new Set(activeFields.map((field) => field.code))
+      const coverActive = activeCodes.has(OrderBuiltinField.CoverNote)
+      const completenessActive = activeCodes.has(OrderBuiltinField.Completeness)
+      const deadlineActive = activeCodes.has(OrderBuiltinField.Deadline)
+      const responsibleActive = activeCodes.has(OrderBuiltinField.Responsible)
+      const patch: UpdateOrderInput = { orderId: order.id }
+
+      if (canEditRepair && coverActive && columns.claimedMalfunction !== order.claimedMalfunction) {
+        patch.claimedMalfunction = columns.claimedMalfunction
+      }
+      if (canEditRepair && completenessActive && columns.completeness !== order.completeness) {
+        patch.completeness = columns.completeness
+      }
+      if (canEditRepair && deadlineActive && !sameOrderDate(columns.deadline, order.deadline)) {
+        patch.deadline = columns.deadline
+        patch.changeDeadline = true
+      }
+      if (
+        canEditResponsible &&
+        responsibleActive &&
+        (columns.responsibleId ?? null) !== (order.responsibleId ?? null)
+      ) {
+        patch.responsibleId = columns.responsibleId
+        patch.changeResponsible = true
+      }
+
+      const shouldUpdateOrder =
+        patch.claimedMalfunction !== undefined ||
+        patch.completeness !== undefined ||
+        Boolean(patch.changeDeadline) ||
+        Boolean(patch.changeResponsible)
+
+      try {
+        if (shouldUpdateOrder) {
+          await update.mutateAsync(patch)
+        }
+
+        if (canUpdate) {
+          const extraFields = activeFields.filter((field) => !isOrderBuiltinField(field.code))
+          if (extraFields.length > 0) {
+            await saveDynamicFieldValues(FieldEntity.Orders, order.id, extra)
+          }
+          await queryClient.invalidateQueries({ queryKey: queryKeys.fields.values(FieldEntity.Orders, order.id) })
+        }
+
+        lastSavedKey.current = key
+        setExtraDraft((current) => {
+          if (!current) {
+            return null
+          }
+          const next = { ...mergeOrderCardValues(order, valuesQuery.data ?? {}), ...current }
+          return JSON.stringify(filledFieldValues(activeFields, next)) === key ? null : current
+        })
+      } catch (error) {
+        toast.error(getErrorMessage(error))
+        throw error
+      }
+    },
+    [
+      activeFields,
+      canEditRepair,
+      canEditResponsible,
+      canUpdate,
+      order,
+      queryClient,
+      update,
+      valuesQuery.data,
+    ],
+  )
+
+  useAutosave(canSaveFields ? extraDraft : null, persistCard)
 
   return (
     <div className="space-y-4">
       {canEditRepair ? (
         <OrderPartiesEditor order={order} />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4">
           <EntityCard
             title="Клиент"
             name={order.customerName}
@@ -109,143 +169,39 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
           <EntityCard
             title="Прибор"
             name={order.deviceLabel}
-            detail={`СН ${order.serialNumber}`}
+            detail={deviceSerialLine(order.serialNumber)}
             href={routes.device.replace(':id', order.deviceId)}
           />
         </div>
       )}
 
-      <SectionCard title="Заказ">
-        <Form {...form}>
-          <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
-            <FormField
-              control={form.control}
-              name="claimedMalfunction"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Заявленная неисправность</FormLabel>
-                  <FormControl>
-                    <Textarea {...field} rows={4} disabled={!canEditRepair} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="completeness"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Комплектность</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={3} disabled={!canEditRepair} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="externalCondition"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Внешнее состояние</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={3} disabled={!canEditRepair} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="deadline"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Срок</FormLabel>
-                    <FormControl>
-                      <DatePicker
-                        value={field.value ?? ''}
-                        onChange={field.onChange}
-                        onBlur={field.onBlur}
-                        name={field.name}
-                        disabled={!canEditRepair}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="responsibleId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Ответственный</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange} disabled={!canEditResponsible}>
-                      <FormControl>
-                        <SelectTrigger className="w-full" aria-label="Ответственный">
-                          <SelectValue placeholder="Не назначен" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>Не назначен</SelectItem>
-                        {(employees.data ?? []).map((employee) => (
-                          <SelectItem key={employee.id} value={employee.id}>
-                            {employee.fullName}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            {canEditRepair || canEditResponsible ? (
-              <div className="flex justify-end">
-                <Button type="submit" disabled={update.isPending}>
-                  {update.isPending ? 'Сохранение…' : 'Сохранить'}
-                </Button>
-              </div>
-            ) : null}
-          </form>
-        </Form>
-      </SectionCard>
-
-      {fieldGroups.map((group, index) => (
+      {fieldGroups.map((group) => (
         <SectionCard key={group.name} title={group.name}>
-          <div className="grid gap-4 md:grid-cols-2">
-            {group.fields.map((field) =>
-              canUpdate ? (
+          <DynamicFieldsGrid>
+            {group.fields.map((field) => {
+              const editable = canEditOrderCardField(field, { canUpdate, canAssign })
+              return editable ? (
                 <DynamicFieldRenderer
                   key={field.id}
                   field={field}
-                  value={extraValues[field.code] ?? emptyFieldValue(field)}
+                  value={cardValues[field.code] ?? emptyFieldValue(field)}
                   onChange={(value) =>
-                    setExtraDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [field.code]: value }))
+                    setExtraDraft((current) => ({
+                      ...(current ?? mergeOrderCardValues(order, valuesQuery.data ?? {})),
+                      [field.code]: value,
+                    }))
                   }
                 />
               ) : (
-                <div key={field.id} className="space-y-1">
+                <div key={field.id} className={cn('space-y-1', fieldLayoutWidthClass(field))}>
                   <p className="text-sm text-muted-foreground">{field.name}</p>
                   <p className="text-sm">
-                    <DynamicFieldValue field={field} value={extraValues[field.code] ?? emptyFieldValue(field)} />
+                    <DynamicFieldValue field={field} value={cardValues[field.code] ?? emptyFieldValue(field)} />
                   </p>
                 </div>
-              ),
-            )}
-          </div>
-          {canUpdate && index === fieldGroups.length - 1 ? (
-            <div className="mt-4 flex justify-end">
-              <Button type="button" onClick={() => void saveExtra()} disabled={savingFields}>
-                {savingFields ? 'Сохранение…' : 'Сохранить поля'}
-              </Button>
-            </div>
-          ) : null}
+              )
+            })}
+          </DynamicFieldsGrid>
         </SectionCard>
       ))}
     </div>
@@ -331,54 +287,41 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
   }, [createdDeviceId, persistDevice, selectedDevice?.id])
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
-      <section className="flex min-w-0 flex-col gap-2 rounded-lg border bg-background p-4">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Клиент</p>
-        <CustomerPicker
-          value={customerId}
-          disabled={pending}
-          onChange={(customer) => {
-            const nextId = customer?.id ?? ''
-            setCustomerId(nextId)
-            if (nextId) {
-              void persistCustomer(nextId)
-            }
-          }}
-        />
-        {customerId ? (
-          <Button asChild variant="link" className="h-auto self-start px-0">
-            <Link to={routes.customer.replace(':id', customerId)}>Открыть карточку</Link>
-          </Button>
-        ) : null}
-      </section>
-
-      <section className="flex min-w-0 flex-col gap-2 rounded-lg border bg-background p-4">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Прибор</p>
-        <DevicePicker
-          serial={serial}
-          customerId={customerId || undefined}
-          disabled={pending}
-          result={serialSearch}
-          isDebouncing={serial.trim() !== debouncedSerial}
-          onSerialChange={(next) => {
-            setSerial(next)
-            setCreatedDeviceId(null)
-          }}
-          onSelectDevice={(device) => {
-            void persistDevice(device.id)
-          }}
-          onCreated={(device) => {
-            setSerial(device.serialNumber)
-            setCreatedDeviceId(device.id)
-            void persistDevice(device.id)
-          }}
-        />
-        {selectedDevice?.id || serial === order.serialNumber ? (
-          <Button asChild variant="link" className="h-auto self-start px-0">
-            <Link to={routes.device.replace(':id', selectedDevice?.id ?? order.deviceId)}>Открыть карточку</Link>
-          </Button>
-        ) : null}
-      </section>
+    <div className="flex w-full flex-col gap-4">
+      <CustomerPicker
+        framed
+        label="Клиент"
+        value={customerId}
+        disabled={pending}
+        onChange={(customer) => {
+          const nextId = customer?.id ?? ''
+          setCustomerId(nextId)
+          if (nextId) {
+            void persistCustomer(nextId)
+          }
+        }}
+      />
+      <DevicePicker
+        framed
+        label="Прибор"
+        serial={serial}
+        customerId={customerId || undefined}
+        disabled={pending}
+        result={serialSearch}
+        isDebouncing={serial.trim() !== debouncedSerial}
+        onSerialChange={(next) => {
+          setSerial(next)
+          setCreatedDeviceId(null)
+        }}
+        onSelectDevice={(device) => {
+          void persistDevice(device.id)
+        }}
+        onCreated={(device) => {
+          setSerial(device.serialNumber)
+          setCreatedDeviceId(device.id)
+          void persistDevice(device.id)
+        }}
+      />
     </div>
   )
 }
@@ -404,14 +347,4 @@ function EntityCard({
       </Button>
     </div>
   )
-}
-
-function toFormValues(order: OrderDetail): UpdateOrderRepairFormValues {
-  return {
-    claimedMalfunction: order.claimedMalfunction,
-    completeness: order.completeness,
-    externalCondition: order.externalCondition,
-    deadline: order.deadline ?? '',
-    responsibleId: order.responsibleId ?? NONE,
-  }
 }

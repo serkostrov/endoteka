@@ -58,16 +58,17 @@ export function InventoryItemsScreen() {
       <PageHeader
         title="Номенклатура"
         description="Справочник запчастей и расходников. Наименование уникально."
-        actions={
+      />
+
+      <FilterBar
+        end={
           canReceive ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
               Новая позиция
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <SearchInput
           value={search}
           onChange={(next) => {

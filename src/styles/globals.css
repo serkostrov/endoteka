@@ -169,6 +169,7 @@
 
 .document-sheet-a4 {
   width: 210mm;
+  max-width: 100%;
   min-height: 277mm;
   padding: 8mm 10mm;
   box-sizing: border-box;
@@ -180,6 +181,126 @@
   padding: 3mm;
   box-sizing: border-box;
   border: 1px dashed #bbb;
+}
+
+.document-sheet-canvas {
+  width: 100%;
+  padding: 16px 20px 32px;
+  box-sizing: border-box;
+}
+
+.document-html-body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 12pt;
+  line-height: 1.45;
+  color: #111;
+}
+
+.document-html-body h1 {
+  font-size: 2em;
+  font-weight: 700;
+  margin: 0.67em 0;
+}
+
+.document-html-body h2 {
+  font-size: 1.5em;
+  font-weight: 700;
+  margin: 0.75em 0;
+}
+
+.document-html-body h3 {
+  font-size: 1.17em;
+  font-weight: 700;
+  margin: 1em 0;
+}
+
+.document-html-body h4,
+.document-html-body h5,
+.document-html-body h6 {
+  font-size: 1em;
+  font-weight: 700;
+  margin: 1.33em 0;
+}
+
+.document-html-body p {
+  margin: 0 0 1em;
+}
+
+.document-html-body ul,
+.document-html-body ol {
+  margin: 1em 0;
+  padding-inline-start: 40px;
+  list-style: revert;
+}
+
+.document-html-body hr {
+  margin: 1em 0;
+  border: none;
+  border-top: 1px solid #ccc;
+}
+
+.document-html-body table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.document-html-body td,
+.document-html-body th {
+  border: 1px dotted #94a3b8;
+  padding: 6px 8px;
+  vertical-align: middle;
+}
+
+.document-html-body img {
+  display: inline-block;
+  max-width: 100%;
+  height: auto;
+}
+
+.document-html-body .doc-field {
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  border-radius: 0;
+}
+
+.document-html-body .doc-qr-image {
+  display: inline-block;
+  width: 4.5rem;
+  height: 4.5rem;
+  vertical-align: middle;
+}
+
+.document-html-body .doc-barcode-svg,
+.document-html-body svg.doc-barcode-svg {
+  display: inline-block;
+  height: 3rem;
+  max-width: 16rem;
+  vertical-align: middle;
+}
+
+.document-tinymce .tox-tinymce {
+  display: flex;
+  height: 100% !important;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  border: 0;
+  border-radius: 0;
+}
+
+.document-tinymce .tox-editor-container {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.document-tinymce .tox-sidebar-wrap,
+.document-tinymce .tox-edit-area,
+.document-tinymce .tox-edit-area__iframe {
+  min-height: 0;
+  height: 100%;
 }
 
 @media print {
@@ -195,5 +316,10 @@
     width: 58mm;
     min-height: 40mm;
     padding: 0;
+  }
+
+  .document-html-body td,
+  .document-html-body th {
+    border: 1px solid #222;
   }
 }

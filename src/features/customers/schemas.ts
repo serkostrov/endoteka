@@ -47,6 +47,10 @@ export const emptyCustomerFormValues: CustomerFormValues = {
   notes: '',
 }
 
+export function emptyCustomerForm(kind: CustomerKind = CustomerKind.Organization): CustomerFormValues {
+  return { ...emptyCustomerFormValues, kind }
+}
+
 export function nameLabel(kind: string) {
   return kind === CustomerKind.Individual ? 'ФИО' : 'Название организации'
 }

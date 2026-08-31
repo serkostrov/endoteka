@@ -18,9 +18,10 @@ type CustomerFieldsProps = {
   form: UseFormReturn<CustomerFormValues>
   disabled?: boolean
   excludeCustomerId?: string
+  hideKind?: boolean
 }
 
-export function CustomerFields({ form, disabled = false, excludeCustomerId }: CustomerFieldsProps) {
+export function CustomerFields({ form, disabled = false, excludeCustomerId, hideKind = false }: CustomerFieldsProps) {
   const kind = form.watch('kind')
   const inn = form.watch('inn')
   const isOrg = kind === CustomerKind.Organization
@@ -34,7 +35,7 @@ export function CustomerFields({ form, disabled = false, excludeCustomerId }: Cu
         <Alert>
           <AlertTitle>Похожий ИНН уже есть</AlertTitle>
           <AlertDescription>
-            <p className="mb-2">Это не запрещает сохранить запись. Проверьте, что это не тот же клиент.</p>
+            <p className="mb-2">Это не запрещает сохранить запись. Проверьте, что это не тот же контакт.</p>
             <ul className="space-y-1">
               {matches.map((item) => (
                 <li key={item.id}>
@@ -48,36 +49,38 @@ export function CustomerFields({ form, disabled = false, excludeCustomerId }: Cu
         </Alert>
       ) : null}
 
-      <FormField
-        control={form.control}
-        name="kind"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Тип</FormLabel>
-            <Select
-              value={field.value}
-              disabled={disabled}
-              onValueChange={(next) => {
-                field.onChange(next)
-                if (next === CustomerKind.Individual) {
-                  form.setValue('kpp', '')
-                }
-              }}
-            >
-              <FormControl>
-                <SelectTrigger className="w-full" aria-label="Тип клиента">
-                  <SelectValue />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                <SelectItem value={CustomerKind.Organization}>{customerKindLabels.organization}</SelectItem>
-                <SelectItem value={CustomerKind.Individual}>{customerKindLabels.individual}</SelectItem>
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+      {hideKind ? null : (
+        <FormField
+          control={form.control}
+          name="kind"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Тип</FormLabel>
+              <Select
+                value={field.value}
+                disabled={disabled}
+                onValueChange={(next) => {
+                  field.onChange(next)
+                  if (next === CustomerKind.Individual) {
+                    form.setValue('kpp', '')
+                  }
+                }}
+              >
+                <FormControl>
+                  <SelectTrigger className="w-full" aria-label="Тип контакта">
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value={CustomerKind.Organization}>{customerKindLabels.organization}</SelectItem>
+                  <SelectItem value={CustomerKind.Individual}>{customerKindLabels.individual}</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
 
       <FormField
         control={form.control}

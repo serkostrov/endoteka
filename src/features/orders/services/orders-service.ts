@@ -5,6 +5,7 @@ import {
   ORDER_FILE_MAX_BYTES,
   ORDER_FILE_MIME_TYPES,
 } from '@/lib/constants/orders'
+import { deviceTitle } from '@/features/devices/classification'
 import { toAppError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase/client'
 import type { Json, OrderAttachmentRow, OrderListItemRow, OrderRow, OrderStatusCatalogRow, OrderStatusGroupRow } from '@/types/database'
@@ -19,6 +20,7 @@ export type OrderSortColumn =
   | 'status'
   | 'responsible'
   | 'deadline'
+  | 'malfunction'
   | 'updated'
 
 export type OrderListFilters = {
@@ -96,6 +98,7 @@ export type OrderAttachment = {
   url: string | null
   caption: string
   createdBy: string | null
+  createdByName: string
   createdAt: string
   signedUrl: string | null
 }
@@ -157,6 +160,7 @@ const SORT_COLUMNS: Record<OrderSortColumn, string> = {
   status: 'status_name',
   responsible: 'responsible_name',
   deadline: 'deadline',
+  malfunction: 'claimed_malfunction',
   updated: 'updated_at',
 }
 
@@ -177,7 +181,11 @@ function mapListItem(row: OrderListItemRow): OrderListItem {
     serialNumber: row.serial_number,
     deviceBrand: row.device_brand,
     deviceModel: row.device_model,
-    deviceLabel: row.device_label || row.serial_number,
+    deviceLabel: deviceTitle({
+      deviceBrand: row.device_brand,
+      deviceModel: row.device_model,
+      deviceLabel: row.device_label,
+    }),
     statusId: row.status_id,
     statusCode: row.status_code,
     statusName: row.status_name,
@@ -192,7 +200,11 @@ function mapListItem(row: OrderListItemRow): OrderListItem {
   }
 }
 
-function mapAttachment(row: OrderAttachmentRow, signedUrl: string | null): OrderAttachment {
+function mapAttachment(
+  row: OrderAttachmentRow,
+  signedUrl: string | null,
+  createdByName: string,
+): OrderAttachment {
   return {
     id: row.id,
     orderId: row.order_id,
@@ -204,6 +216,7 @@ function mapAttachment(row: OrderAttachmentRow, signedUrl: string | null): Order
     url: row.url,
     caption: row.caption,
     createdBy: row.created_by,
+    createdByName,
     createdAt: row.created_at,
     signedUrl,
   }
@@ -317,20 +330,46 @@ export async function createOrder(input: CreateOrderInput): Promise<string> {
   return data
 }
 
+export async function deleteOrder(orderId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('delete_order', {
+    target_order_id: orderId,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить заказ.')
+  }
+}
+
 export async function updateOrder(input: UpdateOrderInput): Promise<void> {
   const { error } = await getSupabase().rpc('update_order', {
     target_order_id: input.orderId,
-    claimed_malfunction: input.claimedMalfunction ?? null,
-    completeness: input.completeness ?? null,
-    external_condition: input.externalCondition ?? null,
-    target_deadline: input.changeDeadline ? input.deadline ?? null : null,
-    clear_deadline: Boolean(input.changeDeadline && input.deadline === null),
-    target_responsible_id: input.changeResponsible ? (input.responsibleId ?? null) : null,
-    change_responsible: Boolean(input.changeResponsible),
-    target_customer_id: input.changeCustomer ? (input.customerId ?? null) : null,
-    change_customer: Boolean(input.changeCustomer),
-    target_device_id: input.changeDevice ? (input.deviceId ?? null) : null,
-    change_device: Boolean(input.changeDevice),
+    ...(input.claimedMalfunction !== undefined ? { claimed_malfunction: input.claimedMalfunction } : {}),
+    ...(input.completeness !== undefined ? { completeness: input.completeness } : {}),
+    ...(input.externalCondition !== undefined ? { external_condition: input.externalCondition } : {}),
+    ...(input.changeDeadline
+      ? {
+          target_deadline: input.deadline ?? null,
+          clear_deadline: input.deadline == null,
+        }
+      : {}),
+    ...(input.changeResponsible
+      ? {
+          target_responsible_id: input.responsibleId ?? null,
+          change_responsible: true,
+        }
+      : {}),
+    ...(input.changeCustomer
+      ? {
+          target_customer_id: input.customerId ?? null,
+          change_customer: true,
+        }
+      : {}),
+    ...(input.changeDevice
+      ? {
+          target_device_id: input.deviceId ?? null,
+          change_device: true,
+        }
+      : {}),
   })
 
   if (error) {
@@ -399,7 +438,8 @@ async function signedUrlFor(filePath: string | null) {
 }
 
 export async function listOrderAttachments(orderId: string): Promise<OrderAttachment[]> {
-  const { data, error } = await getSupabase()
+  const supabase = getSupabase()
+  const { data, error } = await supabase
     .from('order_attachments')
     .select('*')
     .eq('order_id', orderId)
@@ -409,7 +449,22 @@ export async function listOrderAttachments(orderId: string): Promise<OrderAttach
     throw toAppError(error, 'Не удалось загрузить вложения.')
   }
 
-  return Promise.all((data ?? []).map(async (row) => mapAttachment(row, await signedUrlFor(row.file_path))))
+  const rows = data ?? []
+  const creatorIds = [...new Set(rows.map((row) => row.created_by).filter((id): id is string => Boolean(id)))]
+  const names = new Map<string, string>()
+
+  if (creatorIds.length > 0) {
+    const { data: profiles } = await supabase.from('profiles').select('id, full_name').in('id', creatorIds)
+    for (const profile of profiles ?? []) {
+      names.set(profile.id, profile.full_name)
+    }
+  }
+
+  return Promise.all(
+    rows.map(async (row) =>
+      mapAttachment(row, await signedUrlFor(row.file_path), names.get(row.created_by ?? '') ?? ''),
+    ),
+  )
 }
 
 export async function addOrderAttachmentUrl(orderId: string, url: string, caption: string): Promise<void> {
@@ -460,6 +515,21 @@ export async function uploadOrderFile(orderId: string, file: File, caption: stri
 
   if (error) {
     throw toAppError(error, 'Не удалось зарегистрировать файл.')
+  }
+}
+
+export async function deleteOrderAttachment(attachmentId: string, filePath: string | null): Promise<void> {
+  const supabase = getSupabase()
+  const { error } = await supabase.rpc('delete_order_attachment', {
+    target_attachment_id: attachmentId,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить файл.')
+  }
+
+  if (filePath) {
+    await supabase.storage.from(ORDER_ATTACHMENTS_BUCKET).remove([filePath])
   }
 }
 

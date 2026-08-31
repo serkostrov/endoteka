@@ -49,16 +49,17 @@ export function DocumentsScreen() {
       <PageHeader
         title="Документы"
         description="Акты, накладные и этикетки заполняются из шаблона. Произвольный доступ к базе через поля запрещён."
-        actions={
+      />
+
+      <FilterBar
+        end={
           canCreate ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
               Новый документ
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <SearchInput
           value={search}
           onChange={(next) => {

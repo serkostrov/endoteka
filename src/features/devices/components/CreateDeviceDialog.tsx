@@ -10,11 +10,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  runSheetFormSave,
 } from '@/components/ui/sheet'
 import { SERIAL_LOOKUP_DEBOUNCE_MS, SERIAL_LOOKUP_MIN_LENGTH } from '@/lib/constants/devices'
 import { routes } from '@/lib/constants/routes'
@@ -59,40 +61,44 @@ export function CreateDeviceDialog({
   const existing = existingQuery.data?.kind === 'exact' ? existingQuery.data.device : null
   const blockingId = duplicateId || existing?.id || null
 
-  async function onSubmit(values: CreateDeviceFormValues) {
+  async function persist(values: CreateDeviceFormValues) {
     if (blockingId) {
-      return
+      throw new Error('Прибор с таким серийным номером уже существует')
     }
 
+    const id = await create.mutateAsync({
+      serialNumber: values.serialNumber,
+      customerId: emptyToNull(values.customerId),
+      groupId: emptyToNull(values.groupId),
+      brandId: emptyToNull(values.brandId),
+      modelId: emptyToNull(values.modelId),
+      modificationId: emptyToNull(values.modificationId),
+    })
+    toast.success('Прибор создан')
+    onCreated?.({
+      id,
+      serialNumber: values.serialNumber.trim(),
+      groupId: emptyToNull(values.groupId),
+      brandId: emptyToNull(values.brandId),
+      modelId: emptyToNull(values.modelId),
+      modificationId: emptyToNull(values.modificationId),
+      groupName: '',
+      brandName: '',
+      modelName: '',
+      modificationName: '',
+      label: 'Прибор',
+      notes: '',
+      warranty: null,
+      createdAt: '',
+      updatedAt: '',
+    })
+  }
+
+  async function onSubmit(values: CreateDeviceFormValues) {
     try {
-      const id = await create.mutateAsync({
-        serialNumber: values.serialNumber,
-        customerId: emptyToNull(values.customerId),
-        groupId: emptyToNull(values.groupId),
-        brandId: emptyToNull(values.brandId),
-        modelId: emptyToNull(values.modelId),
-        modificationId: emptyToNull(values.modificationId),
-      })
-      toast.success('Прибор создан')
+      await persist(values)
       form.reset(emptyValues('', defaultCustomerId))
       onOpenChange(false)
-      onCreated?.({
-        id,
-        serialNumber: values.serialNumber.trim(),
-        groupId: emptyToNull(values.groupId),
-        brandId: emptyToNull(values.brandId),
-        modelId: emptyToNull(values.modelId),
-        modificationId: emptyToNull(values.modificationId),
-        groupName: '',
-        brandName: '',
-        modelName: '',
-        modificationName: '',
-        label: 'Прибор',
-        notes: '',
-        warranty: null,
-        createdAt: '',
-        updatedAt: '',
-      })
     } catch (error) {
       if (isDeviceDuplicateError(error)) {
         setDuplicateId(error.existingDeviceId)
@@ -111,6 +117,8 @@ export function CreateDeviceDialog({
   return (
     <Sheet
       open={open}
+      dirty={form.formState.isDirty}
+      onSave={() => runSheetFormSave(form.handleSubmit, persist)}
       onOpenChange={(next) => {
         form.reset(defaults)
         setSerialValue(defaults.serialNumber)
@@ -162,9 +170,11 @@ export function CreateDeviceDialog({
               form={form as unknown as UseFormReturn<DeviceClassificationFormValues>}
             />
             <SheetFooter className="px-0">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                Отмена
-              </Button>
+              <SheetClose asChild>
+                <Button type="button" variant="outline">
+                  Отмена
+                </Button>
+              </SheetClose>
               <Button type="submit" disabled={create.isPending || Boolean(blockingId)}>
                 {create.isPending ? 'Сохранение…' : 'Создать'}
               </Button>

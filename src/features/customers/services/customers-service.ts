@@ -2,6 +2,7 @@ import { isCustomerKind, type CustomerKind } from '@/lib/constants/customers'
 import { toAppError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase/client'
 import type { Json } from '@/types/database'
+import { deviceTitle } from '@/features/devices/classification'
 
 export type Customer = {
   id: string
@@ -65,10 +66,22 @@ export type CustomerHistoryEvent = {
   createdAt: string
 }
 
+export type CustomerReceipt = {
+  id: string
+  supplier: string
+  receiptDate: string
+  notes: string
+  createdAt: string
+  actorName: string
+  lineCount: number
+  totalQuantity: number
+}
+
 export type CustomerCard = {
   customer: Customer
   devices: CustomerDevice[]
   orders: CustomerOrder[]
+  receipts: CustomerReceipt[]
   history: CustomerHistoryEvent[]
 }
 
@@ -144,16 +157,18 @@ export async function listCustomers(
   search: string,
   page: number,
   pageSize: number,
+  kind?: CustomerKind,
 ): Promise<CustomerListResult> {
   const { data, error } = await getSupabase().rpc('search_customers', {
     search_query: search,
     page_number: page,
     page_size: pageSize,
     active_only: false,
+    kind_filter: kind ?? null,
   })
 
   if (error) {
-    throw toAppError(error, 'Не удалось загрузить клиентов.')
+    throw toAppError(error, 'Не удалось загрузить контакты.')
   }
 
   const rows = data ?? []
@@ -231,6 +246,7 @@ export async function getCustomerCard(id: string): Promise<CustomerCard | null> 
 
   const devicesRaw = payload?.devices
   const ordersRaw = payload?.orders
+  const receiptsRaw = payload?.receipts
   const historyRaw = payload?.history
 
   return {
@@ -260,7 +276,12 @@ export async function getCustomerCard(id: string): Promise<CustomerCard | null> 
             {
               id: asString(row.id),
               serialNumber: asString(row.serial_number),
-              label: asString(row.label) || asString(row.serial_number),
+              label: deviceTitle({
+                groupName: asString(row.group_name),
+                brandName: asString(row.brand_name),
+                modelName: asString(row.model_name),
+                label: asString(row.label),
+              }),
               groupName: asString(row.group_name),
               brandName: asString(row.brand_name),
               modelName: asString(row.model_name),
@@ -279,10 +300,32 @@ export async function getCustomerCard(id: string): Promise<CustomerCard | null> 
               id: asString(row.id),
               number: asString(row.number),
               serialNumber: asString(row.serial_number),
-              deviceLabel: asString(row.device_label),
+              deviceLabel: deviceTitle({
+                deviceLabel: asString(row.device_label),
+              }),
               statusName: asString(row.status_name),
               statusCode: asString(row.status_code),
               createdAt: asString(row.created_at),
+            },
+          ]
+        })
+      : [],
+    receipts: Array.isArray(receiptsRaw)
+      ? receiptsRaw.flatMap((item) => {
+          const row = asRecord(item)
+          if (!row?.id) {
+            return []
+          }
+          return [
+            {
+              id: asString(row.id),
+              supplier: asString(row.supplier),
+              receiptDate: asString(row.receipt_date),
+              notes: asString(row.notes),
+              createdAt: asString(row.created_at),
+              actorName: asString(row.actor_name),
+              lineCount: Number(row.line_count ?? 0),
+              totalQuantity: Number(row.total_quantity ?? 0),
             },
           ]
         })

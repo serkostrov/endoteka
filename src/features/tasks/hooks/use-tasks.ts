@@ -49,6 +49,19 @@ function invalidateTasks(queryClient: ReturnType<typeof useQueryClient>, taskId?
   ])
 }
 
+function refreshTasksAfterDelete(
+  queryClient: ReturnType<typeof useQueryClient>,
+  orderId?: string | null,
+) {
+  return Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.tasks.all,
+      predicate: (query) => query.queryKey[1] !== 'detail',
+    }),
+    orderId ? queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) }) : Promise.resolve(),
+  ])
+}
+
 export function useCreateTask() {
   const queryClient = useQueryClient()
 
@@ -60,13 +73,13 @@ export function useCreateTask() {
   })
 }
 
-export function useUpdateTask(taskId: string) {
+export function useUpdateTask(taskId: string, orderId?: string | null) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (input: UpdateTaskInput) => updateTask(taskId, input),
     onSuccess: async () => {
-      await invalidateTasks(queryClient, taskId)
+      await invalidateTasks(queryClient, taskId, orderId)
     },
   })
 }
@@ -77,7 +90,7 @@ export function useDeleteTask() {
   return useMutation({
     mutationFn: (input: { id: string; orderId?: string | null }) => deleteTask(input.id),
     onSuccess: async (_void, input) => {
-      await invalidateTasks(queryClient, input.id, input.orderId)
+      await refreshTasksAfterDelete(queryClient, input.orderId)
     },
   })
 }

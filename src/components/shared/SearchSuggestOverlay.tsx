@@ -1,3 +1,4 @@
+import { Plus } from 'lucide-react'
 import { useRef, type ReactNode } from 'react'
 
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
@@ -44,5 +45,35 @@ export function SearchSuggestOverlay({ open, onOpenChange, children, panel }: Se
         {panel}
       </PopoverContent>
     </Popover>
+  )
+}
+
+export function SearchEmptyCreate({
+  message,
+  actionLabel = 'Новый',
+  disabled,
+  onCreate,
+}: {
+  message: string
+  actionLabel?: string
+  disabled?: boolean
+  onCreate?: () => void
+}) {
+  return (
+    <div>
+      <p className="px-3 py-3 text-sm text-muted-foreground">{message}</p>
+      {onCreate ? (
+        <button
+          type="button"
+          disabled={disabled}
+          className="flex w-full items-center gap-2 border-t px-3 py-2.5 text-left text-sm font-medium hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={onCreate}
+        >
+          <Plus className="size-4" />
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
   )
 }

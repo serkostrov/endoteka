@@ -1,26 +1,29 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFieldArray, useForm, useWatch } from 'react-hook-form'
 
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { FieldType } from '@/lib/constants/fields'
+import {
+  FieldType,
+  defaultFieldLayout,
+  fieldLayoutHeightOf,
+  fieldLayoutWidthOf,
+  fieldTypeLabels,
+  resolvedFieldType,
+} from '@/lib/constants/fields'
 import { uniqueCode } from '@/lib/utils/code'
 
-import { DynamicFieldRenderer } from './DynamicFieldRenderer'
-import { DynamicFieldValue } from './DynamicFieldValue'
-import { dynamicFieldFormSchema, emptyFieldValue, type DynamicFieldFormValues } from '../schemas'
-import type { DynamicFieldDefinition, DynamicFieldValueData, FieldTypeRecord } from '../services/fields-service'
+import { dynamicFieldFormSchema, type DynamicFieldFormValues } from '../schemas'
+import type { DynamicFieldDefinition, FieldTypeRecord } from '../services/fields-service'
 
 type DynamicFieldEditorProps = {
   field?: DynamicFieldDefinition | null
   fieldTypes: FieldTypeRecord[]
-  usageCount?: number
   isPending?: boolean
   usedCodes?: string[]
   onSubmit: (values: DynamicFieldFormValues) => Promise<void>
@@ -30,21 +33,21 @@ type DynamicFieldEditorProps = {
 export function DynamicFieldEditor({
   field,
   fieldTypes,
-  usageCount = 0,
   isPending = false,
   usedCodes = [],
   onSubmit,
   onCancel,
 }: DynamicFieldEditorProps) {
-  const [previewValue, setPreviewValue] = useState<DynamicFieldValueData>(field ? emptyFieldValue(field) : '')
   const form = useForm<DynamicFieldFormValues>({
     resolver: zodResolver(dynamicFieldFormSchema),
     defaultValues: {
       code: field?.code ?? '',
       name: field?.name ?? '',
-      fieldType: field?.fieldType ?? FieldType.Text,
+      fieldType: field ? resolvedFieldType(field) : FieldType.Text,
       isRequired: field?.isRequired ?? false,
       groupName: field?.groupName ?? '',
+      layoutWidth: field ? fieldLayoutWidthOf(field) : defaultFieldLayout(FieldType.Text).width,
+      layoutHeight: field ? fieldLayoutHeightOf(field) : defaultFieldLayout(FieldType.Text).height,
       options:
         field?.options.map((option) => ({
           code: option.code,
@@ -56,20 +59,25 @@ export function DynamicFieldEditor({
 
   const options = useFieldArray({ control: form.control, name: 'options' })
   const fieldType = useWatch({ control: form.control, name: 'fieldType' }) ?? FieldType.Text
-  const watched = useWatch({ control: form.control })
-  const previewField = toPreviewField(field, {
-    code: watched.code ?? '',
-    name: watched.name ?? '',
-    fieldType: watched.fieldType ?? FieldType.Text,
-    isRequired: watched.isRequired ?? false,
-    groupName: watched.groupName ?? '',
-    options: (watched.options ?? []).map((option) => ({
-      code: option.code ?? '',
-      label: option.label ?? '',
-      isActive: option.isActive ?? true,
-    })),
-  })
-  const isUsed = usageCount > 0
+  const typeOptions =
+    field && !fieldTypes.some((item) => item.code === resolvedFieldType(field))
+      ? [...fieldTypes, { code: resolvedFieldType(field), name: fieldTypeLabels[resolvedFieldType(field)] }]
+      : fieldTypes
+
+  const lastType = useRef(fieldType)
+
+  useEffect(() => {
+    if (field) {
+      return
+    }
+    if (lastType.current === fieldType) {
+      return
+    }
+    lastType.current = fieldType
+    const next = defaultFieldLayout(fieldType)
+    form.setValue('layoutWidth', next.width)
+    form.setValue('layoutHeight', next.height)
+  }, [field, fieldType, form])
 
   async function handleSubmit(values: DynamicFieldFormValues) {
     const code = field?.code || uniqueCode(values.name, usedCodes, 'field')
@@ -88,15 +96,6 @@ export function DynamicFieldEditor({
   return (
     <Form {...form}>
       <form className="space-y-4" onSubmit={form.handleSubmit(handleSubmit)} noValidate>
-        {isUsed ? (
-          <Alert>
-            <AlertDescription>
-              Поле уже используется в {usageCount} записях. Тип нельзя менять. Отключение скроет поле
-              в новых формах, старые значения сохранятся.
-            </AlertDescription>
-          </Alert>
-        ) : null}
-
         <FormField
           control={form.control}
           name="name"
@@ -117,14 +116,14 @@ export function DynamicFieldEditor({
           render={({ field: typeField }) => (
             <FormItem>
               <FormLabel>Тип</FormLabel>
-              <Select value={typeField.value} onValueChange={typeField.onChange} disabled={isUsed}>
+              <Select value={typeField.value} onValueChange={typeField.onChange}>
                 <FormControl>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {fieldTypes.map((item) => (
+                  {typeOptions.map((item) => (
                     <SelectItem key={item.code} value={item.code}>
                       {item.name}
                     </SelectItem>
@@ -238,16 +237,6 @@ export function DynamicFieldEditor({
           </div>
         ) : null}
 
-        <div className="rounded-lg border bg-muted/30 p-4">
-          <p className="mb-3 text-sm font-medium">Как увидит сотрудник</p>
-          <div className="space-y-2">
-            <DynamicFieldRenderer field={previewField} value={previewValue} onChange={setPreviewValue} />
-            <p className="text-sm text-muted-foreground">
-              На карточке: <DynamicFieldValue field={previewField} value={previewValue} />
-            </p>
-          </div>
-        </div>
-
         <div className="flex justify-end gap-2">
           <Button type="button" variant="outline" onClick={onCancel} disabled={isPending}>
             Отмена
@@ -259,30 +248,4 @@ export function DynamicFieldEditor({
       </form>
     </Form>
   )
-}
-
-function toPreviewField(
-  existing: DynamicFieldDefinition | null | undefined,
-  values: DynamicFieldFormValues,
-): DynamicFieldDefinition {
-  return {
-    id: existing?.id ?? 'preview',
-    entityCode: existing?.entityCode ?? 'preview',
-    code: values.code || 'preview',
-    name: values.name || 'Новое поле',
-    fieldType: values.fieldType,
-    isRequired: values.isRequired,
-    groupName: values.groupName,
-    isActive: true,
-    sortOrder: existing?.sortOrder ?? 0,
-    createdAt: existing?.createdAt ?? '',
-    updatedAt: existing?.updatedAt ?? '',
-    options: values.options.map((option, index) => ({
-      id: `${index}`,
-      code: option.code || `option_${index}`,
-      label: option.label || `Вариант ${index + 1}`,
-      sortOrder: index,
-      isActive: option.isActive,
-    })),
-  }
 }

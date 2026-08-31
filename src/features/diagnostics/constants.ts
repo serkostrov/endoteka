@@ -1,5 +1,3 @@
-export const DIAGNOSTIC_ENGINEER_NONE = '__none__'
-
 export const DiagnosticJournalEvent = {
   Created: 'diagnostics_created',
   Updated: 'diagnostics_updated',

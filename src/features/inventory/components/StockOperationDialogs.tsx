@@ -71,7 +71,7 @@ export function AdjustStockDialog({ open, onOpenChange, item = null }: AdjustDia
         <DialogHeader>
           <DialogTitle>Инвентаризация</DialogTitle>
           <DialogDescription>
-            Плюс увеличивает остаток новой партией, минус списывает FIFO. Отрицательный остаток невозможен.
+            Плюс увеличивает остаток новой партией, минус списывает: сначала самые ранние поступления. Отрицательный остаток невозможен.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>

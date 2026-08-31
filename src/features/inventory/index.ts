@@ -1,6 +1,6 @@
 export { InventoryStockScreen } from './components/InventoryStockScreen'
 export { InventoryItemsScreen } from './components/InventoryItemsScreen'
-export { InventoryItemScreen } from './components/InventoryItemScreen'
+export { InventoryItemScreen, InventoryItemSheet } from './components/InventoryItemScreen'
 export { InventoryReceiptsScreen } from './components/InventoryReceiptsScreen'
 export { InventoryCountsScreen } from './components/InventoryCountsScreen'
 export { InventoryCountScreen } from './components/InventoryCountScreen'

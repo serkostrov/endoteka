@@ -1,6 +1,6 @@
-import { LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { ChevronUp, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -15,12 +15,12 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { flattenNavItems, isNavItemActive, type NavGroup, type NavItem } from '@/config/navigation'
+import { AccountSwitcherItems } from '@/features/auth/components/AccountSwitcher'
 import { useAuth, useHasPermission } from '@/features/auth'
 import { signOut } from '@/features/auth/services/auth-service'
 import { NotificationsButton } from '@/features/notifications'
 import { APP_NAME } from '@/lib/constants/app'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { getInitials } from '@/lib/utils/initials'
@@ -39,7 +39,6 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
   const displayName = user?.fullName || user?.email || 'Пользователь'
   const initials = getInitials(displayName)
   const canReadNotifications = useHasPermission(Permission.NotificationsRead)
-  const canReadSettings = useHasPermission(Permission.SettingsRead)
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [signOutError, setSignOutError] = useState<string | null>(null)
 
@@ -156,25 +155,28 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
                     <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>
                   ) : null}
                 </span>
+                <ChevronUp className="text-muted-foreground size-3.5 shrink-0" />
               </button>
             )}
           </DropdownMenuTrigger>
-          <DropdownMenuContent side={collapsed ? 'right' : 'top'} align={collapsed ? 'end' : 'start'} className="w-64">
-            <DropdownMenuLabel>
-              <span className="block truncate">{user?.fullName || 'Пользователь'}</span>
-              <span className="block truncate text-xs font-normal text-muted-foreground">{user?.email}</span>
+          <DropdownMenuContent side={collapsed ? 'right' : 'top'} align={collapsed ? 'end' : 'start'} className="w-80 p-1.5">
+            <DropdownMenuLabel className="flex items-center gap-3 p-2 font-normal">
+              <Avatar className="size-10">
+                <AvatarFallback>{initials}</AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{user?.fullName || 'Пользователь'}</span>
+                <span className="text-muted-foreground block truncate text-xs">{user?.email}</span>
+                <span className="text-primary mt-0.5 block text-[11px]">Сейчас в системе</span>
+              </span>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            {canReadSettings ? (
-              <DropdownMenuItem asChild>
-                <Link to={routes.settings} onClick={onNavigate}>
-                  Настройки
-                </Link>
-              </DropdownMenuItem>
-            ) : null}
-            {signOutError ? <p className="px-2 py-1.5 text-xs text-destructive">{signOutError}</p> : null}
+            <DropdownMenuSeparator className="my-1.5" />
+            <AccountSwitcherItems />
+            <DropdownMenuSeparator className="my-1.5" />
+            {signOutError ? <p className="text-destructive px-2 py-1.5 text-xs">{signOutError}</p> : null}
             <DropdownMenuItem
               disabled={isSigningOut}
+              className="rounded-md"
               onSelect={(event) => {
                 event.preventDefault()
                 void handleSignOut()

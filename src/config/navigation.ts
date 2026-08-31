@@ -1,8 +1,6 @@
 import {
   ClipboardCheck,
   ClipboardList,
-  FileStack,
-  FileText,
   LayoutDashboard,
   ListChecks,
   Package,
@@ -102,11 +100,11 @@ export const navGroups: NavGroup[] = [
     label: 'Справочники',
     items: [
       {
-        label: 'Клиенты',
+        label: 'Контакты',
         to: routes.customers,
         icon: UserSquare2,
         permission: Permission.CustomersRead,
-        description: 'Организации и контактные лица',
+        description: 'Люди и организации',
       },
       {
         label: 'Приборы',
@@ -121,26 +119,6 @@ export const navGroups: NavGroup[] = [
         icon: ScanLine,
         permission: Permission.InventoryRead,
         description: 'Позиции запчастей и расходников',
-      },
-    ],
-  },
-  {
-    id: 'documents',
-    label: 'Документы',
-    items: [
-      {
-        label: 'Документы',
-        to: routes.documents,
-        icon: FileText,
-        permission: Permission.DocumentsRead,
-        description: 'Акты, накладные и этикетки',
-      },
-      {
-        label: 'Шаблоны',
-        to: routes.documentTemplates,
-        icon: FileStack,
-        permission: Permission.DocumentsEditTemplates,
-        description: 'Печатные формы и этикетки',
       },
     ],
   },
@@ -264,6 +242,50 @@ export function getBreadcrumbs(pathname: string, items: NavItem[] = flattenNavIt
 
   if (pathname === routes.settingsNotifications) {
     return [...crumbs, { label: 'Настройки', to: routes.settings }, { label: 'Уведомления' }]
+  }
+
+  if (pathname === routes.settingsServiceTemplates) {
+    return [
+      ...crumbs,
+      { label: 'Настройки', to: routes.settings },
+      { label: 'Параметры', to: routes.settingsReferences },
+      { label: 'Шаблоны услуг' },
+    ]
+  }
+
+  if (pathname === routes.documentTemplates) {
+    return [...crumbs, { label: 'Настройки', to: routes.settings }, { label: 'Шаблоны документов' }]
+  }
+
+  if (pathname.startsWith(`${routes.documentTemplates}/`)) {
+    const rest = pathname.slice(`${routes.documentTemplates}/`.length)
+    const [id, print] = rest.split('/')
+    const templateCrumbs: BreadcrumbItem[] = [
+      ...crumbs,
+      { label: 'Настройки', to: routes.settings },
+      { label: 'Шаблоны документов', to: routes.documentTemplates },
+    ]
+    if (print === 'print') {
+      return [
+        ...templateCrumbs,
+        { label: 'Макет', to: routes.documentTemplate.replace(':id', id) },
+        { label: 'Печать' },
+      ]
+    }
+    return [...templateCrumbs, { label: 'Макет' }]
+  }
+
+  if (pathname === routes.documents) {
+    return [...crumbs, { label: 'Документы' }]
+  }
+
+  if (/^\/documents\/[^/]+\/print$/.test(pathname)) {
+    const id = pathname.split('/')[2]
+    return [...crumbs, { label: 'Документ', to: routes.document.replace(':id', id) }, { label: 'Печать' }]
+  }
+
+  if (/^\/documents\/[^/]+$/.test(pathname)) {
+    return [...crumbs, { label: 'Документ' }]
   }
 
   if (pathname === routes.ordersNew) {

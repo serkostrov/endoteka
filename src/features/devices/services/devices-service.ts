@@ -3,6 +3,8 @@ import { DEVICE_PAGE_SIZE, isWarrantyStatus, SERIAL_LOOKUP_MIN_LENGTH, type Warr
 import { getSupabase } from '@/lib/supabase/client'
 import type { DeviceListItemRow, Json } from '@/types/database'
 
+import { deviceTitle } from '../classification'
+
 export class DeviceDuplicateError extends AppError {
   readonly existingDeviceId: string | null
 
@@ -172,6 +174,7 @@ function mapLookup(value: Json | null | undefined): DeviceLookup | null {
     return null
   }
 
+  const groupName = asString(row.group_name)
   const brandName = asString(row.brand_name)
   const modelName = asString(row.model_name)
   const modificationName = asString(row.modification_name)
@@ -184,11 +187,16 @@ function mapLookup(value: Json | null | undefined): DeviceLookup | null {
     brandId: asStringOrNull(row.brand_id),
     modelId: asStringOrNull(row.model_id),
     modificationId: asStringOrNull(row.modification_id),
-    groupName: asString(row.group_name),
+    groupName,
     brandName,
     modelName,
     modificationName,
-    label: asString(row.label) || [brandName, modelName, modificationName].filter(Boolean).join(' ') || 'Прибор',
+    label: deviceTitle({
+      groupName,
+      brandName,
+      modelName,
+      label: asString(row.label),
+    }),
     notes: '',
     warranty: mapWarranty(row.warranty),
     latestOrder: row.latest_order ? mapRepair(row.latest_order) : (repairs[0] ?? null),
@@ -223,7 +231,12 @@ function mapListItem(row: DeviceListItemRow): Device {
     brandName: row.brand_name,
     modelName: row.model_name,
     modificationName: row.modification_name,
-    label: row.label || 'Прибор',
+    label: deviceTitle({
+      groupName: row.group_name,
+      brandName: row.brand_name,
+      modelName: row.model_name,
+      label: row.label,
+    }),
     notes: row.notes,
     warranty:
       row.warranty_id && row.warranty_start && row.warranty_end && status
@@ -309,7 +322,12 @@ export async function searchDeviceSerial(queryText: string): Promise<SerialSearc
           {
             id: asString(row.id),
             serialNumber: asString(row.serial_number),
-            label: asString(row.label) || 'Прибор',
+            label: deviceTitle({
+              groupName: asString(row.group_name),
+              brandName: asString(row.brand_name),
+              modelName: asString(row.model_name),
+              label: asString(row.label),
+            }),
             groupName: asString(row.group_name),
             brandName: asString(row.brand_name),
             modelName: asString(row.model_name),

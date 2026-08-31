@@ -269,20 +269,16 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
           }
         >
           {editable ? (
-            <div className="mb-4 space-y-3 rounded-md border p-3">
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Сканер — +1 к факту по штрихкоду</p>
-                <BarcodeScanInput
-                  autoFocus
-                  disabled={increment.isPending}
-                  onScan={(code) => void handleScan(code)}
-                  placeholder="Считайте штрихкод — факт увеличится на 1"
-                />
-              </div>
+            <div className="mb-4 space-y-2">
+              <BarcodeScanInput
+                autoFocus
+                disabled={increment.isPending}
+                onScan={(code) => void handleScan(code)}
+                placeholder="Считайте штрихкод — факт увеличится на 1"
+              />
               <ItemSearchField
                 onSelect={(item) => void handleAdd(item)}
                 showScan={false}
-                searchHint="Добавить позицию в документ — нажмите, чтобы увидеть все"
                 searchPlaceholder="Все позиции — введите, чтобы сузить"
                 disabled={addItem.isPending}
               />

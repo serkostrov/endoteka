@@ -65,16 +65,17 @@ export function InventoryCountsScreen() {
       <PageHeader
         title="Инвентаризация"
         description="Документ пересчёта. Расхождения проводятся журналом движений, остаток вручную не перезаписывается."
-        actions={
+      />
+
+      <FilterBar
+        end={
           canCount ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
               Новый пересчёт
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <Select
           value={status}
           onValueChange={(value) => {

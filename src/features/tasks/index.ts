@@ -1,3 +1,5 @@
 export { TasksScreen } from './components/TasksScreen'
 export { TaskDetailScreen } from './components/TaskDetailScreen'
+export { TaskDetailSheet } from './components/TaskDetailSheet'
 export { OrderTasksTab } from './components/OrderTasksTab'
+export { CreateTaskDialog } from './components/CreateTaskDialog'

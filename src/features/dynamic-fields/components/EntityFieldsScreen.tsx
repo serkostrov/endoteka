@@ -18,14 +18,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useHasPermission } from '@/features/auth'
-import { fieldTypeLabels } from '@/lib/constants/fields'
+import { fieldTypeLabels, resolvedFieldType } from '@/lib/constants/fields'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { moveIndex } from '@/lib/utils/reorder'
 
 import { DynamicFieldEditor } from './DynamicFieldEditor'
-import { DynamicFieldRenderer } from './DynamicFieldRenderer'
+import { FieldsLayoutPreview } from './FieldsLayoutPreview'
 import {
   useDynamicFieldUsage,
   useDynamicFields,
@@ -33,10 +33,11 @@ import {
   useFieldTypes,
   useReorderDynamicFields,
   useSetDynamicFieldActive,
+  useSetDynamicFieldLayout,
   useUpsertDynamicField,
   useDeleteDynamicField,
 } from '../hooks/use-fields'
-import { emptyFieldValue, type DynamicFieldFormValues } from '../schemas'
+import { type DynamicFieldFormValues } from '../schemas'
 import type { DynamicFieldDefinition, DynamicFieldValueData } from '../services/fields-service'
 
 export function EntityFieldsScreen() {
@@ -59,6 +60,7 @@ export function EntityFieldsScreen() {
   const setActive = useSetDynamicFieldActive(entity ?? '')
   const remove = useDeleteDynamicField(entity ?? '')
   const reorder = useReorderDynamicFields(entity ?? '')
+  const setLayout = useSetDynamicFieldLayout(entity ?? '')
   const usageQuery = useDynamicFieldUsage((statusTarget ?? editingField ?? deleteTarget)?.id)
 
   const fields = fieldsQuery.data ?? []
@@ -105,6 +107,8 @@ export function EntityFieldsScreen() {
       fieldType: values.fieldType,
       isRequired: values.isRequired,
       groupName: values.groupName.trim(),
+      layoutWidth: values.layoutWidth,
+      layoutHeight: values.layoutHeight,
       options: values.options.map((option, index) => ({
         code: option.code,
         label: option.label,
@@ -153,6 +157,30 @@ export function EntityFieldsScreen() {
     }
   }
 
+  async function persistPreviewOrder(fromId: string, toId: string) {
+    if (fromId === toId) {
+      return
+    }
+    const from = fields.findIndex((field) => field.id === fromId)
+    const to = fields.findIndex((field) => field.id === toId)
+    if (from < 0 || to < 0) {
+      return
+    }
+    await persistOrder(moveIndex(fields, from, to))
+  }
+
+  async function persistLayout(
+    fieldId: string,
+    layoutWidth: DynamicFieldDefinition['layoutWidth'],
+    layoutHeight: DynamicFieldDefinition['layoutHeight'],
+  ) {
+    try {
+      await setLayout.mutateAsync({ fieldId, layoutWidth, layoutHeight })
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   const usageCount = usageQuery.data ?? 0
   const showReorder = canUpdate && status === 'all' && search.trim() === ''
 
@@ -161,7 +189,35 @@ export function EntityFieldsScreen() {
       <PageHeader
         title={entityRow.name}
         description={entityRow.description ?? 'Дополнительные поля этого раздела.'}
-        actions={
+      />
+
+      {previewFields.length > 0 ? (
+        <SectionCard
+          title="Предпросмотр"
+          description={
+            canUpdate
+              ? 'Перетащите поле, чтобы поменять местами. Потяните за край или угол — чтобы изменить размер.'
+              : 'Так поля появятся на карточке раздела.'
+          }
+        >
+          <FieldsLayoutPreview
+            fields={previewFields}
+            values={previewValues}
+            canUpdate={canUpdate}
+            onChangeValue={(code, value) =>
+              setPreviewValues((current) => ({
+                ...current,
+                [code]: value,
+              }))
+            }
+            onReorder={(fromId, toId) => void persistPreviewOrder(fromId, toId)}
+            onLayoutChange={(fieldId, width, height) => void persistLayout(fieldId, width, height)}
+          />
+        </SectionCard>
+      ) : null}
+
+      <FilterBar
+        end={
           canUpdate ? (
             <Button
               type="button"
@@ -174,9 +230,7 @@ export function EntityFieldsScreen() {
             </Button>
           ) : null
         }
-      />
-
-      <FilterBar>
+      >
         <SearchInput value={search} onChange={setSearch} label="Поиск по полям" placeholder="Название" />
         <Select value={status} onValueChange={(value) => setStatus(value as typeof status)}>
           <SelectTrigger aria-label="Фильтр по статусу">
@@ -249,7 +303,7 @@ export function EntityFieldsScreen() {
                 ) : null}
                 <TableCell className="font-medium">{field.name}</TableCell>
                 <TableCell>{field.groupName || '—'}</TableCell>
-                <TableCell>{fieldTypeLabels[field.fieldType]}</TableCell>
+                <TableCell>{fieldTypeLabels[resolvedFieldType(field)]}</TableCell>
                 <TableCell>{field.isRequired ? 'Да' : 'Нет'}</TableCell>
                 <TableCell>
                   <StatusBadge tone={field.isActive ? 'success' : 'neutral'}>
@@ -290,26 +344,6 @@ export function EntityFieldsScreen() {
         </Table>
       )}
 
-      {previewFields.length > 0 ? (
-        <SectionCard title="Предпросмотр" description="Так поля появятся на карточке раздела.">
-          <div className="grid gap-4 md:grid-cols-2">
-            {previewFields.map((field) => (
-              <DynamicFieldRenderer
-                key={field.id}
-                field={field}
-                value={previewValues[field.code] ?? emptyFieldValue(field)}
-                onChange={(value) =>
-                  setPreviewValues((current) => ({
-                    ...current,
-                    [field.code]: value,
-                  }))
-                }
-              />
-            ))}
-          </div>
-        </SectionCard>
-      ) : null}
-
       <Dialog
         open={editorOpen}
         onOpenChange={(open) => {
@@ -328,7 +362,6 @@ export function EntityFieldsScreen() {
             key={editingField?.id ?? 'new'}
             field={editingField}
             fieldTypes={typesQuery.data ?? []}
-            usageCount={editingField ? usageCount : 0}
             usedCodes={fields.filter((item) => item.id !== editingField?.id).map((item) => item.code)}
             isPending={save.isPending}
             onSubmit={handleSave}

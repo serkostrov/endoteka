@@ -1,44 +1,19 @@
 import { useState } from 'react'
-import { zodResolver } from '@hookform/resolvers/zod'
-import { useForm } from 'react-hook-form'
-import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
 
-import { DatePicker } from '@/components/shared/DatePicker'
 import { DataTable } from '@/components/shared/DataTable'
-import { IconActionButton } from '@/components/shared/IconActionButton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
-import { Input } from '@/components/ui/input'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
-import { Textarea } from '@/components/ui/textarea'
 import { useHasPermission } from '@/features/auth'
 import { INVENTORY_PAGE_SIZE, formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
-import { formatDate, formatDateTime, toIsoDate } from '@/lib/utils/date'
+import { formatDate, formatDateTime } from '@/lib/utils/date'
 
-import { CreateItemDialog } from './CreateItemDialog'
-import { ItemSearchField } from './ItemSearchField'
-import { useInventoryReceipt, useInventoryReceipts, useReceiveInventory } from '../hooks/use-inventory'
-import { receiveFormSchema, type ReceiveFormValues } from '../schemas'
-import type { InventoryItem } from '../services/inventory-service'
-
-type DraftLine = {
-  key: string
-  item: InventoryItem
-  quantity: number
-  purchasePrice: number
-}
+import { ReceiveStockSheet } from './ReceiveStockSheet'
+import { ReceiptDeleteControl } from './ReceiptDeleteControl'
+import { useInventoryReceipt, useInventoryReceipts } from '../hooks/use-inventory'
+import type { InventoryReceiptListItem } from '../services/inventory-service'
 
 export function InventoryReceiptsScreen() {
   const [page, setPage] = useState(1)
@@ -63,6 +38,39 @@ export function InventoryReceiptsScreen() {
           ) : null
         }
       />
+
+      {selectedId && receiptQuery.data ? (
+        <SectionCard
+          title={`Приход · ${receiptQuery.data.supplier}`}
+          description={`${formatDate(receiptQuery.data.receiptDate)}${receiptQuery.data.notes ? ` · ${receiptQuery.data.notes}` : ''}`}
+          actions={
+            <div className="flex items-center gap-2">
+              <ReceiptDeleteControl
+                receipt={{ id: receiptQuery.data.id, supplier: receiptQuery.data.supplier }}
+                variant="button"
+                onDeleted={() => setSelectedId(undefined)}
+              />
+              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedId(undefined)}>
+                Скрыть
+              </Button>
+            </div>
+          }
+        >
+          <DataTable
+            caption="Строки прихода"
+            data={receiptQuery.data.lines}
+            getRowId={(row) => row.id}
+            emptyTitle="Строк нет"
+            columns={[
+              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
+              { id: 'code', header: 'Код', cell: (row) => row.itemCode },
+              { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.quantity) },
+              { id: 'price', header: 'Цена', cell: (row) => formatMoney(row.unitPrice) },
+              { id: 'left', header: 'Остаток партии', cell: (row) => formatQuantity(row.remainingQuantity) },
+            ]}
+          />
+        </SectionCard>
+      ) : null}
 
       <DataTable
         caption="Приходы"
@@ -91,264 +99,31 @@ export function InventoryReceiptsScreen() {
             className: 'hidden lg:table-cell',
             cell: (row) => formatDateTime(row.createdAt),
           },
+          ...(canReceive
+            ? [
+                {
+                  id: 'actions',
+                  header: '',
+                  className: 'w-[1%] whitespace-nowrap',
+                  cell: (row: InventoryReceiptListItem) => (
+                    <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
+                      <ReceiptDeleteControl
+                        receipt={{ id: row.id, supplier: row.supplier }}
+                        onDeleted={() => {
+                          if (selectedId === row.id) {
+                            setSelectedId(undefined)
+                          }
+                        }}
+                      />
+                    </div>
+                  ),
+                },
+              ]
+            : []),
         ]}
       />
 
-      {selectedId && receiptQuery.data ? (
-        <SectionCard
-          title={`Приход · ${receiptQuery.data.supplier}`}
-          description={`${formatDate(receiptQuery.data.receiptDate)}${receiptQuery.data.notes ? ` · ${receiptQuery.data.notes}` : ''}`}
-          actions={
-            <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedId(undefined)}>
-              Скрыть
-            </Button>
-          }
-        >
-          <DataTable
-            caption="Строки прихода"
-            data={receiptQuery.data.lines}
-            getRowId={(row) => row.id}
-            emptyTitle="Строк нет"
-            columns={[
-              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-              { id: 'code', header: 'Код', cell: (row) => row.itemCode },
-              { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.quantity) },
-              { id: 'price', header: 'Цена', cell: (row) => formatMoney(row.unitPrice) },
-              { id: 'left', header: 'Остаток партии', cell: (row) => formatQuantity(row.remainingQuantity) },
-            ]}
-          />
-        </SectionCard>
-      ) : null}
-
       <ReceiveStockSheet open={createOpen} onOpenChange={setCreateOpen} />
     </div>
-  )
-}
-
-function ReceiveStockSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const receive = useReceiveInventory()
-  const [lines, setLines] = useState<DraftLine[]>([])
-  const [picking, setPicking] = useState<InventoryItem | null>(null)
-  const [createItemOpen, setCreateItemOpen] = useState(false)
-  const [lineQty, setLineQty] = useState(1)
-  const [linePrice, setLinePrice] = useState(0)
-  const form = useForm<ReceiveFormValues>({
-    resolver: zodResolver(receiveFormSchema),
-    defaultValues: {
-      supplier: '',
-      receiptDate: toIsoDate(new Date()),
-      notes: '',
-    },
-  })
-
-  function addLine(item: InventoryItem, quantity: number, purchasePrice: number) {
-    if (quantity <= 0) {
-      toast.error('Количество должно быть больше нуля')
-      return
-    }
-    setLines((current) => {
-      const existing = current.find((line) => line.item.id === item.id && line.purchasePrice === purchasePrice)
-      if (existing) {
-        return current.map((line) =>
-          line.key === existing.key ? { ...line, quantity: line.quantity + quantity } : line,
-        )
-      }
-      return [
-        ...current,
-        { key: `${item.id}-${purchasePrice}-${Date.now()}`, item, quantity, purchasePrice },
-      ]
-    })
-    setPicking(null)
-    setLineQty(1)
-    setLinePrice(item.purchasePrice)
-  }
-
-  async function onSubmit(values: ReceiveFormValues) {
-    if (lines.length === 0) {
-      toast.error('Добавьте хотя бы одну позицию')
-      return
-    }
-    try {
-      await receive.mutateAsync({
-        supplier: values.supplier,
-        receiptDate: values.receiptDate,
-        notes: values.notes,
-        lines: lines.map((line) => ({
-          itemId: line.item.id,
-          quantity: line.quantity,
-          purchasePrice: line.purchasePrice,
-        })),
-      })
-      toast.success('Приход проведён')
-      form.reset({ supplier: '', receiptDate: toIsoDate(new Date()), notes: '' })
-      setLines([])
-      onOpenChange(false)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
-  }
-
-  return (
-    <>
-      <Sheet
-        open={open}
-        onOpenChange={(next) => {
-          if (!next) {
-            setLines([])
-            setPicking(null)
-          }
-          onOpenChange(next)
-        }}
-      >
-        <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-2xl">
-          <SheetHeader>
-            <SheetTitle>Новый приход</SheetTitle>
-            <SheetDescription>
-              Сначала документ, затем товары. Проведение создаёт партии и журнал одной транзакцией.
-            </SheetDescription>
-          </SheetHeader>
-          <Form {...form}>
-            <form className="flex flex-1 flex-col gap-4 px-4 pb-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-sm font-medium">Документ</p>
-                  <p className="text-xs text-muted-foreground">Поставщик, дата и комментарий к поступлению.</p>
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="supplier"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Поставщик</FormLabel>
-                        <FormControl>
-                          <Input {...field} autoComplete="off" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="receiptDate"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Дата</FormLabel>
-                        <FormControl>
-                          <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              <FormField
-                control={form.control}
-                name="notes"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Комментарий</FormLabel>
-                    <FormControl>
-                      <Textarea {...field} rows={2} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-                />
-              </div>
-
-              <div className="space-y-3 rounded-md border p-3">
-                <div>
-                  <p className="text-sm font-medium">Товары в приходе</p>
-                  <p className="text-xs text-muted-foreground">
-                    Выберите позицию из списка (открывается со всеми), укажите количество и цену, затем «В документ».
-                  </p>
-                </div>
-                <ItemSearchField
-                  selected={picking}
-                  onSelect={(item) => {
-                    setPicking(item)
-                    setLinePrice(item.purchasePrice)
-                  }}
-                  onClear={() => setPicking(null)}
-                  allowCreate
-                  onCreateRequest={() => setCreateItemOpen(true)}
-                  scanHint="Сканер — найти позицию по штрихкоду"
-                  searchHint="Номенклатура — нажмите, чтобы увидеть все позиции"
-                  defaultOpen
-                />
-                {picking ? (
-                  <div className="flex flex-wrap items-end gap-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="text-muted-foreground">Кол-во</span>
-                      <Input
-                        type="number"
-                        min={0.001}
-                        step="0.001"
-                        className="w-28"
-                        value={lineQty}
-                        onChange={(event) => setLineQty(Number(event.target.value))}
-                      />
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="text-muted-foreground">Цена закупки</span>
-                      <Input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        className="w-32"
-                        value={linePrice}
-                        onChange={(event) => setLinePrice(Number(event.target.value))}
-                      />
-                    </label>
-                    <Button type="button" onClick={() => addLine(picking, lineQty, linePrice)}>
-                      В документ
-                    </Button>
-                  </div>
-                ) : null}
-
-                {lines.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">В документе пока нет строк.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {lines.map((line) => (
-                      <li key={line.key} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="min-w-0 truncate">
-                          {line.item.name} · {formatQuantity(line.quantity)} · {formatMoney(line.purchasePrice)}
-                        </span>
-                        <IconActionButton
-                          label="Убрать"
-                          variant="ghost"
-                          onClick={() => setLines((current) => current.filter((item) => item.key !== line.key))}
-                        >
-                          <Trash2 />
-                        </IconActionButton>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <SheetFooter className="px-0">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Отмена
-                </Button>
-                <Button type="submit" disabled={receive.isPending}>
-                  {receive.isPending ? 'Проведение…' : 'Провести приход'}
-                </Button>
-              </SheetFooter>
-            </form>
-          </Form>
-        </SheetContent>
-      </Sheet>
-      <CreateItemDialog
-        open={createItemOpen}
-        onOpenChange={setCreateItemOpen}
-        onCreated={(item) => {
-          setPicking(item)
-          setLinePrice(item.purchasePrice)
-        }}
-      />
-    </>
   )
 }

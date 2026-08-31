@@ -6,11 +6,14 @@ import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetFooter,
   SheetHeader,
   SheetTitle,
+  useSheetDirty,
+  runSheetFormSave,
 } from '@/components/ui/sheet'
 import { getErrorMessage } from '@/lib/errors'
 
@@ -30,8 +33,8 @@ export function EditCustomerDialog({ customer, open, onOpenChange }: EditCustome
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
         <SheetHeader>
-          <SheetTitle>Изменить клиента</SheetTitle>
-          <SheetDescription>Контакты и реквизиты. Сохраняются отдельной кнопкой.</SheetDescription>
+          <SheetTitle>Изменить контакт</SheetTitle>
+          <SheetDescription>Данные и реквизиты. Сохраняются отдельной кнопкой.</SheetDescription>
         </SheetHeader>
         {customer ? <EditCustomerForm key={customer.id} customer={customer} onDone={() => onOpenChange(false)} /> : null}
       </SheetContent>
@@ -56,11 +59,17 @@ function EditCustomerForm({ customer, onDone }: { customer: Customer; onDone: ()
       notes: customer.notes,
     },
   })
+  useSheetDirty(form.formState.isDirty, () =>
+    runSheetFormSave(form.handleSubmit, async (values) => {
+      await update.mutateAsync(values)
+      toast.success('Контакт сохранён')
+    }),
+  )
 
   async function onSubmit(values: CustomerFormValues) {
     try {
       await update.mutateAsync(values)
-      toast.success('Клиент сохранён')
+      toast.success('Контакт сохранён')
       onDone()
     } catch (error) {
       form.setError('name', { message: getErrorMessage(error) })
@@ -72,9 +81,11 @@ function EditCustomerForm({ customer, onDone }: { customer: Customer; onDone: ()
       <form className="flex flex-1 flex-col gap-4 px-4 pb-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <CustomerFields form={form} excludeCustomerId={customer.id} />
         <SheetFooter className="px-0">
-          <Button type="button" variant="outline" onClick={onDone}>
-            Отмена
-          </Button>
+          <SheetClose asChild>
+            <Button type="button" variant="outline">
+              Отмена
+            </Button>
+          </SheetClose>
           <Button type="submit" disabled={update.isPending}>
             {update.isPending ? 'Сохранение…' : 'Сохранить'}
           </Button>

@@ -1,5 +1,5 @@
 import { Clock } from 'lucide-react'
-import { differenceInCalendarDays } from 'date-fns'
+import { differenceInCalendarDays, differenceInHours } from 'date-fns'
 
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { DeadlineState, deadlineStateLabels } from '@/lib/constants/orders'
@@ -50,31 +50,51 @@ export function OrderStatusBadge({ code, name }: { code: string; name: string })
   )
 }
 
-export function OrderDeadlineHint({ order }: { order: Pick<OrderListItem, 'deadline' | 'deadlineState'> }) {
+function relativeDeadlineLabel(deadline: string, state: DeadlineState) {
+  const date = toDate(deadline)
+  if (!date) {
+    return formatDate(deadline)
+  }
+
+  const hours = differenceInHours(date, new Date())
+  const days = differenceInCalendarDays(date, startOfToday())
+
+  if (state === DeadlineState.Overdue) {
+    const absHours = Math.abs(hours)
+    return absHours < 24 ? `−${Math.max(1, absHours)} ч.` : `−${Math.max(1, Math.abs(days))} дн.`
+  }
+
+  if (state === DeadlineState.Approaching) {
+    return hours >= 0 && hours < 24 ? `${Math.max(1, hours)} ч.` : `${Math.max(1, days)} дн.`
+  }
+
+  return formatDate(deadline)
+}
+
+export function OrderDeadlineHint({
+  order,
+  className,
+}: {
+  order: Pick<OrderListItem, 'deadline' | 'deadlineState'>
+  className?: string
+}) {
   if (!order.deadline || order.deadlineState === DeadlineState.None || order.deadlineState === DeadlineState.Closed) {
     return null
   }
 
-  const date = toDate(order.deadline)
-  const days = date ? differenceInCalendarDays(date, startOfToday()) : 0
-  const label =
-    order.deadlineState === DeadlineState.Overdue
-      ? `−${Math.abs(days)} дн.`
-      : order.deadlineState === DeadlineState.Approaching
-        ? `${days} дн.`
-        : formatDate(order.deadline)
-
   return (
     <span
+      title={`${formatDate(order.deadline)} · ${deadlineStateLabels[order.deadlineState]}`}
       className={cn(
-        'inline-flex items-center gap-1 text-xs font-medium',
-        order.deadlineState === DeadlineState.Overdue && 'text-destructive',
-        order.deadlineState === DeadlineState.Approaching && 'text-warning',
-        order.deadlineState === DeadlineState.Normal && 'text-muted-foreground',
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium leading-none',
+        order.deadlineState === DeadlineState.Overdue && 'bg-destructive/12 text-destructive',
+        order.deadlineState === DeadlineState.Approaching && 'bg-warning/12 text-warning',
+        order.deadlineState === DeadlineState.Normal && 'bg-muted text-muted-foreground',
+        className,
       )}
     >
-      <Clock className="size-3.5" aria-hidden="true" />
-      {label}
+      <Clock className="size-3 shrink-0" aria-hidden="true" />
+      {relativeDeadlineLabel(order.deadline, order.deadlineState)}
     </span>
   )
 }

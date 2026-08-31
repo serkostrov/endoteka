@@ -1,4 +1,4 @@
-import { useId, type KeyboardEventHandler } from 'react'
+import { useId, type KeyboardEventHandler, type MouseEventHandler } from 'react'
 import { Search } from 'lucide-react'
 
 import { Input } from '@/components/ui/input'
@@ -11,7 +11,7 @@ type SearchInputProps = {
   placeholder?: string
   className?: string
   disabled?: boolean
-  onFocus?: () => void
+  onClick?: MouseEventHandler<HTMLInputElement>
   onKeyDown?: KeyboardEventHandler<HTMLInputElement>
 }
 
@@ -22,7 +22,7 @@ export function SearchInput({
   placeholder = 'Поиск',
   className,
   disabled = false,
-  onFocus,
+  onClick,
   onKeyDown,
 }: SearchInputProps) {
   const id = useId()
@@ -38,7 +38,7 @@ export function SearchInput({
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        onFocus={onFocus}
+        onClick={onClick}
         onKeyDown={onKeyDown}
         placeholder={placeholder}
         className="h-9 pl-8"

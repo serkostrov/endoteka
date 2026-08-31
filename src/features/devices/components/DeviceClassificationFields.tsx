@@ -39,14 +39,14 @@ export function DeviceClassificationFields({ form, disabled = false }: DeviceCla
       <RefSelect
         form={form}
         name="groupId"
-        label="Группа"
+        label="Тип прибора"
         disabled={disabled}
         items={(groups.data ?? []).filter((item) => item.isActive)}
       />
       <RefSelect
         form={form}
         name="brandId"
-        label="Бренд"
+        label="Производитель"
         disabled={disabled}
         items={(brands.data ?? []).filter((item) => item.isActive)}
         onValueChange={() => {
