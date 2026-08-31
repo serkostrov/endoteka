@@ -14,6 +14,7 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { SupplierLink } from '@/components/shared/SupplierLink'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import {
@@ -221,7 +222,9 @@ function ItemCardBody({
           emptyDescription="Появятся после прихода или положительной инвентаризации."
           columns={[
             { id: 'date', header: 'Дата', cell: (row) => formatDate(row.receiptDate) },
-            { id: 'supplier', header: 'Поставщик', cell: (row) => row.supplier || '—' },
+            { id: 'supplier', header: 'Поставщик', cell: (row) => (
+              <SupplierLink name={row.supplier} customerId={row.supplierId} />
+            ) },
             { id: 'qty', header: 'Пришло', cell: (row) => formatQuantity(row.quantity) },
             { id: 'left', header: 'Остаток', cell: (row) => formatQuantity(row.remainingQuantity) },
             { id: 'price', header: 'Цена партии', cell: (row) => formatMoney(row.purchasePrice) },

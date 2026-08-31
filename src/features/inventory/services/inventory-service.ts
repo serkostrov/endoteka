@@ -64,6 +64,7 @@ export type InventoryBatch = {
   id: string
   receiptId: string | null
   supplier: string
+  supplierId: string | null
   receiptDate: string
   purchasePrice: number
   quantity: number
@@ -95,6 +96,7 @@ export type InventoryItemCard = {
 export type InventoryReceiptListItem = {
   id: string
   supplier: string
+  supplierId: string | null
   receiptDate: string
   notes: string
   createdAt: string
@@ -118,6 +120,7 @@ export type InventoryReceiptLine = {
 export type InventoryReceiptDetail = {
   id: string
   supplier: string
+  supplierId: string | null
   receiptDate: string
   notes: string
   createdAt: string
@@ -275,6 +278,7 @@ function mapBatch(value: Json): InventoryBatch | null {
     id: row.id,
     receiptId: asId(row.receipt_id),
     supplier: asString(row.supplier),
+    supplierId: asId(row.supplier_id),
     receiptDate: asString(row.receipt_date),
     purchasePrice: asNumber(row.purchase_price),
     quantity: asNumber(row.quantity),
@@ -539,6 +543,7 @@ export async function listInventoryReceipts(page: number, pageSize: number) {
     items: rows.map((row) => ({
       id: row.id,
       supplier: row.supplier,
+      supplierId: row.supplier_id ?? null,
       receiptDate: row.receipt_date,
       notes: row.notes,
       createdAt: row.created_at,
@@ -567,6 +572,7 @@ export async function getInventoryReceipt(id: string): Promise<InventoryReceiptD
   return {
     id: row.id,
     supplier: asString(row.supplier),
+    supplierId: asId(row.supplier_id),
     receiptDate: asString(row.receipt_date),
     notes: asString(row.notes),
     createdAt: asString(row.created_at),

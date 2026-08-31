@@ -7,6 +7,7 @@ import {
   createServiceTemplate,
   deleteServiceTemplate,
   getOrderServiceLines,
+  getServiceTemplate,
   removeOrderServiceLine,
   searchServiceTemplates,
   setOrderServiceLine,
@@ -27,6 +28,14 @@ export function useOrderServiceLines(orderId: string | undefined) {
     queryKey: queryKeys.services.orderLines(orderId ?? ''),
     queryFn: () => getOrderServiceLines(orderId ?? ''),
     enabled: Boolean(orderId),
+  })
+}
+
+export function useServiceTemplate(id: string | null | undefined) {
+  return useQuery({
+    queryKey: id ? queryKeys.services.template(id) : queryKeys.services.all,
+    queryFn: () => getServiceTemplate(id ?? ''),
+    enabled: Boolean(id),
   })
 }
 

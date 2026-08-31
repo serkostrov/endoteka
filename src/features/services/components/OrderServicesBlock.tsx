@@ -17,6 +17,7 @@ import { getErrorMessage } from '@/lib/errors'
 
 import { CreateServiceTemplateDialog } from './CreateServiceTemplateDialog'
 import { ServiceSearchField } from './ServiceSearchField'
+import { ServiceTemplateSheet } from './ServiceTemplateSheet'
 import {
   useAddOrderServiceLine,
   useOrderServiceLines,
@@ -31,6 +32,7 @@ export function OrderServicesBlock({ orderId }: { orderId: string }) {
   const add = useAddOrderServiceLine(orderId)
   const [createOpen, setCreateOpen] = useState(false)
   const [createQuery, setCreateQuery] = useState('')
+  const [openedTemplateId, setOpenedTemplateId] = useState<string | null>(null)
   const addInFlight = useRef(false)
   const lines = linesQuery.data ?? []
 
@@ -87,7 +89,12 @@ export function OrderServicesBlock({ orderId }: { orderId: string }) {
         <ul className="grid gap-1.5">
           {lines.map((line) => (
             <li key={line.id}>
-              <OrderServiceCard line={line} orderId={orderId} canUpdate={canUpdate} />
+              <OrderServiceCard
+                line={line}
+                orderId={orderId}
+                canUpdate={canUpdate}
+                onOpenTemplate={setOpenedTemplateId}
+              />
             </li>
           ))}
         </ul>
@@ -99,6 +106,15 @@ export function OrderServicesBlock({ orderId }: { orderId: string }) {
         initialQuery={createQuery}
         onCreated={(item) => void addTemplate(item)}
       />
+      <ServiceTemplateSheet
+        templateId={openedTemplateId}
+        open={Boolean(openedTemplateId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOpenedTemplateId(null)
+          }
+        }}
+      />
     </SectionCard>
   )
 }
@@ -107,21 +123,39 @@ function OrderServiceCard({
   line,
   orderId,
   canUpdate,
+  onOpenTemplate,
 }: {
   line: OrderServiceLine
   orderId: string
   canUpdate: boolean
+  onOpenTemplate: (templateId: string) => void
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const remove = useRemoveOrderServiceLine(orderId)
   const amount = line.quantity * line.unitPrice
+  const clickable = Boolean(line.templateId)
 
   return (
-    <article className="rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50">
+    <article
+      className={
+        clickable
+          ? 'group cursor-pointer rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50'
+          : 'rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50'
+      }
+      onClick={clickable ? () => onOpenTemplate(line.templateId!) : undefined}
+    >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-2">
-            <p className="min-w-0 truncate text-sm font-medium">{line.name}</p>
+            <p
+              className={
+                clickable
+                  ? 'min-w-0 truncate text-sm font-medium text-primary underline-offset-2 group-hover:underline'
+                  : 'min-w-0 truncate text-sm font-medium'
+              }
+            >
+              {line.name}
+            </p>
             {line.description ? (
               <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">{line.description}</span>
             ) : null}
@@ -135,14 +169,21 @@ function OrderServiceCard({
             size="icon-xs"
             className="-mt-0.5 -mr-1 shrink-0 text-destructive hover:text-destructive"
             disabled={remove.isPending}
-            onClick={() => setDeleteOpen(true)}
+            onClick={(event) => {
+              event.stopPropagation()
+              setDeleteOpen(true)
+            }}
           >
             <Trash2 />
           </IconActionButton>
         ) : null}
       </div>
 
-      <div className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2">
+      <div
+        className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2"
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
         <ServiceNumberField
           line={line}
           orderId={orderId}

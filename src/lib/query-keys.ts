@@ -79,6 +79,7 @@ export const queryKeys = {
     all: ['services'] as const,
     templates: (filters: { search: string; page: number; activeOnly: boolean }) =>
       ['services', 'templates', filters] as const,
+    template: (id: string) => ['services', 'template', id] as const,
     orderLines: (orderId: string) => ['services', 'order', orderId] as const,
   },
   sales: {

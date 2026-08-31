@@ -59,6 +59,24 @@ export async function searchServiceTemplates(
   }
 }
 
+export async function getServiceTemplate(id: string): Promise<ServiceTemplate | null> {
+  let page = 1
+
+  while (page <= 10) {
+    const result = await searchServiceTemplates('', page, 100, false)
+    const found = result.items.find((item) => item.id === id)
+    if (found) {
+      return found
+    }
+    if (result.items.length < 100) {
+      break
+    }
+    page += 1
+  }
+
+  return null
+}
+
 export async function createServiceTemplate(input: ServiceTemplateInput): Promise<string> {
   const { data, error } = await getSupabase().rpc('create_service_template', {
     template_name: input.name,

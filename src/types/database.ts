@@ -1881,6 +1881,7 @@ export type Database = {
         Returns: {
           id: string
           supplier: string
+          supplier_id: string | null
           receipt_date: string
           notes: string
           created_at: string

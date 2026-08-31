@@ -156,6 +156,15 @@ export function OrderPartsTab({ orderId }: OrderPartsTabProps) {
               </div>
               <Button
                 type="button"
+                variant="outline"
+                size="sm"
+                disabled={consume.isPending}
+                onClick={() => pickItem(null)}
+              >
+                Отменить
+              </Button>
+              <Button
+                type="button"
                 size="sm"
                 disabled={consume.isPending || quantity <= 0 || unitPrice < 0}
                 onClick={() => void handleAdd()}

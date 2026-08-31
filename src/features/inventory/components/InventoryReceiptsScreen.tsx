@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { DataTable } from '@/components/shared/DataTable'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
+import { SupplierLink } from '@/components/shared/SupplierLink'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
 import { INVENTORY_PAGE_SIZE, formatMoney, formatQuantity } from '@/lib/constants/inventory'
@@ -41,7 +42,15 @@ export function InventoryReceiptsScreen() {
 
       {selectedId && receiptQuery.data ? (
         <SectionCard
-          title={`Приход · ${receiptQuery.data.supplier}`}
+          title={
+            <>
+              Приход ·{' '}
+              <SupplierLink
+                name={receiptQuery.data.supplier}
+                customerId={receiptQuery.data.supplierId}
+              />
+            </>
+          }
           description={`${formatDate(receiptQuery.data.receiptDate)}${receiptQuery.data.notes ? ` · ${receiptQuery.data.notes}` : ''}`}
           actions={
             <div className="flex items-center gap-2">
@@ -84,7 +93,9 @@ export function InventoryReceiptsScreen() {
         pagination={{ page, pageCount, onPageChange: setPage }}
         columns={[
           { id: 'date', header: 'Дата', cell: (row) => formatDate(row.receiptDate) },
-          { id: 'supplier', header: 'Поставщик', cell: (row) => row.supplier },
+          { id: 'supplier', header: 'Поставщик', cell: (row) => (
+            <SupplierLink name={row.supplier} customerId={row.supplierId} />
+          ) },
           { id: 'lines', header: 'Строк', cell: (row) => String(row.lineCount) },
           { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.totalQuantity) },
           {

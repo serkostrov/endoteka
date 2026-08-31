@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { cn } from '@/lib/utils'
 
 type SectionCardProps = {
-  title: string
+  title: ReactNode
   description?: string
   actions?: ReactNode
   children: ReactNode
