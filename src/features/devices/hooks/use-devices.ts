@@ -16,7 +16,7 @@ import {
 
 export function useDevices(search: string, page: number, pageSize: number) {
   return useQuery({
-    queryKey: queryKeys.devices.list({ search, page }),
+    queryKey: queryKeys.devices.list({ search, page, pageSize }),
     queryFn: () => listDevices(search, page, pageSize),
     placeholderData: keepPreviousData,
   })

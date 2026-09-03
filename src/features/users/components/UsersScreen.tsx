@@ -13,9 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth, useHasPermission } from '@/features/auth'
 import { useRoles } from '@/features/roles/hooks/use-roles'
 import { Permission } from '@/lib/constants/permissions'
-import { USER_PAGE_SIZE, USER_SEARCH_DEBOUNCE_MS } from '@/lib/constants/users'
+import { USER_SEARCH_DEBOUNCE_MS } from '@/lib/constants/users'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate } from '@/lib/utils/date'
 import { toast } from 'sonner'
 
@@ -33,6 +34,7 @@ export function UsersScreen() {
   const [roleId, setRoleId] = useState('all')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<UserAccount | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<UserAccount | null>(null)
@@ -43,12 +45,17 @@ export function UsersScreen() {
     roleId,
     status,
     page,
-    pageSize: USER_PAGE_SIZE,
+    pageSize,
   })
   const rolesQuery = useRoles()
   const deleteAccount = useDeleteUserAccount()
   const total = usersQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / USER_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   async function handleDelete() {
     if (!deleteTarget) {
@@ -134,7 +141,13 @@ export function UsersScreen() {
         getRowId={(row) => row.id}
         emptyTitle="Сотрудники не найдены"
         emptyDescription="Измените фильтры или пригласите первого сотрудника."
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'name', header: 'Сотрудник', cell: (row) => row.fullName || '—' },
           { id: 'email', header: 'Email', cell: (row) => row.email || '—' },

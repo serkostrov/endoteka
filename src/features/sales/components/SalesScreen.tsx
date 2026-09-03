@@ -18,13 +18,13 @@ import { formatMoney } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import {
-  SALES_PAGE_SIZE,
   SALES_SEARCH_DEBOUNCE_MS,
   SaleStatus,
   saleStatusLabels,
   saleStatusTone,
 } from '@/lib/constants/sales'
 import { getErrorMessage } from '@/lib/errors'
+import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate } from '@/lib/utils/date'
 
 import { useCreateSale, useDeleteSale, useSales } from '../hooks/use-sales'
@@ -34,16 +34,22 @@ export function SalesScreen() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const canCreate = useHasPermission(Permission.SalesCreate)
   const canDelete = useHasPermission(Permission.SalesDelete)
   const [deleteTarget, setDeleteTarget] = useState<SaleListItem | null>(null)
   const debouncedSearch = useDebouncedValue(search, SALES_SEARCH_DEBOUNCE_MS)
-  const salesQuery = useSales(debouncedSearch, status, page, SALES_PAGE_SIZE)
+  const salesQuery = useSales(debouncedSearch, status, page, pageSize)
   const create = useCreateSale()
   const remove = useDeleteSale()
   const navigate = useNavigate()
   const total = salesQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / SALES_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   async function handleCreate() {
     try {
@@ -123,7 +129,13 @@ export function SalesScreen() {
         emptyTitle="Продаж нет"
         emptyDescription="Создайте счёт, укажите покупателя и подтвердите списание."
         onRowClick={(row) => navigate(routes.sale.replace(':id', row.id))}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'invoice', header: 'Счёт', cell: (row) => row.invoiceNumber },
           { id: 'customer', header: 'Покупатель', cell: (row) => row.customerName || '—' },

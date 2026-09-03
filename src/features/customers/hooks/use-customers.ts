@@ -16,7 +16,7 @@ import {
 
 export function useCustomers(search: string, page: number, pageSize: number, kind?: CustomerKind) {
   return useQuery({
-    queryKey: queryKeys.customers.list({ search, page, kind }),
+    queryKey: queryKeys.customers.list({ search, page, pageSize, kind }),
     queryFn: () => listCustomers(search, page, pageSize, kind),
     placeholderData: keepPreviousData,
   })
@@ -26,7 +26,7 @@ export function useCustomerSearch(query: string, page: number, pageSize: number,
   const term = query.trim()
 
   return useQuery({
-    queryKey: queryKeys.customers.search({ query: term, page }),
+    queryKey: queryKeys.customers.search({ query: term, page, pageSize }),
     queryFn: () => searchCustomers(term, page, pageSize),
     enabled,
     staleTime: 30_000,

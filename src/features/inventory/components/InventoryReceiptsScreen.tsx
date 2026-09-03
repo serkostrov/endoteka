@@ -6,9 +6,10 @@ import { SectionCard } from '@/components/shared/SectionCard'
 import { SupplierLink } from '@/components/shared/SupplierLink'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
-import { INVENTORY_PAGE_SIZE, formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate, formatDateTime } from '@/lib/utils/date'
 
 import { ReceiveStockSheet } from './ReceiveStockSheet'
@@ -18,13 +19,19 @@ import type { InventoryReceiptListItem } from '../services/inventory-service'
 
 export function InventoryReceiptsScreen() {
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<string | undefined>()
   const canReceive = useHasPermission(Permission.InventoryReceive)
-  const receiptsQuery = useInventoryReceipts(page, INVENTORY_PAGE_SIZE)
+  const receiptsQuery = useInventoryReceipts(page, pageSize)
   const receiptQuery = useInventoryReceipt(selectedId)
   const total = receiptsQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / INVENTORY_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   return (
     <div className="space-y-4">
@@ -90,7 +97,13 @@ export function InventoryReceiptsScreen() {
         emptyTitle="Приходов нет"
         emptyDescription="Оформите поступление, чтобы появились партии."
         onRowClick={(row) => setSelectedId(row.id)}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'date', header: 'Дата', cell: (row) => formatDate(row.receiptDate) },
           { id: 'supplier', header: 'Поставщик', cell: (row) => (

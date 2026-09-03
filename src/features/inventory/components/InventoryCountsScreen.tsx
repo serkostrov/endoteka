@@ -21,7 +21,6 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
 import {
-  INVENTORY_PAGE_SIZE,
   InventoryCountSeedMode,
   InventoryCountStatus,
   inventoryCountStatusLabels,
@@ -30,6 +29,7 @@ import {
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
+import { usePageSize } from '@/hooks/use-page-size'
 import { formatDateTime } from '@/lib/utils/date'
 
 import { useCreateInventoryCount, useDeleteInventoryCount, useInventoryCounts } from '../hooks/use-inventory'
@@ -37,15 +37,21 @@ import type { InventoryCountListItem } from '../services/counts-service'
 
 export function InventoryCountsScreen() {
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [status, setStatus] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<InventoryCountListItem | null>(null)
   const canCount = useHasPermission(Permission.InventoryCount)
-  const countsQuery = useInventoryCounts(status, page, INVENTORY_PAGE_SIZE)
+  const countsQuery = useInventoryCounts(status, page, pageSize)
   const remove = useDeleteInventoryCount()
   const navigate = useNavigate()
   const total = countsQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / INVENTORY_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   async function handleDelete() {
     if (!deleteTarget) {
@@ -106,7 +112,13 @@ export function InventoryCountsScreen() {
         emptyTitle="Документов нет"
         emptyDescription="Создайте пересчёт и заполните факт сканером или вручную."
         onRowClick={(row) => navigate(routes.inventoryCount.replace(':id', row.id))}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'number', header: 'Номер', className: 'min-w-[8rem]', cell: (row) => row.number },
           {

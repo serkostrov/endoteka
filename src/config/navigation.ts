@@ -320,6 +320,11 @@ export function getBreadcrumbs(pathname: string, items: NavItem[] = flattenNavIt
 }
 
 export function getBackPath(pathname: string, items: NavItem[] = flattenNavItems()): string | null {
+  // Пункты сайдбара — корневые экраны, кнопка «Назад» там не нужна.
+  if (items.some((item) => item.to === pathname)) {
+    return null
+  }
+
   const crumbs = getBreadcrumbs(pathname, items)
   for (let index = crumbs.length - 2; index >= 0; index -= 1) {
     const to = crumbs[index]?.to

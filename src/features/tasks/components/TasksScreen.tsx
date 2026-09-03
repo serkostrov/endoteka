@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { FilterBar } from '@/components/shared/FilterBar'
+import { ListPagination } from '@/components/shared/ListPagination'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
@@ -14,9 +15,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth, useHasPermission } from '@/features/auth'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 import { Permission } from '@/lib/constants/permissions'
 import {
-  TASK_PAGE_SIZE,
   TASK_SEARCH_DEBOUNCE_MS,
   TaskDueFilter,
   TaskLinkedFilter,
@@ -58,6 +59,7 @@ export function TasksScreen() {
   const due = paramIn(searchParams.get('due'), Object.values(TaskDueFilter), TaskDueFilter.All)
   const [linked, setLinked] = useState<string>(TaskLinkedFilter.All)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const [fromMe, setFromMe] = useState(false)
   const canCreate = useHasPermission(Permission.TasksCreate)
@@ -82,15 +84,20 @@ export function TasksScreen() {
       due,
       linked,
       page,
-      pageSize: TASK_PAGE_SIZE,
+      pageSize,
     },
     filtersReady,
   )
   const items = (tasksQuery.data?.items ?? []).filter((task) => !fromMe || task.createdBy === user?.id)
   const total = fromMe ? items.length : (tasksQuery.data?.total ?? 0)
-  const pageCount = Math.max(1, Math.ceil((tasksQuery.data?.total ?? 0) / TASK_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil((tasksQuery.data?.total ?? 0) / pageSize))
   const groups = groupTasks(items)
   const tabStatus = status === TaskStatusFilter.Completed ? TaskStatusFilter.Completed : TaskStatusFilter.Open
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   function patchFilters(patch: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams)
@@ -268,28 +275,21 @@ export function TasksScreen() {
               </div>
             </section>
           ))}
-          {pageCount > 1 ? (
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <p className="text-muted-foreground">
-                Стр. {page} из {pageCount}
-                {fromMe ? '' : ` · ${total}`}
-              </p>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-                  Назад
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= pageCount}
-                  onClick={() => setPage(page + 1)}
-                >
-                  Ещё
-                </Button>
-              </div>
-            </div>
-          ) : null}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            {!fromMe && total > 0 ? (
+              <p className="text-sm text-muted-foreground">Всего — {total.toLocaleString('ru-RU')}</p>
+            ) : (
+              <span />
+            )}
+            <ListPagination
+              page={page}
+              pageCount={pageCount}
+              onPageChange={setPage}
+              pageSize={pageSize}
+              onPageSizeChange={handlePageSizeChange}
+              className="justify-end sm:ml-auto"
+            />
+          </div>
         </div>
       )}
 

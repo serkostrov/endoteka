@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 import {
-  DOCUMENTS_PAGE_SIZE,
   DOCUMENTS_SEARCH_DEBOUNCE_MS,
   DocumentKind,
   documentKindLabels,
@@ -31,6 +31,7 @@ export function DocumentsScreen() {
   const [search, setSearch] = useState('')
   const [kind, setKind] = useState('all')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const canCreate = useHasPermission(Permission.DocumentsCreate)
   const debouncedSearch = useDebouncedValue(search, DOCUMENTS_SEARCH_DEBOUNCE_MS)
@@ -38,11 +39,16 @@ export function DocumentsScreen() {
     search: debouncedSearch,
     kind,
     page,
-    pageSize: DOCUMENTS_PAGE_SIZE,
+    pageSize,
   })
   const navigate = useNavigate()
   const total = documentsQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / DOCUMENTS_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   return (
     <div className="space-y-4">
@@ -99,7 +105,13 @@ export function DocumentsScreen() {
         emptyTitle="Документов нет"
         emptyDescription="Создайте документ из шаблона."
         onRowClick={(row) => navigate(routes.document.replace(':id', row.id))}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'number', header: 'Номер', cell: (row) => row.number },
           { id: 'title', header: 'Документ', cell: (row) => row.title },

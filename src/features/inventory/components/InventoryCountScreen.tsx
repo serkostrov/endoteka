@@ -17,7 +17,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
-  INVENTORY_COUNT_LINE_PAGE_SIZE,
   INVENTORY_SEARCH_DEBOUNCE_MS,
   InventoryCountLineFilter,
   InventoryCountStatus,
@@ -29,6 +28,7 @@ import {
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 import { formatDateTime } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 
@@ -85,13 +85,14 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<InventoryCountLineFilter>(InventoryCountLineFilter.All)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const debouncedSearch = useDebouncedValue(search, INVENTORY_SEARCH_DEBOUNCE_MS)
   const linesQuery = useInventoryCountLines(
     document.id,
     debouncedSearch,
     filter,
     page,
-    INVENTORY_COUNT_LINE_PAGE_SIZE,
+    pageSize,
   )
   const statementQuery = useInventoryCountStatement(document.id)
   const start = useStartInventoryCount(document.id)
@@ -103,8 +104,13 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
   const removeLine = useRemoveInventoryCountLine(document.id)
   const setActual = useSetInventoryCountLineActual(document.id)
   const total = linesQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(Number(total) / INVENTORY_COUNT_LINE_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(Number(total) / pageSize))
   const progress = document.lineCount === 0 ? 0 : Math.round((document.countedCount / document.lineCount) * 100)
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   async function handleScan(code: string) {
     try {
@@ -324,7 +330,13 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
             getRowId={(row) => row.id}
             emptyTitle="Строк нет"
             emptyDescription={editable ? 'Добавьте позиции сканером или из списка номенклатуры.' : 'В документе нет строк.'}
-            pagination={{ page, pageCount, onPageChange: setPage }}
+            pagination={{
+              page,
+              pageCount,
+              onPageChange: setPage,
+              pageSize,
+              onPageSizeChange: handlePageSizeChange,
+            }}
             columns={[
               { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
               {

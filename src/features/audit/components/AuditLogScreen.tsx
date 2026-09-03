@@ -17,8 +17,8 @@ import {
 } from '@/components/ui/select'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 import {
-  AUDIT_PAGE_SIZE,
   AUDIT_SEARCH_DEBOUNCE_MS,
   auditActionFilterGroups,
   auditActionLabel,
@@ -40,6 +40,7 @@ export function AuditLogScreen() {
   const [fromDate, setFromDate] = useState('')
   const [toDate, setToDate] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [selected, setSelected] = useState<AuditEvent | null>(null)
   const employees = useActiveEmployees()
   const debouncedSearch = useDebouncedValue(search, AUDIT_SEARCH_DEBOUNCE_MS)
@@ -51,10 +52,15 @@ export function AuditLogScreen() {
     fromDate,
     toDate,
     page,
-    pageSize: AUDIT_PAGE_SIZE,
+    pageSize,
   })
   const total = eventsQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   function updateFilter<T>(setter: (value: T) => void, value: T) {
     setter(value)
@@ -153,7 +159,13 @@ export function AuditLogScreen() {
         emptyTitle="Записей нет"
         emptyDescription="Измените фильтры или период."
         onRowClick={setSelected}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           {
             id: 'createdAt',

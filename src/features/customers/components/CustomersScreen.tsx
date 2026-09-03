@@ -12,11 +12,12 @@ import { PageTabs } from '@/components/shared/PageTabs'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
-import { CUSTOMER_PAGE_SIZE, CUSTOMER_SEARCH_DEBOUNCE_MS, CustomerKind } from '@/lib/constants/customers'
+import { CUSTOMER_SEARCH_DEBOUNCE_MS, CustomerKind } from '@/lib/constants/customers'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 
 import { CreateCustomerDialog } from './CreateCustomerDialog'
 import { EditCustomerDialog } from './EditCustomerDialog'
@@ -38,6 +39,7 @@ export function CustomersScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Customer | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
@@ -48,11 +50,16 @@ export function CustomersScreen() {
   const isPeople = tab === 'people'
   const kind = isPeople ? CustomerKind.Individual : CustomerKind.Organization
   const debouncedSearch = useDebouncedValue(search, CUSTOMER_SEARCH_DEBOUNCE_MS)
-  const customersQuery = useCustomers(debouncedSearch, page, CUSTOMER_PAGE_SIZE, kind)
+  const customersQuery = useCustomers(debouncedSearch, page, pageSize, kind)
   const remove = useDeleteCustomer()
   const navigate = useNavigate()
   const total = customersQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / CUSTOMER_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   function setTab(next: ContactsTab) {
     const params = new URLSearchParams(searchParams)
@@ -194,6 +201,8 @@ export function CustomersScreen() {
           page,
           pageCount,
           onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
         }}
         columns={columns}
       />

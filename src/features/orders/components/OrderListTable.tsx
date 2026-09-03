@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { ListPagination } from '@/components/shared/ListPagination'
 import {
   Pagination,
   PaginationContent,
@@ -52,6 +53,7 @@ type OrderListTableProps = {
   error?: string | null
   onRetry?: () => void
   onPageChange: (page: number) => void
+  onPageSizeChange?: (size: number) => void
   onSort: (column: OrderSortColumn) => void
   onOpenOrder: (orderId: string) => void
 }
@@ -67,6 +69,7 @@ export function OrderListTable({
   error,
   onRetry,
   onPageChange,
+  onPageSizeChange,
   onSort,
   onOpenOrder,
 }: OrderListTableProps) {
@@ -185,7 +188,16 @@ export function OrderListTable({
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted-foreground">Всего — {total.toLocaleString('ru-RU')}</p>
-        {pageCount > 1 ? (
+        {onPageSizeChange ? (
+          <ListPagination
+            page={page}
+            pageCount={pageCount}
+            onPageChange={onPageChange}
+            pageSize={pageSize}
+            onPageSizeChange={onPageSizeChange}
+            className="justify-end sm:ml-auto"
+          />
+        ) : pageCount > 1 ? (
           <Pagination className="mx-0 w-auto justify-start sm:justify-end">
             <PaginationContent>
               <PaginationItem>

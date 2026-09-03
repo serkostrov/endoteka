@@ -12,9 +12,10 @@ import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
 import { formatMoney } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
-import { SERVICE_PAGE_SIZE, SERVICE_SEARCH_DEBOUNCE_MS } from '@/lib/constants/services'
+import { SERVICE_SEARCH_DEBOUNCE_MS } from '@/lib/constants/services'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 
 import { CreateServiceTemplateDialog } from './CreateServiceTemplateDialog'
 import { EditServiceTemplateDialog } from './EditServiceTemplateDialog'
@@ -24,15 +25,21 @@ import type { ServiceTemplate } from '../services/services-service'
 export function ServiceTemplatesScreen() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<ServiceTemplate | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ServiceTemplate | null>(null)
   const canEdit = useHasPermission(Permission.SettingsUpdate)
   const debouncedSearch = useDebouncedValue(search, SERVICE_SEARCH_DEBOUNCE_MS)
-  const listQuery = useServiceTemplates(debouncedSearch, page, SERVICE_PAGE_SIZE)
+  const listQuery = useServiceTemplates(debouncedSearch, page, pageSize)
   const remove = useDeleteServiceTemplate()
   const total = listQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / SERVICE_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   async function handleDelete() {
     if (!deleteTarget) {
@@ -83,7 +90,13 @@ export function ServiceTemplatesScreen() {
         emptyTitle="Услуги не найдены"
         emptyDescription="Добавьте шаблон или измените запрос."
         onRowClick={canEdit ? (row) => setEditTarget(row) : undefined}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'name', header: 'Наименование', cell: (row) => row.name },
           {

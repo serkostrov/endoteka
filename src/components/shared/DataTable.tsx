@@ -3,14 +3,8 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { ListPagination } from '@/components/shared/ListPagination'
 import { Button } from '@/components/ui/button'
-import {
-  Pagination,
-  PaginationContent,
-  PaginationItem,
-  PaginationNext,
-  PaginationPrevious,
-} from '@/components/ui/pagination'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -43,6 +37,8 @@ type DataTablePagination = {
   page: number
   pageCount: number
   onPageChange: (page: number) => void
+  pageSize?: number
+  onPageSizeChange?: (size: number) => void
 }
 
 type DataTableProps<T> = {
@@ -91,6 +87,9 @@ export function DataTable<T>({
   if (data.length === 0) {
     return <EmptyState title={emptyTitle} description={emptyDescription} className="py-12" />
   }
+
+  const canChangePageSize = Boolean(pagination?.pageSize != null && pagination.onPageSizeChange)
+  const showPagination = Boolean(pagination) && (pagination!.pageCount > 1 || canChangePageSize)
 
   return (
     <div className="space-y-3">
@@ -153,40 +152,29 @@ export function DataTable<T>({
         </TableBody>
       </Table>
 
-      {pagination && pagination.pageCount > 1 ? (
-        <Pagination className="justify-end">
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious
-                href="#"
-                onClick={(event) => {
-                  event.preventDefault()
-                  pagination.onPageChange(Math.max(1, pagination.page - 1))
-                }}
-                aria-disabled={pagination.page <= 1}
-              />
-            </PaginationItem>
-            <PaginationItem>
-              <span className="px-3 text-sm text-muted-foreground">
-                {pagination.page} из {pagination.pageCount}
-              </span>
-            </PaginationItem>
-            <PaginationItem>
-              <PaginationNext
-                href="#"
-                onClick={(event) => {
-                  event.preventDefault()
-                  pagination.onPageChange(Math.min(pagination.pageCount, pagination.page + 1))
-                }}
-                aria-disabled={pagination.page >= pagination.pageCount}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
+      {showPagination && canChangePageSize ? (
+        <ListPagination
+          page={pagination!.page}
+          pageCount={pagination!.pageCount}
+          onPageChange={pagination!.onPageChange}
+          pageSize={pagination!.pageSize!}
+          onPageSizeChange={pagination!.onPageSizeChange!}
+        />
+      ) : showPagination ? (
+        <ListPagination
+          page={pagination!.page}
+          pageCount={pagination!.pageCount}
+          onPageChange={pagination!.onPageChange}
+          pageSize={PAGE_SIZE_FALLBACK}
+          onPageSizeChange={() => undefined}
+          hidePageSize
+        />
       ) : null}
     </div>
   )
 }
+
+const PAGE_SIZE_FALLBACK = 20
 
 function SortIcon({ active, direction }: { active: boolean; direction: DataTableSortDirection }) {
   if (!active) {

@@ -17,7 +17,7 @@ import {
 
 export function useServiceTemplates(search: string, page: number, pageSize: number, activeOnly = false) {
   return useQuery({
-    queryKey: queryKeys.services.templates({ search, page, activeOnly }),
+    queryKey: queryKeys.services.templates({ search, page, pageSize, activeOnly }),
     queryFn: () => searchServiceTemplates(search, page, pageSize, activeOnly),
     placeholderData: keepPreviousData,
   })

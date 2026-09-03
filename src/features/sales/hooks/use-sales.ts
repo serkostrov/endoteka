@@ -17,7 +17,7 @@ import {
 
 export function useSales(search: string, status: string, page: number, pageSize: number) {
   return useQuery({
-    queryKey: queryKeys.sales.list({ search, status, page }),
+    queryKey: queryKeys.sales.list({ search, status, page, pageSize }),
     queryFn: () => listSales(search, status, page, pageSize),
     placeholderData: keepPreviousData,
   })

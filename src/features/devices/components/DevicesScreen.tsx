@@ -11,11 +11,12 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
-import { DEVICE_PAGE_SIZE, SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
+import { SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate } from '@/lib/utils/date'
 
 import { deviceSerialLine, deviceTitle } from '../classification'
@@ -28,6 +29,7 @@ import type { Device } from '../services/devices-service'
 export function DevicesScreen() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<Device | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Device | null>(null)
@@ -35,11 +37,16 @@ export function DevicesScreen() {
   const canCreate = useHasPermission(Permission.DevicesCreate)
   const canUpdate = useHasPermission(Permission.DevicesUpdate)
   const canDelete = useHasPermission(Permission.DevicesDelete)
-  const devicesQuery = useDevices(debouncedSearch, page, DEVICE_PAGE_SIZE)
+  const devicesQuery = useDevices(debouncedSearch, page, pageSize)
   const remove = useDeleteDevice()
   const navigate = useNavigate()
   const total = devicesQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / DEVICE_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   async function handleDelete() {
     if (!deleteTarget) {
@@ -90,7 +97,13 @@ export function DevicesScreen() {
         emptyTitle="Приборы не найдены"
         emptyDescription="Измените запрос или добавьте прибор."
         onRowClick={(row) => navigate(routes.device.replace(':id', row.id))}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'device', header: 'Прибор', cell: (row) => deviceTitle(row) },
           { id: 'serial', header: 'Серийный номер', cell: (row) => row.serialNumber },

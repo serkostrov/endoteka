@@ -16,12 +16,12 @@ import {
   DeadlineState,
   deadlineStateLabels,
   ORDER_BOARD_PAGE_SIZE,
-  ORDER_PAGE_SIZE,
   ORDER_SEARCH_DEBOUNCE_MS,
 } from '@/lib/constants/orders'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 
 import { CreateOrderDialog } from './CreateOrderDialog'
 import { OrderDetailSheet } from './OrderDetailScreen'
@@ -78,6 +78,7 @@ export function OrdersScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, ORDER_SEARCH_DEBOUNCE_MS)
+  const [pageSize, setPageSize] = usePageSize()
 
   const view: OrdersViewMode = searchParams.get('view') === 'kanban' ? 'kanban' : 'list'
   const isList = view === 'list'
@@ -115,7 +116,7 @@ export function OrdersScreen() {
       sort: isList ? listSort : 'updated',
       direction: isList ? listDir : 'desc',
       page: isList ? page : 1,
-      pageSize: isList ? ORDER_PAGE_SIZE : ORDER_BOARD_PAGE_SIZE,
+      pageSize: isList ? pageSize : ORDER_BOARD_PAGE_SIZE,
     },
     filtersReady,
   )
@@ -131,9 +132,14 @@ export function OrdersScreen() {
   )
   const closedCount = items.filter((order) => order.isTerminal || closedStatusIds.has(order.statusId)).length
   const listBlockedByBoardPlaceholder =
-    isList && ordersQuery.isPlaceholderData && (ordersQuery.data?.items.length ?? 0) > ORDER_PAGE_SIZE
+    isList && ordersQuery.isPlaceholderData && (ordersQuery.data?.items.length ?? 0) > pageSize
 
   const createOpen = canCreate && searchParams.get('new') === '1'
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    patchFilters({ page: null })
+  }
 
   function patchFilters(patch: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams)
@@ -296,13 +302,14 @@ export function OrdersScreen() {
           data={items}
           total={total}
           page={page}
-          pageSize={ORDER_PAGE_SIZE}
+          pageSize={pageSize}
           sort={listSort}
           direction={listDir}
           isLoading={ordersQuery.isLoading || !filtersReady || listBlockedByBoardPlaceholder}
           error={ordersQuery.error ? getErrorMessage(ordersQuery.error) : null}
           onRetry={() => void ordersQuery.refetch()}
           onPageChange={(next) => patchFilters({ page: next <= 1 ? null : String(next) })}
+          onPageSizeChange={handlePageSizeChange}
           onSort={handleListSort}
           onOpenOrder={openOrder}
         />

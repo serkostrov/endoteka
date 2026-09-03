@@ -50,7 +50,7 @@ export type { InventoryReceiptDeleteMode }
 
 export function useInventoryStock(search: string, page: number, pageSize: number, stockFilter = 'all') {
   return useQuery({
-    queryKey: queryKeys.inventory.stock({ search, page, stock: stockFilter }),
+    queryKey: queryKeys.inventory.stock({ search, page, pageSize, stock: stockFilter }),
     queryFn: () => searchInventoryItems(search, page, pageSize, stockFilter),
     placeholderData: keepPreviousData,
   })
@@ -88,7 +88,7 @@ export function useInventoryItemCard(id: string | undefined) {
 
 export function useInventoryReceipts(page: number, pageSize: number) {
   return useQuery({
-    queryKey: queryKeys.inventory.receipts(page),
+    queryKey: queryKeys.inventory.receipts({ page, pageSize }),
     queryFn: () => listInventoryReceipts(page, pageSize),
     placeholderData: keepPreviousData,
   })
@@ -123,7 +123,7 @@ export function useDeleteInventoryReceipt() {
 
 export function useInventoryAdjustments(page: number, pageSize: number) {
   return useQuery({
-    queryKey: queryKeys.inventory.adjustments(page),
+    queryKey: queryKeys.inventory.adjustments({ page, pageSize }),
     queryFn: () => listInventoryAdjustments(page, pageSize),
     placeholderData: keepPreviousData,
   })
@@ -247,7 +247,7 @@ export function useAdjustInventory() {
 
 export function useInventoryCounts(status: string, page: number, pageSize: number) {
   return useQuery({
-    queryKey: queryKeys.inventory.counts({ status, page }),
+    queryKey: queryKeys.inventory.counts({ status, page, pageSize }),
     queryFn: () => listInventoryCounts(status, page, pageSize),
     placeholderData: keepPreviousData,
   })
@@ -270,7 +270,7 @@ export function useInventoryCountLines(
 ) {
   return useQuery({
     queryKey: countId
-      ? queryKeys.inventory.countLines(countId, { search, filter, page })
+      ? queryKeys.inventory.countLines(countId, { search, filter, page, pageSize })
       : queryKeys.inventory.all,
     queryFn: () => listInventoryCountLines(countId ?? '', search, filter, page, pageSize),
     enabled: Boolean(countId),

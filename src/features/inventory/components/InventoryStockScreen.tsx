@@ -13,7 +13,6 @@ import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
 import {
-  INVENTORY_PAGE_SIZE,
   INVENTORY_SEARCH_DEBOUNCE_MS,
   formatQuantity,
 } from '@/lib/constants/inventory'
@@ -21,6 +20,7 @@ import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePageSize } from '@/hooks/use-page-size'
 
 import { BarcodeScanInput } from './BarcodeScanInput'
 import { useDeleteInventoryItem, useInventoryStock } from '../hooks/use-inventory'
@@ -30,6 +30,7 @@ export function InventoryStockScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize()
   const stockFilter = searchParams.get('stock') === 'zero' ? 'zero' : 'all'
   const filterKey = stockFilter
   const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
@@ -38,13 +39,18 @@ export function InventoryStockScreen() {
     setPage(1)
   }
   const debouncedSearch = useDebouncedValue(search, INVENTORY_SEARCH_DEBOUNCE_MS)
-  const stockQuery = useInventoryStock(debouncedSearch, page, INVENTORY_PAGE_SIZE, stockFilter)
+  const stockQuery = useInventoryStock(debouncedSearch, page, pageSize, stockFilter)
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const remove = useDeleteInventoryItem()
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null)
   const navigate = useNavigate()
   const total = stockQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / INVENTORY_PAGE_SIZE))
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size)
+    setPage(1)
+  }
 
   async function handleDelete() {
     if (!deleteTarget) {
@@ -146,7 +152,13 @@ export function InventoryStockScreen() {
           stockFilter === 'zero' ? 'Нет позиций с нулевым остатком.' : 'Измените запрос или оформите приход.'
         }
         onRowClick={(row) => navigate(routes.inventoryItem.replace(':id', row.id))}
-        pagination={{ page, pageCount, onPageChange: setPage }}
+        pagination={{
+          page,
+          pageCount,
+          onPageChange: setPage,
+          pageSize,
+          onPageSizeChange: handlePageSizeChange,
+        }}
         columns={[
           { id: 'name', header: 'Наименование', className: 'min-w-[12rem]', cell: (row) => row.name },
           {
