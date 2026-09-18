@@ -145,7 +145,11 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
       return
     }
     setExpanded((current) => {
-      const next = { ...current, [FOLDER_SERVICES]: true, [FOLDER_PRODUCTS]: true }
+      const next: Record<string, boolean> = {
+        ...current,
+        [FOLDER_SERVICES]: true,
+        [FOLDER_PRODUCTS]: true,
+      }
       for (const group of productGroups) {
         next[group.id] = true
       }

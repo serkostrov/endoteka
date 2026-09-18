@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { toast } from 'sonner'
-import type { UseFormReturn } from 'react-hook-form'
+import type { Path, UseFormReturn } from 'react-hook-form'
 
 import { SearchCreateAction } from '@/components/shared/SearchSuggestOverlay'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -84,11 +84,12 @@ const FIELD_META: Record<
 }
 
 export function DeviceClassificationFields({
-  form,
+  form: formProp,
   disabled = false,
   parts = 'all',
   appearance = 'form',
 }: DeviceClassificationFieldsProps) {
+  const form = formProp as UseFormReturn<DeviceClassificationFormValues>
   const canCreate = useHasPermission(Permission.SettingsUpdate)
   const setsQuery = useReferenceSets()
   const groups = useReferenceItemsBySetCode(ReferenceSetCode.DeviceGroups)
@@ -354,7 +355,7 @@ function RefSelect({
   allowCreate = false,
   onCreate,
 }: {
-  form: UseFormReturn<DeviceClassificationFormValues> | UseFormReturn<EditDeviceFormValues>
+  form: UseFormReturn<DeviceClassificationFormValues>
   name: ClassificationField
   label: string
   items: { id: string; name: string }[]
@@ -383,7 +384,7 @@ function RefSelect({
   return (
     <FormField
       control={form.control}
-      name={name}
+      name={name as Path<DeviceClassificationFormValues>}
       render={({ field }) => {
         const value = field.value || CLASSIFICATION_NONE
         const selectedLabel =

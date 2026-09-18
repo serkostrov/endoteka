@@ -146,33 +146,6 @@ function DeviceDetailSheetContent({ deviceId, onClose }: { deviceId: string; onC
   )
 }
 
-function DeviceDetailPanel({
-  deviceId,
-  layout,
-  onDeleted,
-}: {
-  deviceId: string | undefined
-  layout: 'page' | 'sheet'
-  onDeleted?: () => void
-}) {
-  const cardQuery = useDeviceCard(deviceId)
-
-  if (cardQuery.isLoading) {
-    return <LoadingState label="Загрузка прибора" className={layout === 'sheet' ? 'min-h-40' : undefined} />
-  }
-
-  if (cardQuery.error) {
-    return <ErrorState description={getErrorMessage(cardQuery.error)} />
-  }
-
-  const card = cardQuery.data
-  if (!card) {
-    return <ErrorState description="Прибор не найден." />
-  }
-
-  return <DeviceCardBody card={card} layout={layout} onDeleted={onDeleted} />
-}
-
 function DeviceCardBody({
   card,
   layout,

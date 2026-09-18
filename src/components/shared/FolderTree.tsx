@@ -222,6 +222,9 @@ export function nestByFolderKeys<T>(
   }
 
   const [getKey, ...rest] = levels
+  if (!getKey) {
+    return []
+  }
   const top = groupByFolderKey(items, getKey)
 
   if (rest.length === 0) {

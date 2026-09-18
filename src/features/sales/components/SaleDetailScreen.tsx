@@ -116,7 +116,7 @@ function SaleDetailSheetContent({ saleId, onClose }: { saleId: string; onClose: 
         ) : !document ? (
           <ErrorState description="Продажа не найдена." />
         ) : (
-          <SaleDocumentBody document={document} layout="sheet" hideChromeDelete onDeleted={onClose} />
+          <SaleDocumentBody document={document} hideChromeDelete onDeleted={onClose} />
         )}
       </div>
       <ConfirmDialog
@@ -134,12 +134,10 @@ function SaleDetailSheetContent({ saleId, onClose }: { saleId: string; onClose: 
 
 function SaleDocumentBody({
   document,
-  layout,
   onDeleted,
   hideChromeDelete = false,
 }: {
   document: SaleDocument
-  layout: 'page' | 'sheet'
   onDeleted?: () => void
   hideChromeDelete?: boolean
 }) {
