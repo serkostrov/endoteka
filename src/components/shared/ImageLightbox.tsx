@@ -300,14 +300,15 @@ function ViewerAction({
 type ImageHoverPreviewProps = {
   src: string
   alt?: string
+  className?: string
   children: ReactNode
 }
 
-export function ImageHoverPreview({ src, alt, children }: ImageHoverPreviewProps) {
+export function ImageHoverPreview({ src, alt, className, children }: ImageHoverPreviewProps) {
   const triggerRef = useRef<HTMLSpanElement>(null)
   const timerRef = useRef(0)
   const [open, setOpen] = useState(false)
-  const [coords, setCoords] = useState({ top: 0, left: 0 })
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 520, height: 420 })
 
   function hide() {
     window.clearTimeout(timerRef.current)
@@ -321,20 +322,34 @@ export function ImageHoverPreview({ src, alt, children }: ImageHoverPreviewProps
       if (!rect) {
         return
       }
-      const width = 288
-      const height = 220
+      // Превью заметно крупнее исходного фото, но не больше окна.
+      const width = Math.min(
+        Math.max(rect.width * 1.75, 360),
+        Math.min(560, window.innerWidth - 24),
+      )
+      const height = Math.min(
+        Math.max(rect.height * 1.75, 280),
+        Math.min(480, window.innerHeight - 24),
+      )
       const gap = 12
+      // Сначала справа от фото; если не влезает — слева; иначе у края экрана.
       let left = rect.right + gap
       if (left + width > window.innerWidth - 8) {
-        left = Math.max(8, rect.left - width - gap)
+        left = rect.left - width - gap
       }
-      let top = rect.top
+      if (left < 8) {
+        left = Math.min(window.innerWidth - width - 8, Math.max(8, rect.left))
+      }
+      let top = rect.top + rect.height / 2 - height / 2
+      if (top < 8) {
+        top = 8
+      }
       if (top + height > window.innerHeight - 8) {
         top = Math.max(8, window.innerHeight - height - 8)
       }
-      setCoords({ top, left })
+      setCoords({ top, left, width, height })
       setOpen(true)
-    }, 280)
+    }, 220)
   }
 
   useEffect(() => () => window.clearTimeout(timerRef.current), [])
@@ -342,20 +357,26 @@ export function ImageHoverPreview({ src, alt, children }: ImageHoverPreviewProps
   return (
     <span
       ref={triggerRef}
-      className="inline-flex min-w-0"
+      className={cn('inline-flex min-w-0', className)}
       onMouseEnter={show}
       onMouseLeave={hide}
-      onClick={hide}
+      onFocus={show}
+      onBlur={hide}
     >
       {children}
       {open
         ? createPortal(
             <div
               role="tooltip"
-              className="pointer-events-none fixed z-[60] overflow-hidden rounded-lg border bg-background p-1.5 shadow-xl"
-              style={{ top: coords.top, left: coords.left }}
+              className="pointer-events-none fixed z-[100] overflow-hidden rounded-lg border bg-background p-2 shadow-xl"
+              style={{ top: coords.top, left: coords.left, width: coords.width, maxHeight: coords.height }}
             >
-              <img src={src} alt={alt || ''} className="max-h-52 max-w-72 rounded-md object-contain" />
+              <img
+                src={src}
+                alt={alt || ''}
+                className="h-full max-h-full w-full max-w-full rounded-md object-contain"
+                style={{ maxHeight: coords.height - 16, maxWidth: coords.width - 16 }}
+              />
             </div>,
             document.body,
           )

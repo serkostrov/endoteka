@@ -825,10 +825,12 @@ export async function uploadInventoryItemPhoto(itemId: string, file: File): Prom
         ? '.webp'
         : '.jpg'
   const path = `${itemId}/${crypto.randomUUID()}${extension}`
+  const payload = new File([file], file.name || `photo${extension}`, { type: mime })
   const supabase = getSupabase()
-  const { error: uploadError } = await supabase.storage.from(ITEM_PHOTOS_BUCKET).upload(path, file, {
+  const { error: uploadError } = await supabase.storage.from(ITEM_PHOTOS_BUCKET).upload(path, payload, {
     contentType: mime,
     upsert: false,
+    cacheControl: '3600',
   })
   if (uploadError) {
     throw toAppError(uploadError, 'Не удалось загрузить фото.')

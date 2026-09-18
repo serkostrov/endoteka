@@ -70,6 +70,14 @@ export function toAppError(error: unknown, fallback = 'Не удалось вы�
     if (!isInternalErrorMessage(error.message)) {
       return new AppError(code ?? 'APP', error.message, error)
     }
+
+    if (/row-level security|violates.*policy/i.test(error.message)) {
+      return new AppError(code ?? 'RLS', 'Нет доступа (политика безопасности).', error)
+    }
+
+    if (/mime type|not supported|invalid.*type/i.test(error.message)) {
+      return new AppError(code ?? 'MIME', 'Этот тип файла не поддерживается.', error)
+    }
   }
 
   return new AppError('UNKNOWN', fallback, error)

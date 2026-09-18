@@ -1,10 +1,10 @@
-import { type ChangeEvent, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Camera, ImagePlus, WandSparkles } from 'lucide-react'
 import QRCode from 'qrcode'
 import { toast } from 'sonner'
 import type { UseFormReturn } from 'react-hook-form'
 
-import { ImageLightbox, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
+import { ImageLightbox, ImageHoverPreview, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,7 @@ import {
   type BarcodeType,
 } from '@/lib/constants/barcode'
 import { getErrorMessage } from '@/lib/errors'
+import { pickImageFiles } from '@/lib/pick-image-files'
 import { cn } from '@/lib/utils'
 
 import {
@@ -42,7 +43,6 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
     isBarcodeType(item.barcodeType) ? item.barcodeType : 'code128',
   )
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
-  const fileInput = useRef<HTMLInputElement>(null)
 
   const photosQuery = useInventoryItemPhotos(item.id)
   const upload = useUploadInventoryItemPhoto(item.id)
@@ -77,21 +77,27 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
     }
   }
 
-  async function onFiles(event: ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files
-    event.target.value = ''
-    if (!files?.length) {
+  async function handleAddPhotos() {
+    if (!canEdit || upload.isPending) {
+      return
+    }
+    const files = await pickImageFiles({ accept: INVENTORY_ITEM_PHOTO_ACCEPT, multiple: true })
+    if (!files.length) {
       return
     }
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         await upload.mutateAsync(file)
       }
       toast.success(files.length === 1 ? 'Фото добавлено' : `Добавлено фото: ${files.length}`)
     } catch (error) {
       const message = getErrorMessage(error)
-      if (/function|relation|bucket|does not exist|404|PGRST/i.test(message)) {
-        toast.error('Фото не настроены в базе. Примените миграцию inventory_item_photos_label.')
+      if (/function|relation|bucket|does not exist|404|PGRST|schema cache/i.test(message)) {
+        toast.error('Фото не настроены в базе. Примените миграцию inventory_item_photos_label / fix_photo_uploads.')
+        return
+      }
+      if (/row-level security|policy|403|недостаточно прав/i.test(message)) {
+        toast.error('Нет прав на загрузку фото (нужно inventory:receive).')
         return
       }
       toast.error(message)
@@ -105,7 +111,7 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
           canEdit={canEdit}
           photos={lightboxItems}
           uploading={upload.isPending}
-          onAdd={() => fileInput.current?.click()}
+          onAdd={() => void handleAddPhotos()}
           onOpen={(index) => setViewerIndex(index)}
         />
         <LabelPreviewCard
@@ -127,15 +133,6 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
           }}
         />
       </div>
-
-      <input
-        ref={fileInput}
-        type="file"
-        accept={INVENTORY_ITEM_PHOTO_ACCEPT}
-        multiple
-        className="sr-only"
-        onChange={(event) => void onFiles(event)}
-      />
 
       <ImageLightbox
         open={viewerIndex !== null}
@@ -217,10 +214,21 @@ function PhotoStrip({
   return (
     <div className="grid h-full min-h-[14rem] grid-cols-[minmax(0,1fr)_3.25rem] gap-1.5 rounded-lg border border-dashed bg-muted/20 p-1.5">
       <div className="group relative min-h-0 overflow-hidden rounded-md border bg-background">
-        <button type="button" className="absolute inset-0" onClick={() => onOpen(0)} aria-label="Открыть фото">
-          <img src={main.src} alt={main.alt ?? ''} className="size-full object-cover" draggable={false} />
-          <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-        </button>
+        <ImageHoverPreview
+          src={main.src}
+          alt={main.alt ?? 'Фото'}
+          className="absolute inset-0 block size-full"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 size-full"
+            onClick={() => onOpen(0)}
+            aria-label="Открыть фото"
+          >
+            <img src={main.src} alt={main.alt ?? ''} className="size-full object-cover" draggable={false} />
+            <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+          </button>
+        </ImageHoverPreview>
         {canEdit ? (
           <button
             type="button"
@@ -240,32 +248,44 @@ function PhotoStrip({
 
       <div className="flex min-h-0 flex-col gap-1.5">
         {sidePhotos.map((photo, index) => (
-          <button
+          <ImageHoverPreview
             key={photo.id ?? photo.src}
-            type="button"
-            className="group relative min-h-0 flex-1 overflow-hidden rounded-md border bg-background"
-            onClick={() => onOpen(index + 1)}
+            src={photo.src}
+            alt={photo.alt ?? 'Фото'}
+            className="flex min-h-0 flex-1"
           >
-            <img src={photo.src} alt={photo.alt ?? ''} className="size-full object-cover" draggable={false} />
-            <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-          </button>
+            <button
+              type="button"
+              className="group relative size-full min-h-0 overflow-hidden rounded-md border bg-background"
+              onClick={() => onOpen(index + 1)}
+            >
+              <img src={photo.src} alt={photo.alt ?? ''} className="size-full object-cover" draggable={false} />
+              <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+            </button>
+          </ImageHoverPreview>
         ))}
         {overflowPhoto ? (
-          <button
-            type="button"
-            className="relative min-h-0 flex-1 overflow-hidden rounded-md border bg-background"
-            onClick={() => onOpen(1 + sidePhotos.length)}
+          <ImageHoverPreview
+            src={overflowPhoto.src}
+            alt={overflowPhoto.alt ?? 'Фото'}
+            className="flex min-h-0 flex-1"
           >
-            <img
-              src={overflowPhoto.src}
-              alt={overflowPhoto.alt ?? ''}
-              className="size-full object-cover"
-              draggable={false}
-            />
-            <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-sm font-semibold text-white">
-              +{hiddenCount}
-            </span>
-          </button>
+            <button
+              type="button"
+              className="relative size-full min-h-0 overflow-hidden rounded-md border bg-background"
+              onClick={() => onOpen(1 + sidePhotos.length)}
+            >
+              <img
+                src={overflowPhoto.src}
+                alt={overflowPhoto.alt ?? ''}
+                className="size-full object-cover"
+                draggable={false}
+              />
+              <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-sm font-semibold text-white">
+                +{hiddenCount}
+              </span>
+            </button>
+          </ImageHoverPreview>
         ) : null}
         {canEdit && rest.length < SIDE_SLOTS ? (
           <button

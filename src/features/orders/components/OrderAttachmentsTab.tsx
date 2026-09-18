@@ -153,13 +153,7 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
                     onClick={() => openAttachment(item)}
                   >
                     <TableCell className="whitespace-normal">
-                      {item.kind === 'photo' && item.signedUrl ? (
-                        <ImageHoverPreview src={item.signedUrl} alt={item.fileName || item.caption || 'Фото'}>
-                          <AttachmentRowPreview item={item} />
-                        </ImageHoverPreview>
-                      ) : (
-                        <AttachmentRowPreview item={item} />
-                      )}
+                      <AttachmentRowPreview item={item} />
                     </TableCell>
                     <TableCell className="whitespace-normal">
                       <p className="font-medium">{item.createdByName || '—'}</p>
@@ -193,7 +187,17 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
 function AttachmentRowPreview({ item }: { item: OrderAttachment }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <AttachmentThumb item={item} />
+      {item.kind === 'photo' && item.signedUrl ? (
+        <ImageHoverPreview
+          src={item.signedUrl}
+          alt={item.fileName || item.caption || 'Фото'}
+          className="shrink-0"
+        >
+          <AttachmentThumb item={item} />
+        </ImageHoverPreview>
+      ) : (
+        <AttachmentThumb item={item} />
+      )}
       <div className="min-w-0">
         <p className="truncate font-medium">{item.fileName || item.caption || item.url || 'Вложение'}</p>
         {item.fileSize ? (

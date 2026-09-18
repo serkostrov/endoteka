@@ -157,11 +157,26 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     return null
   }
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profileWithAvatar, error: profileWithAvatarError } = await supabase
     .from('profiles')
     .select('id, full_name, email, is_active, avatar_path')
     .eq('id', user.id)
     .maybeSingle()
+
+  let profile = profileWithAvatar
+  let profileError = profileWithAvatarError
+
+  if (profileError && /avatar_path|column/i.test(profileError.message)) {
+    const fallback = await supabase
+      .from('profiles')
+      .select('id, full_name, email, is_active')
+      .eq('id', user.id)
+      .maybeSingle()
+    profile = fallback.data
+      ? { ...fallback.data, avatar_path: null }
+      : null
+    profileError = fallback.error
+  }
 
   if (profileError) {
     throw toAppError(profileError, 'Не удалось загрузить профиль пользователя.')
@@ -193,7 +208,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     throw toAppError(permissionsError, 'Не удалось загрузить права пользователя.')
   }
 
-  const avatarUrl = publicAvatarUrl(profile.avatar_path)
+  const avatarUrl = publicAvatarUrl(profile.avatar_path ?? null)
   const currentUser: AuthUser = {
     id: user.id,
     email: profile.email || user.email || '',
@@ -270,10 +285,12 @@ export async function uploadMyAvatar(file: File): Promise<string> {
 
   const extension = mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp' : '.jpg'
   const path = `${user.id}/${crypto.randomUUID()}${extension}`
+  const payload = new File([file], `avatar${extension}`, { type: mime })
 
-  const { error: uploadError } = await supabase.storage.from(PROFILE_AVATARS_BUCKET).upload(path, file, {
+  const { error: uploadError } = await supabase.storage.from(PROFILE_AVATARS_BUCKET).upload(path, payload, {
     contentType: mime,
-    upsert: false,
+    upsert: true,
+    cacheControl: '3600',
   })
   if (uploadError) {
     throw toAppError(uploadError, 'Не удалось загрузить фото.')

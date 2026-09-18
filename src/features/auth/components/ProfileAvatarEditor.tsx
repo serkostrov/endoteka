@@ -1,9 +1,10 @@
 import { Camera, Loader2, Trash2 } from 'lucide-react'
-import { type ChangeEvent, useRef, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { getErrorMessage } from '@/lib/errors'
+import { pickImageFiles } from '@/lib/pick-image-files'
 import { getInitials } from '@/lib/utils/initials'
 import { cn } from '@/lib/utils'
 
@@ -21,13 +22,15 @@ type ProfileAvatarEditorProps = {
 
 export function ProfileAvatarEditor({ className, size = 'lg' }: ProfileAvatarEditorProps) {
   const { user, refreshUser } = useAuth()
-  const fileInput = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState(false)
   const initials = getInitials(user?.fullName || user?.email || 'Пользователь')
 
-  async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
+  async function handlePick() {
+    if (pending) {
+      return
+    }
+    const files = await pickImageFiles({ accept: PROFILE_AVATAR_ACCEPT })
+    const file = files[0]
     if (!file) {
       return
     }
@@ -38,8 +41,10 @@ export function ProfileAvatarEditor({ className, size = 'lg' }: ProfileAvatarEdi
       toast.success('Фото профиля обновлено')
     } catch (error) {
       const message = getErrorMessage(error)
-      if (/function|bucket|does not exist|PGRST/i.test(message)) {
-        toast.error('Аватары не настроены в базе. Примените миграцию profile_avatars.')
+      if (/function|bucket|does not exist|PGRST|schema cache/i.test(message)) {
+        toast.error('Аватары не настроены в базе. Примените миграцию profile_avatars / fix_photo_uploads.')
+      } else if (/row-level security|policy|403|unauthorized|jwt/i.test(message)) {
+        toast.error('Нет доступа к хранилищу аватаров. Проверьте политики storage.')
       } else {
         toast.error(message)
       }
@@ -72,7 +77,11 @@ export function ProfileAvatarEditor({ className, size = 'lg' }: ProfileAvatarEdi
         className="group relative rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label="Изменить фото профиля"
         onPointerDown={(event) => event.preventDefault()}
-        onClick={() => fileInput.current?.click()}
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          void handlePick()
+        }}
       >
         <Avatar size={size} className={size === 'lg' ? 'size-10' : undefined}>
           {user?.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
@@ -102,13 +111,6 @@ export function ProfileAvatarEditor({ className, size = 'lg' }: ProfileAvatarEdi
           <Trash2 className="size-3" />
         </button>
       ) : null}
-      <input
-        ref={fileInput}
-        type="file"
-        accept={PROFILE_AVATAR_ACCEPT}
-        className="sr-only"
-        onChange={(event) => void onFileChange(event)}
-      />
     </div>
   )
 }
