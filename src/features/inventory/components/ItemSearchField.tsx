@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Folder, FolderOpen, Search, X } from 'lucide-react'
 
-import { SearchCreateAction, SearchEmptyCreate, SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
+import { SearchCreateAction, SearchEmptyCreate, SearchSuggestOverlay, SearchSuggestPanel } from '@/components/shared/SearchSuggestOverlay'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -174,10 +174,16 @@ export function ItemSearchField({
       <SearchSuggestOverlay
         open={showPanel}
         onOpenChange={setOpen}
-        contentClassName="w-[min(40rem,calc(100vw-2rem))] max-h-[min(22rem,var(--radix-popover-content-available-height))]"
+        contentClassName="w-[min(40rem,calc(100vw-2rem))]"
         panel={
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
+          <SearchSuggestPanel
+            footer={
+              allowCreate && items.length > 0 ? (
+                <SearchCreateAction label="Новый" disabled={disabled} onCreate={requestCreate} />
+              ) : null
+            }
+          >
+            <div className="py-1">
               {listQuery.error ? (
                 <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(listQuery.error)}</p>
               ) : searching && items.length === 0 ? (
@@ -250,11 +256,7 @@ export function ItemSearchField({
                 </div>
               )}
             </div>
-
-            {allowCreate && items.length > 0 ? (
-              <SearchCreateAction label="Новый" disabled={disabled} onCreate={requestCreate} />
-            ) : null}
-          </div>
+          </SearchSuggestPanel>
         }
       >
         <div className="relative">

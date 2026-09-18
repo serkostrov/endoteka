@@ -7,6 +7,7 @@ import { SearchCreateAction } from '@/components/shared/SearchSuggestOverlay'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { markNestedDialogClosing } from '@/components/ui/sheet'
 import { useHasPermission } from '@/features/auth'
 import { ReferenceItemDialog } from '@/features/references/components/ReferenceItemDialog'
 import {
@@ -103,6 +104,7 @@ export function DeviceClassificationFields({
   const modificationId = form.watch('modificationId')
 
   const [createField, setCreateField] = useState<ClassificationField | null>(null)
+  const [createName, setCreateName] = useState('')
 
   const brandOptions = ensureSelectedOption(
     (brands.data ?? []).filter((item) => {
@@ -110,9 +112,9 @@ export function DeviceClassificationFields({
         return false
       }
       if (groupId === CLASSIFICATION_NONE) {
-        return !item.parentId
+        return false
       }
-      return item.parentId === groupId || !item.parentId
+      return item.parentId === groupId
     }),
     brands.data,
     brandId,
@@ -122,7 +124,10 @@ export function DeviceClassificationFields({
       if (!item.isActive) {
         return false
       }
-      return brandId === CLASSIFICATION_NONE ? !item.parentId : item.parentId === brandId
+      if (brandId === CLASSIFICATION_NONE) {
+        return false
+      }
+      return item.parentId === brandId
     }),
     models.data,
     modelId,
@@ -132,7 +137,10 @@ export function DeviceClassificationFields({
       if (!item.isActive) {
         return false
       }
-      return modelId === CLASSIFICATION_NONE ? !item.parentId : item.parentId === modelId
+      if (modelId === CLASSIFICATION_NONE) {
+        return false
+      }
+      return item.parentId === modelId
     }),
     modifications.data,
     modificationId,
@@ -171,25 +179,36 @@ export function DeviceClassificationFields({
     createField === 'brandId'
       ? (groups.data ?? []).filter((item) => item.isActive || item.id === createParentId)
       : createField === 'modelId'
-        ? (brands.data ?? []).filter((item) => item.isActive || item.id === createParentId)
+        ? (brands.data ?? []).filter((item) => {
+            if (!(item.isActive || item.id === createParentId)) {
+              return false
+            }
+            if (item.id === createParentId) {
+              return true
+            }
+            return groupId !== CLASSIFICATION_NONE && item.parentId === groupId
+          })
         : createField === 'modificationId'
-          ? (models.data ?? []).filter((item) => item.isActive || item.id === createParentId)
+          ? (models.data ?? []).filter((item) => {
+              if (!(item.isActive || item.id === createParentId)) {
+                return false
+              }
+              if (item.id === createParentId) {
+                return true
+              }
+              return brandId !== CLASSIFICATION_NONE && item.parentId === brandId
+            })
           : []
 
   const createSiblings =
     createField === 'groupId'
       ? (groups.data ?? [])
       : createField === 'brandId'
-        ? (brands.data ?? []).filter(
-            (item) => item.parentId === createParentId || (!item.parentId && Boolean(createParentId)),
-          )
+        ? (brands.data ?? []).filter((item) => item.parentId === createParentId)
         : createField === 'modelId'
           ? (models.data ?? []).filter((item) => item.parentId === createParentId)
           : createField === 'modificationId'
-            ? (modifications.data ?? []).filter(
-                (item) =>
-                  item.parentId === createParentId || (!item.parentId && Boolean(createParentId)),
-              )
+            ? (modifications.data ?? []).filter((item) => item.parentId === createParentId)
             : []
 
   const save = useUpsertReferenceItem(createSetId)
@@ -231,7 +250,10 @@ export function DeviceClassificationFields({
               triggerSlot={triggerSlot}
               hideLabel={header}
               allowCreate={canCreate}
-              onCreate={() => setCreateField('groupId')}
+              onCreate={(query) => {
+                setCreateName(query)
+                setCreateField('groupId')
+              }}
               onValueChange={() => {
                 form.setValue('brandId', CLASSIFICATION_NONE)
                 form.setValue('modelId', CLASSIFICATION_NONE)
@@ -248,7 +270,10 @@ export function DeviceClassificationFields({
               triggerSlot={triggerSlot}
               hideLabel={header}
               allowCreate={canCreate && groupId !== CLASSIFICATION_NONE}
-              onCreate={() => setCreateField('brandId')}
+              onCreate={(query) => {
+                setCreateName(query)
+                setCreateField('brandId')
+              }}
               onValueChange={() => {
                 form.setValue('modelId', CLASSIFICATION_NONE)
                 form.setValue('modificationId', CLASSIFICATION_NONE)
@@ -264,7 +289,10 @@ export function DeviceClassificationFields({
               triggerSlot={triggerSlot}
               hideLabel={header}
               allowCreate={canCreate && brandId !== CLASSIFICATION_NONE}
-              onCreate={() => setCreateField('modelId')}
+              onCreate={(query) => {
+                setCreateName(query)
+                setCreateField('modelId')
+              }}
               onValueChange={() => form.setValue('modificationId', CLASSIFICATION_NONE)}
             />
           </>
@@ -277,7 +305,10 @@ export function DeviceClassificationFields({
             disabled={disabled || modelId === CLASSIFICATION_NONE}
             items={modificationOptions}
             allowCreate={canCreate && modelId !== CLASSIFICATION_NONE}
-            onCreate={() => setCreateField('modificationId')}
+            onCreate={(query) => {
+              setCreateName(query)
+              setCreateField('modificationId')
+            }}
           />
         ) : null}
       </div>
@@ -291,27 +322,42 @@ export function DeviceClassificationFields({
           parentOptions={createParentOptions}
           item={null}
           defaultParentId={createParentId}
+          defaultName={createName}
           lockParent={createMeta.requiresParent && Boolean(createParentId)}
           isPending={save.isPending}
           onOpenChange={(open) => {
             if (!open) {
               setCreateField(null)
+              setCreateName('')
             }
           }}
           onSubmit={async (values: ReferenceItemFormValues) => {
+            const nameTaken = createSiblings.some(
+              (row) => row.name.trim().toLowerCase() === values.name.trim().toLowerCase(),
+            )
+            if (nameTaken) {
+              throw new Error('Запись с таким названием уже есть на этом уровне.')
+            }
+            const setCodes =
+              createField === 'groupId'
+                ? (groups.data ?? []).map((row) => row.code ?? '')
+                : createField === 'brandId'
+                  ? (brands.data ?? []).map((row) => row.code ?? '')
+                  : createField === 'modelId'
+                    ? (models.data ?? []).map((row) => row.code ?? '')
+                    : (modifications.data ?? []).map((row) => row.code ?? '')
             const id = await save.mutateAsync({
               setId: createSetId,
-              code: uniqueCode(
-                values.name,
-                createSiblings.map((row) => row.code ?? ''),
-              ),
+              code: uniqueCode(values.name, setCodes),
               name: values.name,
               description: values.description,
               parentId: createMeta.requiresParent ? createParentId || values.parentId || null : null,
             })
+            // Сначала блокируем закрытие родительских Sheet, потом подставляем значение.
+            // Иначе Radix успевает закрыть «Новый прибор» / «Новый заказ».
+            markNestedDialogClosing()
             applyCreated(createField, id)
             toast.success('Запись добавлена')
-            setCreateField(null)
           }}
         />
       ) : null}
@@ -365,7 +411,7 @@ function RefSelect({
   triggerSlot?: string
   hideLabel?: boolean
   allowCreate?: boolean
-  onCreate?: () => void
+  onCreate?: (query: string) => void
 }) {
   const listId = useId()
   const searchRef = useRef<HTMLInputElement>(null)
@@ -441,58 +487,67 @@ function RefSelect({
               <PopoverContent
                 align="start"
                 sideOffset={4}
+                collisionPadding={12}
                 className="z-[80] w-[var(--radix-popover-trigger-width)] min-w-[12rem] max-w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden p-0"
                 onOpenAutoFocus={(event) => event.preventDefault()}
               >
-                <div className="border-b p-2">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      ref={searchRef}
-                      value={query}
-                      onChange={(event) => setQuery(event.target.value)}
-                      placeholder="Поиск…"
-                      className="h-8 pl-8"
-                      onKeyDown={(event) => {
-                        if (event.key === 'Escape') {
-                          event.stopPropagation()
-                          setOpen(false)
-                        }
+                <div className="flex max-h-[min(32rem,var(--radix-popover-content-available-height,100dvh))] flex-col overflow-hidden">
+                  <div className="shrink-0 border-b p-2">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        ref={searchRef}
+                        value={query}
+                        onChange={(event) => setQuery(event.target.value)}
+                        placeholder="Поиск…"
+                        className="h-8 pl-8"
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            event.stopPropagation()
+                            setOpen(false)
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div
+                    id={listId}
+                    role="listbox"
+                    aria-label={label}
+                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
+                  >
+                    {showNone ? (
+                      <OptionButton
+                        selected={value === CLASSIFICATION_NONE}
+                        onSelect={() => pick(CLASSIFICATION_NONE)}
+                      >
+                        {NONE_LABEL}
+                      </OptionButton>
+                    ) : null}
+                    {filtered.map((item) => (
+                      <OptionButton
+                        key={item.id}
+                        selected={value === item.id}
+                        onSelect={() => pick(item.id)}
+                      >
+                        {item.name}
+                      </OptionButton>
+                    ))}
+                    {!showNone && filtered.length === 0 ? (
+                      <p className="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
+                    ) : null}
+                  </div>
+                  {allowCreate ? (
+                    <SearchCreateAction
+                      label="Новый"
+                      onCreate={() => {
+                        const nextName = query.trim()
+                        setOpen(false)
+                        onCreate?.(nextName)
                       }}
                     />
-                  </div>
-                </div>
-                <div id={listId} role="listbox" aria-label={label} className="max-h-64 overflow-y-auto p-1">
-                  {showNone ? (
-                    <OptionButton
-                      selected={value === CLASSIFICATION_NONE}
-                      onSelect={() => pick(CLASSIFICATION_NONE)}
-                    >
-                      {NONE_LABEL}
-                    </OptionButton>
-                  ) : null}
-                  {filtered.map((item) => (
-                    <OptionButton
-                      key={item.id}
-                      selected={value === item.id}
-                      onSelect={() => pick(item.id)}
-                    >
-                      {item.name}
-                    </OptionButton>
-                  ))}
-                  {!showNone && filtered.length === 0 ? (
-                    <p className="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
                   ) : null}
                 </div>
-                {allowCreate ? (
-                  <SearchCreateAction
-                    label="Новый"
-                    onCreate={() => {
-                      setOpen(false)
-                      onCreate?.()
-                    }}
-                  />
-                ) : null}
               </PopoverContent>
             </Popover>
             <FormMessage />

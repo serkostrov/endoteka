@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import tinymce from 'tinymce'
 import { Editor } from '@tinymce/tinymce-react'
 import type { Editor as TinyMCEEditor } from 'tinymce'
@@ -19,7 +19,13 @@ import 'tinymce/skins/ui/oxide/content.js'
 import 'tinymce/skins/content/default/content.js'
 
 import { DOCUMENT_CONTENT_STYLE } from '../document-content-style'
-import { groupPlaceholders, placeholdersForContext } from '../placeholders'
+import { DEFAULT_DOCUMENT_DATE_FORMAT, documentDateFormats } from '../date-formats'
+import {
+  groupPlaceholders,
+  mergePlaceholderCatalog,
+  placeholdersForContext,
+  type PlaceholderDefinition,
+} from '../placeholders'
 
 void tinymce
 
@@ -27,10 +33,18 @@ type TinyMceDocumentEditorProps = {
   value: string
   onChange: (html: string) => void
   disabled?: boolean
+  settingsFields?: PlaceholderDefinition[]
 }
 
-export function TinyMceDocumentEditor({ value, onChange, disabled = false }: TinyMceDocumentEditorProps) {
-  const init = useMemo(() => createInit(), [])
+export function TinyMceDocumentEditor({
+  value,
+  onChange,
+  disabled = false,
+  settingsFields = [],
+}: TinyMceDocumentEditorProps) {
+  const settingsRef = useRef(settingsFields)
+  settingsRef.current = settingsFields
+  const init = useMemo(() => createInit(() => settingsRef.current), [])
 
   return (
     <div className="document-tinymce flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
@@ -45,7 +59,7 @@ export function TinyMceDocumentEditor({ value, onChange, disabled = false }: Tin
   )
 }
 
-function createInit(): Record<string, unknown> {
+function createInit(getSettingsFields: () => PlaceholderDefinition[]): Record<string, unknown> {
   return {
     language: 'ru',
     language_url: '/tinymce/langs/ru.js',
@@ -72,24 +86,26 @@ function createInit(): Record<string, unknown> {
     automatic_uploads: false,
     table_default_styles: { width: '100%', 'border-collapse': 'collapse' },
     table_default_attributes: { border: '1' },
-    extended_valid_elements: 'span[class|contenteditable|data-code|data-field|style]',
-    setup: (editor: TinyMCEEditor) => registerExtras(editor),
+    extended_valid_elements: 'span[class|contenteditable|data-code|data-field|data-date-format|style]',
+    setup: (editor: TinyMCEEditor) => registerExtras(editor, getSettingsFields),
   }
 }
 
-function registerExtras(editor: TinyMCEEditor) {
+function registerExtras(editor: TinyMCEEditor, getSettingsFields: () => PlaceholderDefinition[]) {
   editor.ui.registry.addMenuButton('placeholders', {
     text: 'Поле',
     tooltip: 'Вставить поле документа',
     fetch: (callback) => {
-      const items = groupPlaceholders(placeholdersForContext('document')).flatMap((group) => [
+      const items = groupPlaceholders(
+        mergePlaceholderCatalog(placeholdersForContext('document'), getSettingsFields()),
+      ).flatMap((group) => [
         { type: 'separator' as const },
         {
           type: 'menuitem' as const,
           text: group.name,
           enabled: false,
         },
-        ...group.items.map((item) => insertFieldItem(editor, item.key, item.label)),
+        ...group.items.map((item) => insertFieldItem(editor, item)),
       ])
       callback(items.filter((item, index) => !(item.type === 'separator' && index === 0)))
     },
@@ -103,12 +119,12 @@ function registerExtras(editor: TinyMCEEditor) {
         { type: 'menuitem', text: 'Запчасть заказа', enabled: false },
         ...placeholdersForContext('parts')
           .filter((item) => item.scope === 'row')
-          .map((item) => insertFieldItem(editor, item.key, item.label)),
+          .map((item) => insertFieldItem(editor, item)),
         { type: 'separator' },
         { type: 'menuitem', text: 'Строка накладной', enabled: false },
         ...placeholdersForContext('lines')
           .filter((item) => item.scope === 'row')
-          .map((item) => insertFieldItem(editor, item.key, item.label)),
+          .map((item) => insertFieldItem(editor, item)),
       ])
     },
   })
@@ -141,16 +157,55 @@ function registerExtras(editor: TinyMCEEditor) {
   })
 }
 
-function insertFieldItem(editor: TinyMCEEditor, key: string, label: string) {
+function insertFieldItem(editor: TinyMCEEditor, item: PlaceholderDefinition) {
   return {
     type: 'menuitem' as const,
-    text: label,
+    text: item.label,
     onAction: () => {
-      editor.insertContent(
-        `<span class="doc-field" data-field="${key}" contenteditable="false">{{${key}}}</span>&nbsp;`,
-      )
+      if (item.isDate) {
+        openDateFormatDialog(editor, item.key, item.label)
+        return
+      }
+      insertFieldToken(editor, item.key)
     },
   }
+}
+
+function insertFieldToken(editor: TinyMCEEditor, key: string, dateFormat?: string) {
+  const token = dateFormat ? `{{${key}|${dateFormat}}}` : `{{${key}}}`
+  const formatAttr = dateFormat ? ` data-date-format="${escapeAttr(dateFormat)}"` : ''
+  editor.insertContent(
+    `<span class="doc-field" data-field="${escapeAttr(key)}"${formatAttr} contenteditable="false">${token}</span>&nbsp;`,
+  )
+}
+
+function openDateFormatDialog(editor: TinyMCEEditor, key: string, label: string) {
+  editor.windowManager.open({
+    title: `Формат даты — ${label}`,
+    body: {
+      type: 'panel',
+      items: [
+        {
+          type: 'selectbox',
+          name: 'format',
+          label: 'Формат',
+          size: 1,
+          items: documentDateFormats.map((item) => ({ text: item.label, value: item.value })),
+        },
+      ],
+    },
+    initialData: { format: DEFAULT_DOCUMENT_DATE_FORMAT },
+    buttons: [
+      { type: 'cancel', text: 'Отмена' },
+      { type: 'submit', text: 'Вставить', buttonType: 'primary' },
+    ],
+    onSubmit: (api) => {
+      const data = api.getData() as { format?: string }
+      const format = data.format?.trim() || DEFAULT_DOCUMENT_DATE_FORMAT
+      insertFieldToken(editor, key, format)
+      api.close()
+    },
+  })
 }
 
 function openUrlDialog(

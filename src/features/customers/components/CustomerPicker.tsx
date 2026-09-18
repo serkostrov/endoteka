@@ -5,6 +5,7 @@ import {
   SearchCreateAction,
   SearchEmptyCreate,
   SearchSuggestOverlay,
+  SearchSuggestPanel,
 } from '@/components/shared/SearchSuggestOverlay'
 import { Button } from '@/components/ui/button'
 import { CUSTOMER_PICKER_PAGE_SIZE, CUSTOMER_SEARCH_DEBOUNCE_MS } from '@/lib/constants/customers'
@@ -29,6 +30,8 @@ type CustomerPickerProps = {
   emptyMessage?: string
   createTitle?: string
   createDescription?: string
+  /** Скрыть кнопку «Сменить» внутри (если она в заголовке снаружи). */
+  hideChangeButton?: boolean
 }
 
 export function CustomerPicker({
@@ -43,6 +46,7 @@ export function CustomerPicker({
   emptyMessage = 'Клиенты не найдены',
   createTitle,
   createDescription,
+  hideChangeButton = false,
 }: CustomerPickerProps) {
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
@@ -76,90 +80,92 @@ export function CustomerPicker({
       compact={compact}
       disabled={disabled}
       onOpen={() => setDetailOpen(true)}
-      onClear={framed ? undefined : clearCustomer}
     />
   ) : (
     <SearchSuggestOverlay
       open={open}
       onOpenChange={setOpen}
       panel={
-        <div className="flex min-h-0 flex-col overflow-hidden">
-          <div className="min-h-0 max-h-64 overflow-auto">
-            {searching && items.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
-            ) : items.length === 0 ? (
-              <SearchEmptyCreate
-                message={emptyMessage}
-                actionLabel="Новый"
-                disabled={disabled}
-                actionSize="comfortable"
-                onCreate={() => {
-                  setOpen(false)
-                  setCreateOpen(true)
-                }}
-              />
-            ) : (
-              <ul>
-                {items.map((customer) => (
-                  <li key={customer.id}>
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      className={cn(
-                        'flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent',
-                      )}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => selectCustomer(customer)}
-                    >
-                      <span className="font-medium">{customer.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {customerKindLabel(customer.kind)}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {pageCount > 1 && items.length > 0 ? (
-            <div className="flex shrink-0 items-center justify-between gap-2 border-t px-3 py-2 text-sm">
-              <span className="text-muted-foreground">
-                {page} из {pageCount}
-              </span>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => setPage((current) => Math.max(1, current - 1))}
-                >
-                  Назад
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= pageCount}
-                  onClick={() => setPage((current) => current + 1)}
-                >
-                  Ещё
-                </Button>
-              </div>
-            </div>
-          ) : null}
-          {items.length > 0 ? (
-            <SearchCreateAction
-              label="Новый"
+        <SearchSuggestPanel
+          footer={
+            items.length > 0 ? (
+              <>
+                {pageCount > 1 ? (
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-t px-3 py-2 text-sm">
+                    <span className="text-muted-foreground">
+                      {page} из {pageCount}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={page <= 1}
+                        onClick={() => setPage((current) => Math.max(1, current - 1))}
+                      >
+                        Назад
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={page >= pageCount}
+                        onClick={() => setPage((current) => current + 1)}
+                      >
+                        Ещё
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+                <SearchCreateAction
+                  label="Новый"
+                  disabled={disabled}
+                  size="comfortable"
+                  onCreate={() => {
+                    setOpen(false)
+                    setCreateOpen(true)
+                  }}
+                />
+              </>
+            ) : null
+          }
+        >
+          {searching && items.length === 0 ? (
+            <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
+          ) : items.length === 0 ? (
+            <SearchEmptyCreate
+              message={emptyMessage}
+              actionLabel="Новый"
               disabled={disabled}
-              size="comfortable"
+              actionSize="comfortable"
               onCreate={() => {
                 setOpen(false)
                 setCreateOpen(true)
               }}
             />
-          ) : null}
-        </div>
+          ) : (
+            <ul>
+              {items.map((customer) => (
+                <li key={customer.id}>
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    className={cn(
+                      'flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent',
+                    )}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectCustomer(customer)}
+                  >
+                    <span className="font-medium">{customer.name}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {customerKindLabel(customer.kind)}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SearchSuggestPanel>
       }
     >
       <SearchInput
@@ -183,6 +189,19 @@ export function CustomerPicker({
     </SearchSuggestOverlay>
   )
 
+  const changeButton =
+    selected && !disabled && !hideChangeButton ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-auto shrink-0 px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+        onClick={clearCustomer}
+      >
+        Сменить
+      </Button>
+    ) : null
+
   return (
     <div className={cn('min-w-0', !compact && 'flex h-full min-h-0 flex-col')}>
       {framed ? (
@@ -193,22 +212,15 @@ export function CustomerPicker({
             ) : (
               <span />
             )}
-            {selected && !disabled ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-auto shrink-0 px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
-                onClick={clearCustomer}
-              >
-                Сменить
-              </Button>
-            ) : null}
+            {changeButton}
           </div>
           {body}
         </section>
       ) : (
-        body
+        <>
+          {changeButton ? <div className="mb-1.5 flex justify-end">{changeButton}</div> : null}
+          {body}
+        </>
       )}
 
       <CreateCustomerDialog
@@ -216,6 +228,7 @@ export function CustomerPicker({
         onOpenChange={setCreateOpen}
         title={createTitle}
         description={createDescription}
+        initialName={query}
         onCreated={(customer) => {
           selectCustomer(customer)
         }}
@@ -234,18 +247,15 @@ function CustomerLookupCard({
   compact = false,
   disabled,
   onOpen,
-  onClear,
 }: {
   customer: Customer
   compact?: boolean
   disabled?: boolean
   onOpen: () => void
-  onClear?: () => void
 }) {
-  const action = onClear ?? onOpen
   const clickable = !disabled
   const compactMeta = [customerKindLabel(customer.kind), customer.phone].filter(Boolean).join(' · ')
-  const ariaLabel = onClear ? `Сменить клиента ${customer.name}` : `Открыть карточку ${customer.name}`
+  const ariaLabel = `Открыть карточку ${customer.name}`
 
   function onCardKeyDown(event: KeyboardEvent<HTMLElement>) {
     if (!clickable) {
@@ -253,7 +263,7 @@ function CustomerLookupCard({
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      action()
+      onOpen()
     }
   }
 
@@ -267,7 +277,7 @@ function CustomerLookupCard({
         role={clickable ? 'button' : undefined}
         tabIndex={clickable ? 0 : undefined}
         aria-label={clickable ? ariaLabel : undefined}
-        onClick={clickable ? action : undefined}
+        onClick={clickable ? onOpen : undefined}
         onKeyDown={onCardKeyDown}
       >
         <div className="min-w-0 flex-1 truncate text-left text-sm">
@@ -287,7 +297,7 @@ function CustomerLookupCard({
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
       aria-label={clickable ? ariaLabel : undefined}
-      onClick={clickable ? action : undefined}
+      onClick={clickable ? onOpen : undefined}
       onKeyDown={onCardKeyDown}
     >
       <div className="min-w-0">

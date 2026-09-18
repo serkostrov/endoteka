@@ -12,26 +12,33 @@ type DevicePickerProps = {
   serial: string
   onSerialChange: (serial: string) => void
   result: UseQueryResult<SerialSearchResult>
+  /** Подтверждённый выбор — без него точное совпадение не подставляется само. */
+  selectedId?: string | null
   disabled?: boolean
   customerId?: string
   isDebouncing?: boolean
   onCreated?: (device: Device) => void
   onSelectDevice?: (item: DeviceSearchItem) => void
+  onClear?: () => void
   framed?: boolean
   label?: string
+  hideChangeButton?: boolean
 }
 
 export function DevicePicker({
   serial,
   onSerialChange,
   result,
+  selectedId = null,
   disabled = false,
   customerId,
   isDebouncing = false,
   onCreated,
   onSelectDevice,
+  onClear,
   framed = false,
   label,
+  hideChangeButton = false,
 }: DevicePickerProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const canCreate = useHasPermission(Permission.DevicesCreate)
@@ -42,6 +49,7 @@ export function DevicePicker({
         value={serial}
         onChange={onSerialChange}
         result={result}
+        selectedId={selectedId}
         disabled={disabled}
         isDebouncing={isDebouncing}
         allowCreate={canCreate}
@@ -50,8 +58,10 @@ export function DevicePicker({
           onSerialChange(item.serialNumber)
           onSelectDevice?.(item)
         }}
+        onClear={onClear}
         framed={framed}
         label={label}
+        hideChangeButton={hideChangeButton}
       />
       <CreateDeviceDialog
         key={createOpen ? `open-${serial}` : 'closed'}

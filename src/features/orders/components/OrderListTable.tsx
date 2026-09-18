@@ -25,6 +25,7 @@ import {
 import { deviceSerialLine } from '@/features/devices/classification'
 import { DeadlineState } from '@/lib/constants/orders'
 import { formatDate, formatDateTime } from '@/lib/utils/date'
+import { formatInteger } from '@/lib/utils/number'
 import { cn } from '@/lib/utils'
 
 import { OrderDeadlineHint } from './OrderBadges'
@@ -258,7 +259,7 @@ export function OrderListTable({
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-muted-foreground">Всего — {total.toLocaleString('ru-RU')}</p>
+        <p className="text-sm text-muted-foreground">Всего — {formatInteger(total)}</p>
         {onPageSizeChange ? (
           <ListPagination
             page={page}

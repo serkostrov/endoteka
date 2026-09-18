@@ -139,7 +139,9 @@ function InventoryItemSheetContent({
     >
       <SheetHeader className="sr-only">
         <SheetTitle>Позиция склада</SheetTitle>
-        <SheetDescription>Карточка, цены и дополнительные поля номенклатуры.</SheetDescription>
+        <SheetDescription>
+          Изменения карточки обновляют цены и название во всех заказах, где эта позиция из справочника.
+        </SheetDescription>
       </SheetHeader>
       <div className="space-y-4 p-4 pr-14">
         {cardQuery.isLoading ? (

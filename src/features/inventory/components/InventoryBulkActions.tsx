@@ -13,6 +13,7 @@ import { getDocument } from '@/features/documents/services/documents-service'
 import { DocumentSourceType, sourceTypeForTemplate } from '@/lib/constants/documents'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { formatInteger } from '@/lib/utils/number'
 
 import { useDeleteInventoryItem } from '../hooks/use-inventory'
 
@@ -60,7 +61,7 @@ export function InventoryBulkActions({ selectedIds, onClear }: InventoryBulkActi
         await remove.mutateAsync(id)
       }
       toast.success(
-        count === 1 ? 'Позиция удалена' : `Удалено позиций: ${count.toLocaleString('ru-RU')}`,
+        count === 1 ? 'Позиция удалена' : `Удалено позиций: ${formatInteger(count)}`,
       )
       setDeleteOpen(false)
       onClear()
@@ -106,7 +107,7 @@ export function InventoryBulkActions({ selectedIds, onClear }: InventoryBulkActi
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-        <p className="mr-1 text-sm font-medium">Выбрано: {count.toLocaleString('ru-RU')}</p>
+        <p className="mr-1 text-sm font-medium">Выбрано: {formatInteger(count)}</p>
 
         {canPrint ? (
           <Popover
@@ -196,7 +197,7 @@ export function InventoryBulkActions({ selectedIds, onClear }: InventoryBulkActi
         description={
           count === 1
             ? 'Выбранная позиция будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.'
-            : `Будет удалено позиций: ${count.toLocaleString('ru-RU')}. Удаление не пройдёт для позиций с партиями, движениями или документами.`
+            : `Будет удалено позиций: ${formatInteger(count)}. Удаление не пройдёт для позиций с партиями, движениями или документами.`
         }
         confirmLabel="Удалить"
         confirmVariant="destructive"

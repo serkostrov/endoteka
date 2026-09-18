@@ -11,7 +11,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { flattenNavItems, isNavItemActive, type NavGroup, type NavItem } from '@/config/navigation'
 import { AccountSwitcherItems } from '@/features/auth/components/AccountSwitcher'
@@ -76,7 +75,12 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
   ) : null
 
   return (
-    <div className="flex h-full flex-col bg-sidebar text-sidebar-foreground">
+    <div
+      className={cn(
+        'flex h-full flex-col bg-sidebar text-sidebar-foreground',
+        collapsed ? 'w-full' : 'w-max max-w-full',
+      )}
+    >
       <div
         className={cn(
           'flex border-b border-sidebar-border',
@@ -95,14 +99,17 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
         {collapseButton}
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
-        <nav aria-label="Основная навигация" className={cn('space-y-4 py-3', collapsed ? 'px-2' : 'px-3')}>
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <nav
+          aria-label="Основная навигация"
+          className={cn('w-max max-w-full space-y-4 py-3', collapsed ? 'px-2' : 'px-2')}
+        >
           {groups.map((group) => (
             <div key={group.id}>
               {collapsed ? (
                 <span className="sr-only">{group.label}</span>
               ) : (
-                <p className="mb-1 px-2 text-[11px] font-medium tracking-wide text-sidebar-foreground/45 uppercase">
+                <p className="mb-1 px-2 text-[11px] font-medium tracking-wide whitespace-nowrap text-sidebar-foreground/45 uppercase">
                   {group.label}
                 </p>
               )}
@@ -121,7 +128,7 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
             </div>
           ))}
         </nav>
-      </ScrollArea>
+      </div>
 
       <div
         className={cn(
@@ -221,14 +228,14 @@ function SidebarLink({
       aria-current={isActive ? 'page' : undefined}
       className={cn(
         'flex items-center rounded-md text-sm transition-colors',
-        collapsed ? 'relative justify-center p-2' : 'gap-2 px-2 py-1.5',
+        collapsed ? 'relative justify-center p-2' : 'gap-2 px-2 py-1.5 whitespace-nowrap',
         isActive
           ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
           : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
       )}
     >
       <Icon className="size-4 shrink-0" aria-hidden="true" />
-      {collapsed ? <span className="sr-only">{item.label}</span> : <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+      {collapsed ? <span className="sr-only">{item.label}</span> : <span className="whitespace-nowrap">{item.label}</span>}
       {count > 0 && collapsed ? (
         <span className="absolute top-0.5 right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-medium text-primary-foreground">
           {count > 99 ? '99+' : count}

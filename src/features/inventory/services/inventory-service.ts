@@ -516,6 +516,22 @@ export async function addOrderCustomPartLine(
   return data
 }
 
+export async function updateOrderCustomPartLine(
+  lineId: string,
+  input: { name: string; quantity: number; unitPrice: number },
+): Promise<void> {
+  const { error } = await getSupabase().rpc('update_order_custom_part_line', {
+    target_line_id: lineId,
+    line_name: input.name,
+    line_quantity: input.quantity,
+    line_unit_price: input.unitPrice,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось сохранить позицию заказа.')
+  }
+}
+
 export async function setOrderPartLine(
   lineId: string,
   quantity: number,

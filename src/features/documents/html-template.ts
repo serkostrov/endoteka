@@ -5,7 +5,8 @@ import { buildCode128Path } from './barcode'
 import { interpolateTemplate } from './interpolate'
 import type { DocumentContext, TemplateBlock } from './template-schema'
 
-const FIELD_PATTERN = /\{\{\s*([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)?)\s*\}\}/g
+const FIELD_PATTERN =
+  /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+)(?:\|([^}]+))?\s*\}\}/g
 
 export function templateHtml(blocks: TemplateBlock[]): string {
   const htmlBlock = blocks.find((block) => block.type === 'html')
@@ -76,6 +77,7 @@ export function sanitizeDocumentHtml(html: string) {
       'cellspacing',
       'data-code',
       'data-field',
+      'data-date-format',
       'viewBox',
       'd',
       'stroke',
@@ -268,8 +270,9 @@ function blockToHtml(block: TemplateBlock): string {
 }
 
 function inlineHtml(value: string) {
-  return escapeHtml(value).replace(FIELD_PATTERN, (_full, key: string) => {
-    return `<span class="doc-field">{{${key}}}</span>`
+  return escapeHtml(value).replace(FIELD_PATTERN, (_full, key: string, dateFormat?: string) => {
+    const token = dateFormat ? `{{${key}|${dateFormat}}}` : `{{${key}}}`
+    return `<span class="doc-field">${token}</span>`
   })
 }
 

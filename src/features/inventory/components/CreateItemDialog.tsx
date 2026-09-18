@@ -15,7 +15,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  runSheetFormSave,
+  markNestedDialogClosing,
+  shouldIgnoreNestedDialogClose,
 } from '@/components/ui/sheet'
 import { getErrorMessage } from '@/lib/errors'
 
@@ -63,6 +64,13 @@ export function CreateItemDialog({
     setDuplicateId(null)
   }, [form, initialQuery, open])
 
+  function closeOnly() {
+    form.reset(emptyInventoryItemFormValues)
+    setDuplicateId(null)
+    markNestedDialogClosing()
+    onOpenChange(false)
+  }
+
   async function persistCatalog(values: InventoryItemFormValues) {
     try {
       const id = await create.mutateAsync(values)
@@ -71,6 +79,7 @@ export function CreateItemDialog({
       if (card) {
         onCreated?.(card.item)
       }
+      closeOnly()
     } catch (error) {
       if (isInventoryDuplicateError(error)) {
         setDuplicateId(error.existingItemId)
@@ -98,9 +107,7 @@ export function CreateItemDialog({
     }
     await addCustom.mutateAsync({ name, unitPrice, quantity: 1 })
     toast.success('Позиция добавлена в заказ')
-    form.reset(emptyInventoryItemFormValues)
-    setDuplicateId(null)
-    onOpenChange(false)
+    closeOnly()
     onCreatedForOrder?.()
   }
 
@@ -115,9 +122,6 @@ export function CreateItemDialog({
     }
     try {
       await persistCatalog(values)
-      form.reset(emptyInventoryItemFormValues)
-      setDuplicateId(null)
-      onOpenChange(false)
     } catch {
       return
     }
@@ -126,29 +130,36 @@ export function CreateItemDialog({
   return (
     <Sheet
       open={open}
-      dirty={form.formState.isDirty}
-      onSave={() =>
-        runSheetFormSave(form.handleSubmit, orderId ? async () => persistForOrder() : persistCatalog)
-      }
       onOpenChange={(next) => {
+        if (!next && shouldIgnoreNestedDialogClose()) {
+          return
+        }
         if (!next) {
           form.reset(emptyInventoryItemFormValues)
           setDuplicateId(null)
+          markNestedDialogClosing()
         }
         onOpenChange(next)
       }}
     >
-      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
+      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Новая позиция</SheetTitle>
           <SheetDescription>
             {orderId
-              ? 'Можно добавить только в этот заказ (без склада) или сохранить в справочник.'
-              : 'Наименование уникально. Приход и заказ остаются открытыми — данные не сбрасываются.'}
+              ? 'Можно добавить только в этот заказ или сохранить в справочник. Окно заказа останется открытым.'
+              : 'Наименование уникально. После сохранения позиция применится к карточке.'}
           </SheetDescription>
         </SheetHeader>
         <Form {...form}>
-          <form className="flex flex-1 flex-col gap-4 px-4 pb-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+          <form
+            className="flex flex-1 flex-col gap-4 px-4 pb-4"
+            onSubmit={(event) => {
+              event.stopPropagation()
+              void form.handleSubmit(onSubmit)(event)
+            }}
+            noValidate
+          >
             {duplicateId ? (
               <Alert>
                 <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
@@ -177,9 +188,6 @@ export function CreateItemDialog({
                           void form.handleSubmit(async (values) => {
                             try {
                               await persistCatalog(values)
-                              form.reset(emptyInventoryItemFormValues)
-                              setDuplicateId(null)
-                              onOpenChange(false)
                             } catch {
                               return
                             }
@@ -191,8 +199,8 @@ export function CreateItemDialog({
                   {create.isPending
                     ? 'Сохранение…'
                     : orderId
-                      ? 'В справочник'
-                      : 'Создать'}
+                      ? 'Создать и добавить в справочник'
+                      : 'Сохранить'}
                 </Button>
               ) : null}
               {orderId ? (
@@ -205,7 +213,7 @@ export function CreateItemDialog({
                     })
                   }}
                 >
-                  {addCustom.isPending ? 'Добавление…' : 'Создать в заказ'}
+                  {addCustom.isPending ? 'Добавление…' : 'Создать только для заказа'}
                 </Button>
               ) : null}
             </SheetFooter>

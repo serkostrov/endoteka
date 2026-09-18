@@ -4,6 +4,7 @@ import { queryKeys } from '@/lib/query-keys'
 
 import {
   getDynamicFieldUsage,
+  listAllActiveDynamicFields,
   listDynamicFields,
   listFieldEntities,
   listFieldTypes,
@@ -16,6 +17,7 @@ import {
   type DynamicFieldDefinition,
   type DynamicFieldInput,
 } from '../services/fields-service'
+import { settingsFieldDefinition, type PlaceholderDefinition } from '@/features/documents/placeholders'
 
 export function useFieldTypes() {
   return useQuery({
@@ -36,6 +38,25 @@ export function useDynamicFields(entityCode: string | undefined) {
     queryKey: entityCode ? queryKeys.fields.byEntity(entityCode) : queryKeys.fields.all,
     queryFn: () => listDynamicFields(entityCode ?? ''),
     enabled: Boolean(entityCode),
+  })
+}
+
+export function useDocumentSettingsFields() {
+  return useQuery({
+    queryKey: queryKeys.fields.documentPlaceholders,
+    queryFn: async (): Promise<PlaceholderDefinition[]> => {
+      const rows = await listAllActiveDynamicFields()
+      return rows.flatMap(({ field, entityName }) => {
+        const definition = settingsFieldDefinition({
+          entityCode: field.entityCode,
+          entityName,
+          code: field.code,
+          name: field.name,
+          fieldType: field.fieldType,
+        })
+        return definition ? [definition] : []
+      })
+    },
   })
 }
 
@@ -64,6 +85,7 @@ export function useUpsertDynamicField(entityCode: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.byEntity(entityCode) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.entities })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.fields.documentPlaceholders })
     },
   })
 }
@@ -112,6 +134,7 @@ export function useSetDynamicFieldActive(entityCode: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.byEntity(entityCode) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.entities })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.fields.documentPlaceholders })
     },
   })
 }
@@ -123,6 +146,7 @@ export function useReorderDynamicFields(entityCode: string) {
     mutationFn: (fieldIds: string[]) => reorderDynamicFields(entityCode, fieldIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.byEntity(entityCode) })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.fields.documentPlaceholders })
     },
   })
 }
@@ -135,6 +159,7 @@ export function useDeleteDynamicField(entityCode: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.byEntity(entityCode) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.fields.entities })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.fields.documentPlaceholders })
     },
   })
 }

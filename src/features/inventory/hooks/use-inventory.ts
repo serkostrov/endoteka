@@ -45,6 +45,7 @@ import {
   setInventoryItemLabel,
   setOrderPartLine,
   updateInventoryItem,
+  updateOrderCustomPartLine,
   uploadInventoryItemPhoto,
   type InventoryItemInput,
   type InventoryReceiptDeleteMode,
@@ -271,6 +272,23 @@ export function useAddOrderCustomPartLine(orderId: string) {
       await invalidateInventory(queryClient)
       await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.orderUsage(orderId) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) })
+    },
+  })
+}
+
+export function useUpdateOrderCustomPartLine(orderId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { lineId: string; name: string; quantity: number; unitPrice: number }) =>
+      updateOrderCustomPartLine(input.lineId, {
+        name: input.name,
+        quantity: input.quantity,
+        unitPrice: input.unitPrice,
+      }),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.orderUsage(orderId) })
     },
   })
 }

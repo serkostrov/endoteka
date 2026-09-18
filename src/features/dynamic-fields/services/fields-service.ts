@@ -151,7 +151,40 @@ export async function listDynamicFields(entityCode: string): Promise<DynamicFiel
     throw toAppError(error, 'Не удалось загрузить поля.')
   }
 
-  const fields = data ?? []
+  return mapFieldsWithOptions(supabase, data ?? [])
+}
+
+export async function listAllActiveDynamicFields(): Promise<
+  { field: DynamicFieldDefinition; entityName: string }[]
+> {
+  const supabase = getSupabase()
+  const [entities, fieldsResult] = await Promise.all([
+    listFieldEntities(),
+    supabase.from('dynamic_fields').select('*').eq('is_active', true).order('sort_order').order('name'),
+  ])
+
+  if (fieldsResult.error) {
+    throw toAppError(fieldsResult.error, 'Не удалось загрузить поля карточек.')
+  }
+
+  const fields = await mapFieldsWithOptions(supabase, fieldsResult.data ?? [])
+  const entityNames = new Map(entities.map((entity) => [entity.code, entity.name]))
+  const entityOrder = new Map(entities.map((entity) => [entity.code, entity.sortOrder]))
+
+  return fields
+    .map((field) => ({
+      field,
+      entityName: entityNames.get(field.entityCode) ?? field.entityCode,
+      entitySort: entityOrder.get(field.entityCode) ?? 999,
+    }))
+    .sort((a, b) => a.entitySort - b.entitySort || a.field.sortOrder - b.field.sortOrder)
+    .map(({ field, entityName }) => ({ field, entityName }))
+}
+
+async function mapFieldsWithOptions(
+  supabase: ReturnType<typeof getSupabase>,
+  fields: DynamicFieldRow[],
+): Promise<DynamicFieldDefinition[]> {
   if (fields.length === 0) {
     return []
   }

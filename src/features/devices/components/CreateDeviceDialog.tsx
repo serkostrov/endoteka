@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm, type UseFormReturn } from 'react-hook-form'
 import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { toast } from 'sonner'
@@ -17,6 +17,7 @@ import {
   SheetHeader,
   SheetTitle,
   runSheetFormSave,
+  shouldIgnoreNestedDialogClose,
 } from '@/components/ui/sheet'
 import { SERIAL_LOOKUP_DEBOUNCE_MS, SERIAL_LOOKUP_MIN_LENGTH } from '@/lib/constants/devices'
 import { getErrorMessage } from '@/lib/errors'
@@ -60,6 +61,20 @@ export function CreateDeviceDialog({
   const existing = existingQuery.data?.kind === 'exact' ? existingQuery.data.device : null
   const blockingId = duplicateId || existing?.id || null
 
+  const defaults = useMemo(
+    () => emptyValues(defaultSerial, defaultCustomerId),
+    [defaultCustomerId, defaultSerial],
+  )
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+    form.reset(defaults)
+    setSerialValue(defaults.serialNumber)
+    setDuplicateId(null)
+  }, [defaults, form, open])
+
   async function persist(values: CreateDeviceFormValues) {
     if (blockingId) {
       throw new Error('Прибор с таким серийным номером уже существует')
@@ -97,6 +112,8 @@ export function CreateDeviceDialog({
     try {
       await persist(values)
       form.reset(emptyValues('', defaultCustomerId))
+      setSerialValue('')
+      setDuplicateId(null)
       onOpenChange(false)
     } catch (error) {
       if (isDeviceDuplicateError(error)) {
@@ -108,17 +125,15 @@ export function CreateDeviceDialog({
     }
   }
 
-  const defaults = useMemo(
-    () => emptyValues(defaultSerial, defaultCustomerId),
-    [defaultCustomerId, defaultSerial],
-  )
-
   return (
     <Sheet
       open={open}
       dirty={form.formState.isDirty}
       onSave={() => runSheetFormSave(form.handleSubmit, persist)}
       onOpenChange={(next) => {
+        if (!next && shouldIgnoreNestedDialogClose()) {
+          return
+        }
         form.reset(defaults)
         setSerialValue(defaults.serialNumber)
         setDuplicateId(null)
@@ -128,7 +143,9 @@ export function CreateDeviceDialog({
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Новый прибор</SheetTitle>
-          <SheetDescription>Серийный номер уникален. Классификация берётся из справочников.</SheetDescription>
+          <SheetDescription>
+            Серийный номер уникален. Классификация из справочников. Окно заказа останется открытым.
+          </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form className="flex flex-1 flex-col gap-4 px-4 pb-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
@@ -158,7 +175,9 @@ export function CreateDeviceDialog({
               <Alert>
                 <AlertTitle>Прибор с таким серийным номером уже существует</AlertTitle>
                 <AlertDescription>
-                  <EntitySheetLink kind="device" id={blockingId}>Открыть прибор</EntitySheetLink>
+                  <EntitySheetLink kind="device" id={blockingId}>
+                    Открыть прибор
+                  </EntitySheetLink>
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -173,7 +192,7 @@ export function CreateDeviceDialog({
                 </Button>
               </SheetClose>
               <Button type="submit" disabled={create.isPending || Boolean(blockingId)}>
-                {create.isPending ? 'Сохранение…' : 'Создать'}
+                {create.isPending ? 'Сохранение…' : 'Сохранить'}
               </Button>
             </SheetFooter>
           </form>

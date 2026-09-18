@@ -43,6 +43,7 @@ export const OrderBuiltinField = {
   CoverNote: 'claimed_malfunction',
   Completeness: 'completeness',
   Deadline: 'deadline',
+  ReadyDate: 'ready_date',
   Responsible: 'responsible',
 } as const
 
@@ -57,6 +58,7 @@ export function isOrderBuiltinField(code: string): code is OrderBuiltinField {
 export function orderBuiltinFieldType(code: OrderBuiltinField): FieldType {
   switch (code) {
     case OrderBuiltinField.Deadline:
+    case OrderBuiltinField.ReadyDate:
       return FieldType.Date
     case OrderBuiltinField.Responsible:
       return FieldType.Employee

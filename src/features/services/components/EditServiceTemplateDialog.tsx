@@ -103,7 +103,9 @@ function EditServiceTemplateForm({
       >
         <SheetHeader className="pr-14">
           <SheetTitle>Услуга</SheetTitle>
-          <SheetDescription>Изменения шаблона не меняют уже добавленные в заказы строки.</SheetDescription>
+          <SheetDescription>
+            Изменения обновляют шаблон и все строки заказов, где эта услуга из справочника.
+          </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form

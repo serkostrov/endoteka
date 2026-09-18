@@ -13,6 +13,7 @@ import { getDocument } from '@/features/documents/services/documents-service'
 import { DocumentSourceType, sourceTypeForTemplate } from '@/lib/constants/documents'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { formatInteger } from '@/lib/utils/number'
 
 import { useRemoveSaleLine } from '../hooks/use-sales'
 import type { SaleLine } from '../services/sales-service'
@@ -79,7 +80,7 @@ export function SaleLinesBulkActions({
         await remove.mutateAsync(id)
       }
       toast.success(
-        count === 1 ? 'Строка удалена' : `Удалено строк: ${count.toLocaleString('ru-RU')}`,
+        count === 1 ? 'Строка удалена' : `Удалено строк: ${formatInteger(count)}`,
       )
       setDeleteOpen(false)
       onClear()
@@ -125,7 +126,7 @@ export function SaleLinesBulkActions({
   return (
     <>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-        <p className="mr-1 text-sm font-medium">Выбрано: {count.toLocaleString('ru-RU')}</p>
+        <p className="mr-1 text-sm font-medium">Выбрано: {formatInteger(count)}</p>
 
         {canPrint ? (
           <Popover
@@ -190,7 +191,7 @@ export function SaleLinesBulkActions({
                 >
                   {printPending
                     ? 'Подготовка…'
-                    : `Печать × ${itemIds.length.toLocaleString('ru-RU')}`}
+                    : `Печать × ${formatInteger(itemIds.length)}`}
                 </Button>
               </div>
             </PopoverContent>
@@ -222,7 +223,7 @@ export function SaleLinesBulkActions({
         description={
           count === 1
             ? 'Выбранная строка будет удалена из счёта.'
-            : `Будет удалено строк: ${count.toLocaleString('ru-RU')}.`
+            : `Будет удалено строк: ${formatInteger(count)}.`
         }
         confirmLabel="Удалить"
         confirmVariant="destructive"

@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import { ChevronDown, ChevronRight, Folder, FolderOpen, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { SearchCreateAction, SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
+import { SearchCreateAction, SearchSuggestOverlay, SearchSuggestPanel } from '@/components/shared/SearchSuggestOverlay'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -291,10 +291,23 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
           <SearchSuggestOverlay
             open={showPanel}
             onOpenChange={setOpen}
-            contentClassName="w-[min(40rem,calc(100vw-2rem))] max-h-[min(22rem,var(--radix-popover-content-available-height))]"
+            contentClassName="w-[min(40rem,calc(100vw-2rem))]"
             panel={
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1">
+              <SearchSuggestPanel
+                footer={
+                  canUpdateOrder || canCreateItem ? (
+                    <div>
+                      {canCreateItem ? (
+                        <SearchCreateAction label="Новый товар" onCreate={openCreateProduct} />
+                      ) : null}
+                      {canUpdateOrder ? (
+                        <SearchCreateAction label="Новая услуга" onCreate={openCreateService} />
+                      ) : null}
+                    </div>
+                  ) : null
+                }
+              >
+                <div className="py-1">
                   {searching && flatSuggestions.length === 0 && !serviceItems.length && !productItems.length ? (
                     <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
                   ) : (
@@ -395,18 +408,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                     </div>
                   )}
                 </div>
-
-                {(canUpdateOrder || canCreateItem) && (
-                  <div className="shrink-0">
-                    {canCreateItem ? (
-                      <SearchCreateAction label="Новый товар" onCreate={openCreateProduct} />
-                    ) : null}
-                    {canUpdateOrder ? (
-                      <SearchCreateAction label="Новая услуга" onCreate={openCreateService} />
-                    ) : null}
-                  </div>
-                )}
-              </div>
+              </SearchSuggestPanel>
             }
           >
             <div className="relative">
@@ -525,9 +527,12 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
         initialQuery={createQuery}
         orderId={orderId}
         onCreatedForOrder={() => {
-          setCreateServiceOpen(false)
+          setSearch('')
         }}
-        onCreated={(item) => void addServiceTemplate(item)}
+        onCreated={(item) => {
+          setSearch('')
+          void addServiceTemplate(item)
+        }}
       />
       <CreateItemDialog
         open={createItemOpen}
@@ -535,9 +540,12 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
         initialQuery={createQuery}
         orderId={orderId}
         onCreatedForOrder={() => {
-          setCreateItemOpen(false)
+          setSearch('')
         }}
-        onCreated={(item) => void addProduct(item)}
+        onCreated={(item) => {
+          setSearch('')
+          void addProduct(item)
+        }}
       />
     </>
   )

@@ -108,13 +108,24 @@ export function ReferenceSetScreen() {
   )
 
   async function handleSave(values: ReferenceItemFormValues) {
+    const effectiveParentId = currentSet.parentSetId ? values.parentId || null : null
+    const siblingRows = items.filter(
+      (row) => row.id !== editingItem?.id && (row.parentId ?? null) === effectiveParentId,
+    )
+    const nameTaken = siblingRows.some(
+      (row) => row.name.trim().toLowerCase() === values.name.trim().toLowerCase(),
+    )
+    if (nameTaken) {
+      throw new Error('Запись с таким названием уже есть на этом уровне.')
+    }
+    const setCodes = items.filter((row) => row.id !== editingItem?.id).map((row) => row.code)
     await save.mutateAsync({
       id: editingItem?.id,
       setId: currentSet.id,
-      code: editingItem?.code ?? uniqueCode(values.name, items.map((item) => item.code)),
+      code: editingItem?.code ?? uniqueCode(values.name, setCodes),
       name: values.name,
       description: values.description,
-      parentId: currentSet.parentSetId ? values.parentId || null : null,
+      parentId: effectiveParentId,
     })
     toast.success('Запись сохранена')
     setEditingItem(null)

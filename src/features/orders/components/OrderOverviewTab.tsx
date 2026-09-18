@@ -86,6 +86,7 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
       const coverActive = activeCodes.has(OrderBuiltinField.CoverNote)
       const completenessActive = activeCodes.has(OrderBuiltinField.Completeness)
       const deadlineActive = activeCodes.has(OrderBuiltinField.Deadline)
+      const readyDateActive = activeCodes.has(OrderBuiltinField.ReadyDate)
       const responsibleActive = activeCodes.has(OrderBuiltinField.Responsible)
       const patch: UpdateOrderInput = { orderId: order.id }
 
@@ -98,6 +99,10 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
       if (canEditRepair && deadlineActive && !sameOrderDate(columns.deadline, order.deadline)) {
         patch.deadline = columns.deadline
         patch.changeDeadline = true
+      }
+      if (canEditRepair && readyDateActive && !sameOrderDate(columns.readyDate, order.readyDate)) {
+        patch.readyDate = columns.readyDate
+        patch.changeReadyDate = true
       }
       if (
         canEditResponsible &&
@@ -112,6 +117,7 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
         patch.claimedMalfunction !== undefined ||
         patch.completeness !== undefined ||
         Boolean(patch.changeDeadline) ||
+        Boolean(patch.changeReadyDate) ||
         Boolean(patch.changeResponsible)
 
       try {
@@ -216,7 +222,7 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
   const lastSavedDeviceId = useRef(order.deviceId)
   const debouncedSerial = useDebouncedValue(serial.trim(), SERIAL_LOOKUP_DEBOUNCE_MS)
   const serialSearch = useSerialSearch(debouncedSerial)
-  const selectedDevice = serialSearch.data?.kind === 'exact' ? serialSearch.data.device : null
+  const [pickedDeviceId, setPickedDeviceId] = useState<string | null>(order.deviceId)
   const pending = update.isPending
 
   useEffect(() => {
@@ -227,6 +233,7 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
   useEffect(() => {
     setSerial(order.serialNumber)
     setCreatedDeviceId(null)
+    setPickedDeviceId(order.deviceId)
     lastSavedDeviceId.current = order.deviceId
   }, [order.deviceId, order.serialNumber])
 
@@ -271,19 +278,18 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
         lastSavedDeviceId.current = previous
         setSerial(order.serialNumber)
         setCreatedDeviceId(null)
+        setPickedDeviceId(previous)
         toast.error(getErrorMessage(error))
       }
     },
     [order.id, order.serialNumber, update],
   )
 
-  useEffect(() => {
-    const nextId = selectedDevice?.id ?? createdDeviceId
-    if (!nextId) {
-      return
-    }
-    void persistDevice(nextId)
-  }, [createdDeviceId, persistDevice, selectedDevice?.id])
+  function clearDevice() {
+    setSerial('')
+    setCreatedDeviceId(null)
+    setPickedDeviceId(null)
+  }
 
   return (
     <div className="grid w-full gap-2.5 md:grid-cols-2">
@@ -291,6 +297,7 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
         framed
         label="Прибор"
         serial={serial}
+        selectedId={pickedDeviceId ?? createdDeviceId}
         customerId={customerId || undefined}
         disabled={pending}
         result={serialSearch}
@@ -298,13 +305,17 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
         onSerialChange={(next) => {
           setSerial(next)
           setCreatedDeviceId(null)
+          setPickedDeviceId(null)
         }}
         onSelectDevice={(device) => {
+          setPickedDeviceId(device.id)
           void persistDevice(device.id)
         }}
+        onClear={clearDevice}
         onCreated={(device) => {
           setSerial(device.serialNumber)
           setCreatedDeviceId(device.id)
+          setPickedDeviceId(device.id)
           void persistDevice(device.id)
         }}
       />

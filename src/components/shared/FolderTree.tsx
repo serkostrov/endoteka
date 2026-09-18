@@ -212,10 +212,14 @@ export function groupByFolderKey<T>(
   return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }
 
-/** Вложенные папки по уровням ключей; листья — на последнем уровне. */
+/** Вложенные папки по уровням ключей; листья — на последнем уровне.
+ * Id дочерних папок включают путь родителя, иначе одинаковые «Без бренда»
+ * в разных группах делят одно состояние раскрытия.
+ */
 export function nestByFolderKeys<T>(
   items: T[],
   levels: Array<(item: T) => { id: string; name: string }>,
+  pathPrefix = '',
 ): FolderTreeGroup<T>[] {
   if (levels.length === 0) {
     return []
@@ -227,13 +231,16 @@ export function nestByFolderKeys<T>(
   }
   const top = groupByFolderKey(items, getKey)
 
-  if (rest.length === 0) {
-    return top
-  }
-
-  return top.map((group) => ({
-    ...group,
-    items: [],
-    children: nestByFolderKeys(group.items, rest),
-  }))
+  return top.map((group) => {
+    const id = pathPrefix ? `${pathPrefix}/${group.id}` : group.id
+    if (rest.length === 0) {
+      return { ...group, id }
+    }
+    return {
+      ...group,
+      id,
+      items: [],
+      children: nestByFolderKeys(group.items, rest, id),
+    }
+  })
 }

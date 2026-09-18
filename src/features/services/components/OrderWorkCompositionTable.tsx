@@ -1,12 +1,26 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { Briefcase, Trash2, Wrench } from 'lucide-react'
+import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
+import { z } from 'zod'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
+import { Button } from '@/components/ui/button'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Table,
@@ -16,11 +30,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Textarea } from '@/components/ui/textarea'
 import { InventoryItemSheet } from '@/features/inventory/components/InventoryItemScreen'
 import {
   useOrderInventoryUsage,
   useRemoveOrderPartLine,
   useSetOrderPartLine,
+  useUpdateOrderCustomPartLine,
 } from '@/features/inventory/hooks/use-inventory'
 import type { OrderInventoryUsage } from '@/features/inventory/services/inventory-service'
 import { useHasPermission } from '@/features/auth'
@@ -34,6 +50,7 @@ import {
   useOrderServiceLines,
   useRemoveOrderServiceLine,
   useSetOrderServiceLine,
+  useUpdateOrderCustomServiceLine,
 } from '../hooks/use-services'
 import type { OrderServiceLine } from '../services/services-service'
 
@@ -63,6 +80,22 @@ const cellPad = 'px-2 py-1.5'
 const spinless =
   '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
+const customPartSchema = z.object({
+  name: z.string().trim().min(1, 'Укажите наименование'),
+  unitPrice: z.number().min(0, 'Цена не может быть отрицательной'),
+  quantity: z.number().positive('Количество должно быть больше нуля'),
+})
+
+const customServiceSchema = z.object({
+  name: z.string().trim().min(1, 'Укажите наименование'),
+  description: z.string().trim(),
+  unitPrice: z.number().min(0, 'Цена не может быть отрицательной'),
+  quantity: z.number().positive('Количество должно быть больше нуля'),
+})
+
+type CustomPartFormValues = z.infer<typeof customPartSchema>
+type CustomServiceFormValues = z.infer<typeof customServiceSchema>
+
 export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const canWriteOff = useHasPermission(Permission.InventoryWriteOff)
   const canUpdateServices = useHasPermission(Permission.OrdersUpdate)
@@ -70,6 +103,8 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const servicesQuery = useOrderServiceLines(orderId)
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
   const [openedTemplateId, setOpenedTemplateId] = useState<string | null>(null)
+  const [customPart, setCustomPart] = useState<OrderInventoryUsage | null>(null)
+  const [customService, setCustomService] = useState<OrderServiceLine | null>(null)
 
   const parts = partsQuery.data ?? []
   const services = servicesQuery.data ?? []
@@ -161,6 +196,8 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
                 canUpdateServices={canUpdateServices}
                 onOpenPart={(itemId) => setOpenedItemId(itemId)}
                 onOpenService={(templateId) => setOpenedTemplateId(templateId)}
+                onOpenCustomPart={(part) => setCustomPart(part)}
+                onOpenCustomService={(service) => setCustomService(service)}
               />
             ))}
           </TableBody>
@@ -185,6 +222,26 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
           }
         }}
       />
+      <EditCustomPartDialog
+        orderId={orderId}
+        part={customPart}
+        open={Boolean(customPart)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCustomPart(null)
+          }
+        }}
+      />
+      <EditCustomServiceDialog
+        orderId={orderId}
+        service={customService}
+        open={Boolean(customService)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCustomService(null)
+          }
+        }}
+      />
     </>
   )
 }
@@ -196,6 +253,8 @@ function ActorGroupRows({
   canUpdateServices,
   onOpenPart,
   onOpenService,
+  onOpenCustomPart,
+  onOpenCustomService,
 }: {
   group: ActorGroup
   orderId: string
@@ -203,6 +262,8 @@ function ActorGroupRows({
   canUpdateServices: boolean
   onOpenPart: (itemId: string) => void
   onOpenService: (templateId: string) => void
+  onOpenCustomPart: (part: OrderInventoryUsage) => void
+  onOpenCustomService: (service: OrderServiceLine) => void
 }) {
   return (
     <>
@@ -222,12 +283,20 @@ function ActorGroupRows({
               : canUpdateServices
           }
           onOpen={() => {
-            if (line.kind === 'part' && line.part?.itemId) {
-              onOpenPart(line.part.itemId)
+            if (line.kind === 'part' && line.part) {
+              if (line.part.itemId) {
+                onOpenPart(line.part.itemId)
+              } else {
+                onOpenCustomPart(line.part)
+              }
               return
             }
-            if (line.kind === 'service' && line.service?.templateId) {
-              onOpenService(line.service.templateId)
+            if (line.kind === 'service' && line.service) {
+              if (line.service.templateId) {
+                onOpenService(line.service.templateId)
+              } else {
+                onOpenCustomService(line.service)
+              }
             }
           }}
         />
@@ -252,44 +321,50 @@ function WorkLineRow({
   const removeService = useRemoveOrderServiceLine(orderId)
   const removePending = line.kind === 'part' ? removePart.isPending : removeService.isPending
   const amount = line.quantity * line.unitPrice
-  const clickable =
-    (line.kind === 'part' && Boolean(line.part?.itemId)) ||
-    (line.kind === 'service' && Boolean(line.service?.templateId))
   const TypeIcon = line.kind === 'part' ? Briefcase : Wrench
 
+  function handleRowClick(event: MouseEvent<HTMLTableRowElement>) {
+    const target = event.target as HTMLElement
+    if (target.closest('input, textarea, button, a, [data-row-ignore-click]')) {
+      return
+    }
+    const selection = window.getSelection()
+    if (selection && !selection.isCollapsed && selection.toString().length > 0) {
+      return
+    }
+    onOpen()
+  }
+
   return (
-    <TableRow className="group/row border-b last:border-b-0 hover:bg-muted/20">
+    <TableRow
+      className="group/row cursor-pointer border-b last:border-b-0 hover:bg-muted/20"
+      onClick={handleRowClick}
+    >
       <TableCell className={cn(cellPad, 'w-8 text-muted-foreground')}>
         <TypeIcon className="size-3.5 opacity-70" aria-hidden />
         <span className="sr-only">{line.kind === 'part' ? 'Запчасть' : 'Услуга'}</span>
       </TableCell>
       <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal')}>
-        <button
-          type="button"
-          className={cn(
-            'flex min-w-0 max-w-full items-baseline gap-2 text-left',
-            clickable
-              ? 'text-primary underline-offset-2 hover:underline'
-              : 'cursor-default text-foreground',
-          )}
-          disabled={!clickable}
-          onClick={onOpen}
-        >
-          <span className="truncate text-sm font-medium">{line.name}</span>
+        <div className="flex min-w-0 max-w-full items-baseline gap-2">
+          <span className="cursor-text select-text truncate text-sm font-medium text-primary">
+            {line.name}
+          </span>
           {line.subtitle ? (
-            <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground sm:inline">
+            <span className="hidden min-w-0 cursor-text select-text truncate text-[11px] text-muted-foreground sm:inline">
               {line.subtitle}
             </span>
           ) : null}
-        </button>
+        </div>
         {line.subtitle ? (
-          <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:hidden">{line.subtitle}</p>
+          <p className="mt-0.5 cursor-text select-text truncate text-[11px] text-muted-foreground sm:hidden">
+            {line.subtitle}
+          </p>
         ) : null}
       </TableCell>
-      <TableCell className={cn(cellPad, 'text-right')}>
+      <TableCell className={cn(cellPad, 'text-right')} data-row-ignore-click>
         <InlineNumberField line={line} orderId={orderId} field="unitPrice" disabled={!canEdit} />
       </TableCell>
-      <TableCell className={cn(cellPad, 'text-right')}>
+      <TableCell className={cn(cellPad, 'text-right')} data-row-ignore-click>
         <InlineNumberField
           line={line}
           orderId={orderId}
@@ -301,7 +376,7 @@ function WorkLineRow({
       <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>
         {formatMoney(amount)}
       </TableCell>
-      <TableCell className={cellPad}>
+      <TableCell className={cellPad} data-row-ignore-click>
         {canEdit ? (
           <IconActionButton
             label="Удалить из заказа"
@@ -340,7 +415,7 @@ function WorkLineRow({
             removeService.mutate(line.id, {
               onSuccess: () => {
                 setDeleteOpen(false)
-                toast.success('Услуга удалена из заказа')
+                toast.success('Услуга удалена')
               },
               onError: (error) => toast.error(getErrorMessage(error)),
             })
@@ -348,6 +423,298 @@ function WorkLineRow({
         />
       </TableCell>
     </TableRow>
+  )
+}
+
+function EditCustomPartDialog({
+  orderId,
+  part,
+  open,
+  onOpenChange,
+}: {
+  orderId: string
+  part: OrderInventoryUsage | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const update = useUpdateOrderCustomPartLine(orderId)
+  const form = useForm<CustomPartFormValues>({
+    resolver: zodResolver(customPartSchema),
+    defaultValues: { name: '', unitPrice: 0, quantity: 1 },
+  })
+
+  useEffect(() => {
+    if (!open || !part) {
+      return
+    }
+    form.reset({
+      name: part.itemName,
+      unitPrice: part.unitPrice,
+      quantity: part.quantity,
+    })
+  }, [form, open, part])
+
+  if (!part) {
+    return null
+  }
+
+  return (
+    <Sheet
+      open={open}
+      dirty={form.formState.isDirty}
+      onOpenChange={onOpenChange}
+    >
+      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Позиция заказа</SheetTitle>
+          <SheetDescription>Создана только для этого заказа, без справочника.</SheetDescription>
+        </SheetHeader>
+        <Form {...form}>
+          <form
+            className="flex flex-1 flex-col gap-4 px-4 pb-4"
+            onSubmit={form.handleSubmit(async (values) => {
+              try {
+                await update.mutateAsync({
+                  lineId: part.id,
+                  name: values.name,
+                  quantity: values.quantity,
+                  unitPrice: values.unitPrice,
+                })
+                toast.success('Сохранено')
+                onOpenChange(false)
+              } catch (error) {
+                form.setError('name', { message: getErrorMessage(error) })
+              }
+            })}
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Наименование</FormLabel>
+                  <FormControl>
+                    <Input {...field} autoComplete="off" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="unitPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Цена</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="tabular-nums"
+                        value={Number.isFinite(field.value) ? field.value : ''}
+                        onChange={(event) => field.onChange(Number(event.target.value))}
+                        onBlur={field.onBlur}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="quantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Количество</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0.001}
+                        step="0.001"
+                        className="tabular-nums"
+                        value={Number.isFinite(field.value) ? field.value : ''}
+                        onChange={(event) => field.onChange(Number(event.target.value))}
+                        onBlur={field.onBlur}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <SheetFooter className="px-0">
+              <SheetClose asChild>
+                <Button type="button" variant="outline">
+                  Отмена
+                </Button>
+              </SheetClose>
+              <Button type="submit" disabled={update.isPending}>
+                {update.isPending ? 'Сохранение…' : 'Сохранить'}
+              </Button>
+            </SheetFooter>
+          </form>
+        </Form>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function EditCustomServiceDialog({
+  orderId,
+  service,
+  open,
+  onOpenChange,
+}: {
+  orderId: string
+  service: OrderServiceLine | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const update = useUpdateOrderCustomServiceLine(orderId)
+  const form = useForm<CustomServiceFormValues>({
+    resolver: zodResolver(customServiceSchema),
+    defaultValues: { name: '', description: '', unitPrice: 0, quantity: 1 },
+  })
+
+  useEffect(() => {
+    if (!open || !service) {
+      return
+    }
+    form.reset({
+      name: service.name,
+      description: service.description,
+      unitPrice: service.unitPrice,
+      quantity: service.quantity,
+    })
+  }, [form, open, service])
+
+  if (!service) {
+    return null
+  }
+
+  return (
+    <Sheet
+      open={open}
+      dirty={form.formState.isDirty}
+      onOpenChange={onOpenChange}
+    >
+      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
+        <SheetHeader>
+          <SheetTitle>Услуга заказа</SheetTitle>
+          <SheetDescription>Создана только для этого заказа, без справочника.</SheetDescription>
+        </SheetHeader>
+        <Form {...form}>
+          <form
+            className="flex flex-1 flex-col gap-4 px-4 pb-4"
+            onSubmit={form.handleSubmit(async (values) => {
+              try {
+                await update.mutateAsync({
+                  lineId: service.id,
+                  name: values.name,
+                  description: values.description,
+                  quantity: values.quantity,
+                  unitPrice: values.unitPrice,
+                })
+                toast.success('Сохранено')
+                onOpenChange(false)
+              } catch (error) {
+                form.setError('name', { message: getErrorMessage(error) })
+              }
+            })}
+            noValidate
+          >
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Наименование</FormLabel>
+                  <FormControl>
+                    <Input {...field} autoComplete="off" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Описание</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      rows={1}
+                      placeholder="Необязательно"
+                      className="field-sizing-content min-h-9 max-h-32 resize-none overflow-y-auto py-1.5 leading-5"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="unitPrice"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Цена</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        className="tabular-nums"
+                        value={Number.isFinite(field.value) ? field.value : ''}
+                        onChange={(event) => field.onChange(Number(event.target.value))}
+                        onBlur={field.onBlur}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="quantity"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Количество</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={0.001}
+                        step="0.001"
+                        className="tabular-nums"
+                        value={Number.isFinite(field.value) ? field.value : ''}
+                        onChange={(event) => field.onChange(Number(event.target.value))}
+                        onBlur={field.onBlur}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <SheetFooter className="px-0">
+              <SheetClose asChild>
+                <Button type="button" variant="outline">
+                  Отмена
+                </Button>
+              </SheetClose>
+              <Button type="submit" disabled={update.isPending}>
+                {update.isPending ? 'Сохранение…' : 'Сохранить'}
+              </Button>
+            </SheetFooter>
+          </form>
+        </Form>
+      </SheetContent>
+    </Sheet>
   )
 }
 

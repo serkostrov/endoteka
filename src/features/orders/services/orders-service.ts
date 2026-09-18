@@ -28,6 +28,10 @@ export type OrderListFilters = {
   statusId: string
   responsibleId: string
   deadlineState: string
+  customerId: string
+  groupId: string
+  brandId: string
+  modelId: string
   activeOnly: boolean
   attentionOnly: boolean
   sort: OrderSortColumn
@@ -69,6 +73,7 @@ export type OrderDetail = OrderListItem & {
   completeness: string
   externalCondition: string
   createdBy: string | null
+  readyDate: string | null
 }
 
 export type OrderTransition = {
@@ -110,6 +115,7 @@ export type CreateOrderInput = {
   completeness: string
   externalCondition: string
   deadline: string | null
+  readyDate: string | null
   responsibleId: string | null
 }
 
@@ -120,6 +126,8 @@ export type UpdateOrderInput = {
   externalCondition?: string
   deadline?: string | null
   changeDeadline?: boolean
+  readyDate?: string | null
+  changeReadyDate?: boolean
   responsibleId?: string | null
   changeResponsible?: boolean
   customerId?: string | null
@@ -254,6 +262,22 @@ export async function listOrders(filters: OrderListFilters): Promise<OrderListRe
     query = query.eq('deadline_state', filters.deadlineState)
   }
 
+  if (filters.customerId !== 'all') {
+    query = query.eq('customer_id', filters.customerId)
+  }
+
+  if (filters.groupId !== 'all') {
+    query = query.eq('device_group_id', filters.groupId)
+  }
+
+  if (filters.brandId !== 'all') {
+    query = query.eq('device_brand_id', filters.brandId)
+  }
+
+  if (filters.modelId !== 'all') {
+    query = query.eq('device_model_id', filters.modelId)
+  }
+
   if (filters.attentionOnly) {
     query = query
       .eq('is_terminal', false)
@@ -299,6 +323,7 @@ export async function getOrder(id: string): Promise<OrderDetail | null> {
     completeness: order.completeness,
     externalCondition: order.external_condition,
     createdBy: order.created_by,
+    readyDate: order.ready_date,
   }
 }
 
@@ -320,6 +345,7 @@ export async function createOrder(input: CreateOrderInput): Promise<string> {
     completeness: input.completeness,
     external_condition: input.externalCondition,
     target_deadline: input.deadline,
+    target_ready_date: input.readyDate,
     target_responsible_id: input.responsibleId,
   })
 
@@ -350,6 +376,12 @@ export async function updateOrder(input: UpdateOrderInput): Promise<void> {
       ? {
           target_deadline: input.deadline ?? null,
           clear_deadline: input.deadline == null,
+        }
+      : {}),
+    ...(input.changeReadyDate
+      ? {
+          target_ready_date: input.readyDate ?? null,
+          clear_ready_date: input.readyDate == null,
         }
       : {}),
     ...(input.changeResponsible

@@ -14,8 +14,8 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  runSheetFormSave,
-  useSheetDirty,
+  markNestedDialogClosing,
+  shouldIgnoreNestedDialogClose,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { getErrorMessage } from '@/lib/errors'
@@ -53,7 +53,6 @@ export function CreateServiceTemplateDialog({
     defaultValues: emptyServiceTemplateFormValues,
   })
   const canSaveCatalog = Boolean(onCreated) || !orderId
-  useSheetDirty(form.formState.isDirty, () => runSheetFormSave(form.handleSubmit, persistCatalog))
 
   useEffect(() => {
     if (!open) {
@@ -65,11 +64,15 @@ export function CreateServiceTemplateDialog({
     })
   }, [form, initialQuery, open])
 
+  function closeOnly() {
+    form.reset(emptyServiceTemplateFormValues)
+    markNestedDialogClosing()
+    onOpenChange(false)
+  }
+
   async function persistCatalog(values: ServiceTemplateFormValues) {
     const id = await create.mutateAsync(values)
     toast.success('Услуга добавлена в справочник')
-    form.reset(emptyServiceTemplateFormValues)
-    onOpenChange(false)
     onCreated?.({
       id,
       name: values.name,
@@ -79,6 +82,7 @@ export function CreateServiceTemplateDialog({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     })
+    closeOnly()
   }
 
   async function persistForOrder(values: ServiceTemplateFormValues) {
@@ -92,8 +96,7 @@ export function CreateServiceTemplateDialog({
       quantity: 1,
     })
     toast.success('Услуга добавлена в заказ')
-    form.reset(emptyServiceTemplateFormValues)
-    onOpenChange(false)
+    closeOnly()
     onCreatedForOrder?.()
   }
 
@@ -102,10 +105,13 @@ export function CreateServiceTemplateDialog({
   return (
     <Sheet
       open={open}
-      dirty={form.formState.isDirty}
       onOpenChange={(next) => {
+        if (!next && shouldIgnoreNestedDialogClose()) {
+          return
+        }
         if (!next) {
           form.reset(emptyServiceTemplateFormValues)
+          markNestedDialogClosing()
         }
         onOpenChange(next)
       }}
@@ -115,20 +121,23 @@ export function CreateServiceTemplateDialog({
           <SheetTitle>Новая услуга</SheetTitle>
           <SheetDescription>
             {orderId
-              ? 'Можно добавить только в этот заказ или сохранить шаблон в справочник.'
+              ? 'Можно добавить только в этот заказ или сохранить шаблон в справочник. Окно заказа останется открытым.'
               : 'Шаблон появится в поиске состава работы и в настройках.'}
           </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
             className="flex flex-1 flex-col gap-4 px-4 pb-4"
-            onSubmit={form.handleSubmit((values) => {
-              void (orderId ? persistForOrder(values) : persistCatalog(values)).catch((error) => {
-                const message = getErrorMessage(error)
-                form.setError('name', { message })
-                toast.error(message)
-              })
-            })}
+            onSubmit={(event) => {
+              event.stopPropagation()
+              void form.handleSubmit((values) => {
+                void (orderId ? persistForOrder(values) : persistCatalog(values)).catch((error) => {
+                  const message = getErrorMessage(error)
+                  form.setError('name', { message })
+                  toast.error(message)
+                })
+              })(event)
+            }}
             noValidate
           >
             <ServiceTemplateFields form={form} />
@@ -160,13 +169,13 @@ export function CreateServiceTemplateDialog({
                   {create.isPending
                     ? 'Сохранение…'
                     : orderId
-                      ? 'В справочник'
-                      : 'Создать'}
+                      ? 'Создать и добавить в справочник'
+                      : 'Сохранить'}
                 </Button>
               ) : null}
               {orderId ? (
                 <Button type="submit" disabled={pending}>
-                  {addCustom.isPending ? 'Добавление…' : 'Создать в заказ'}
+                  {addCustom.isPending ? 'Добавление…' : 'Создать только для заказа'}
                 </Button>
               ) : null}
             </SheetFooter>

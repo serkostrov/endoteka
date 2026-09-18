@@ -65,7 +65,7 @@ export function AppLayout() {
             className={
               sidebarCollapsed
                 ? 'sticky top-0 h-screen w-16 shrink-0 border-r border-sidebar-border print:hidden'
-                : 'sticky top-0 h-screen w-60 shrink-0 border-r border-sidebar-border print:hidden'
+                : 'sticky top-0 h-screen w-max max-w-[15rem] shrink-0 border-r border-sidebar-border print:hidden'
             }
           >
             <AppSidebar
@@ -76,7 +76,7 @@ export function AppLayout() {
           </aside>
         ) : (
           <Sheet open={isMobileNavOpen} onOpenChange={setIsMobileNavOpen}>
-            <SheetContent side="left" className="w-72 p-0">
+            <SheetContent side="left" className="w-max max-w-[min(18rem,90vw)] p-0">
               <SheetHeader className="sr-only">
                 <SheetTitle>{APP_NAME}</SheetTitle>
                 <SheetDescription>Навигация по разделам</SheetDescription>

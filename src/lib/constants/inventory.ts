@@ -46,13 +46,7 @@ export function isScanBarcode(value: string) {
   return new RegExp(`^\\d{${BARCODE_MIN_LENGTH},${BARCODE_MAX_LENGTH}}$`).test(value.trim())
 }
 
-export function formatMoney(value: number) {
-  return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value)
-}
-
-export function formatQuantity(value: number) {
-  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 3 }).format(value)
-}
+export { formatInteger, formatMoney, formatQuantity } from '@/lib/utils/number'
 
 export const InventoryCountStatus = {
   Draft: 'draft',

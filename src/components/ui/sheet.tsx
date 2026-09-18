@@ -8,6 +8,17 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { getErrorMessage } from "@/lib/errors"
 import { cn } from "@/lib/utils"
 
+/** После закрытия вложенного Dialog Radix может дернуть onOpenChange(false) у Sheet — игнорируем коротко. */
+let nestedDialogCloseIgnoreUntil = 0
+
+export function markNestedDialogClosing() {
+  nestedDialogCloseIgnoreUntil = performance.now() + 1200
+}
+
+export function shouldIgnoreNestedDialogClose() {
+  return performance.now() < nestedDialogCloseIgnoreUntil
+}
+
 type SheetSaveFn = () => void | Promise<void>
 
 type SheetDirtyContextValue = {
@@ -180,6 +191,14 @@ function Sheet({
       onOpenChange?.(true)
       return
     }
+    // Вложенный Dialog (например «Новая запись») поверх Sheet —
+    // не закрывать sheet и не показывать «несохранённые изменения».
+    if (typeof document !== "undefined" && document.querySelector('[data-slot="dialog-content"]')) {
+      return
+    }
+    if (shouldIgnoreNestedDialogClose()) {
+      return
+    }
     if (blocked) {
       setConfirmOpen(true)
       return
@@ -285,6 +304,7 @@ function SheetContent({
   showCloseButton = true,
   actions,
   style,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
@@ -324,6 +344,16 @@ function SheetContent({
           zIndex: sheetZIndex(layer),
           ...peekStyle,
           ...style,
+        }}
+        onInteractOutside={(event) => {
+          const target = event.target as HTMLElement | null
+          if (
+            target?.closest?.('[data-slot="dialog-content"]') ||
+            target?.closest?.('[data-slot="dialog-overlay"]')
+          ) {
+            event.preventDefault()
+          }
+          onInteractOutside?.(event)
         }}
         {...props}
       >

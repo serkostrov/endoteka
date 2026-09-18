@@ -1,5 +1,4 @@
-import { Archive } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -11,14 +10,15 @@ import { SegmentedFilter } from '@/components/shared/SegmentedFilter'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth, useHasPermission } from '@/features/auth'
+import { useCustomers } from '@/features/customers/hooks/use-customers'
+import { useReferenceItemsBySetCode } from '@/features/references/hooks/use-references'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import {
-  DeadlineState,
-  deadlineStateLabels,
   ORDER_BOARD_PAGE_SIZE,
   ORDER_SEARCH_DEBOUNCE_MS,
 } from '@/lib/constants/orders'
 import { Permission } from '@/lib/constants/permissions'
+import { ReferenceSetCode } from '@/lib/constants/references'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
@@ -44,16 +44,7 @@ const LIST_SORT_COLUMNS = [
 
 const DEFAULT_LIST_SORT: OrderSortColumn = 'deadline'
 const DEFAULT_LIST_DIR = 'asc' as const
-
-function isDeadlineFilter(value: string) {
-  return (
-    value === 'all' ||
-    value === DeadlineState.Overdue ||
-    value === DeadlineState.Approaching ||
-    value === DeadlineState.Normal ||
-    value === DeadlineState.None
-  )
-}
+const CUSTOMER_FILTER_PAGE_SIZE = 200
 
 function parsePage(value: string | null) {
   if (!value) {
@@ -87,33 +78,65 @@ export function OrdersScreen() {
   const page = parsePage(searchParams.get('page'))
   const listSort = parseListSort(searchParams.get('sort'))
   const listDir = parseListDir(searchParams.get('dir'))
-  const deadlineParam = searchParams.get('deadline') ?? 'all'
-  const deadlineState = isDeadlineFilter(deadlineParam) ? deadlineParam : 'all'
   const responsibleParam = searchParams.get('responsible') ?? 'all'
   const attentionOnly = searchParams.get('attention') === '1'
   const activeOnly = searchParams.get('active') === '1' && !attentionOnly
   const statusCode = searchParams.get('status') ?? 'all'
+  const customerId = searchParams.get('customer') ?? 'all'
+  const groupId = searchParams.get('group') ?? 'all'
+  const brandId = searchParams.get('brand') ?? 'all'
+  const modelId = searchParams.get('model') ?? 'all'
 
   const employees = useActiveEmployees()
   const catalogQuery = useOrderStatusCatalog()
-  const showClosed = searchParams.get('closed') === '1'
+  const customersQuery = useCustomers('', 1, CUSTOMER_FILTER_PAGE_SIZE)
+  const groupsQuery = useReferenceItemsBySetCode(ReferenceSetCode.DeviceGroups)
+  const brandsQuery = useReferenceItemsBySetCode(ReferenceSetCode.DeviceBrands)
+  const modelsQuery = useReferenceItemsBySetCode(ReferenceSetCode.DeviceModels)
+
   const responsibleId = responsibleParam === 'me' ? (user?.id ?? '') : responsibleParam
   const filtersReady =
     (responsibleParam !== 'me' || Boolean(user?.id)) &&
     !(isList && statusCode !== 'all' && catalogQuery.isLoading)
   const responsibleSelectValue = responsibleParam === 'me' ? (user?.id ?? 'me') : responsibleParam
   const statusId =
-    isList && statusCode !== 'all'
+    statusCode !== 'all'
       ? (catalogQuery.data?.find((item) => item.code === statusCode)?.id ?? 'all')
       : 'all'
+
+  const brandOptions = useMemo(() => {
+    const items = (brandsQuery.data ?? []).filter((item) => item.isActive)
+    if (groupId === 'all') {
+      return items
+    }
+    return items.filter((item) => item.parentId === groupId)
+  }, [brandsQuery.data, groupId])
+
+  const modelOptions = useMemo(() => {
+    const items = (modelsQuery.data ?? []).filter((item) => item.isActive)
+    if (brandId === 'all') {
+      if (groupId === 'all') {
+        return items
+      }
+      const brandIds = new Set(brandOptions.map((item) => item.id))
+      return items.filter((item) => item.parentId && brandIds.has(item.parentId))
+    }
+    return items.filter((item) => item.parentId === brandId)
+  }, [modelsQuery.data, brandId, brandOptions, groupId])
 
   const ordersQuery = useOrders(
     {
       search: debouncedSearch,
       statusId,
       responsibleId: responsibleId || 'all',
-      deadlineState,
-      activeOnly: isList ? !showClosed && !attentionOnly : activeOnly,
+      deadlineState: 'all',
+      customerId,
+      groupId,
+      brandId,
+      modelId,
+      activeOnly: isList
+        ? !attentionOnly && statusCode === 'all'
+        : activeOnly && statusCode === 'all',
       attentionOnly,
       sort: isList ? listSort : 'updated',
       direction: isList ? listDir : 'desc',
@@ -123,16 +146,8 @@ export function OrdersScreen() {
     filtersReady,
   )
 
-  const items = (ordersQuery.data?.items ?? []).filter(
-    (order) => statusId !== 'all' || statusCode === 'all' || order.statusCode === statusCode,
-  )
+  const items = ordersQuery.data?.items ?? []
   const total = ordersQuery.data?.total ?? 0
-  const closedStatusIds = new Set(
-    (catalogQuery.data ?? [])
-      .filter((item) => item.isActive && item.isTerminal)
-      .map((item) => item.id),
-  )
-  const closedCount = items.filter((order) => order.isTerminal || closedStatusIds.has(order.statusId)).length
   const listBlockedByBoardPlaceholder =
     isList && ordersQuery.isPlaceholderData && (ordersQuery.data?.items.length ?? 0) > pageSize
 
@@ -209,6 +224,51 @@ export function OrdersScreen() {
     setSearchParams(next, { replace: true })
   }
 
+  function setGroupFilter(next: string) {
+    const brandStillValid =
+      next === 'all' ||
+      brandId === 'all' ||
+      (brandsQuery.data ?? []).some((item) => item.id === brandId && item.parentId === next)
+    const nextBrand = brandStillValid ? brandId : 'all'
+    const modelStillValid =
+      nextBrand === 'all'
+        ? modelId === 'all' ||
+          (modelsQuery.data ?? []).some((item) => {
+            if (item.id !== modelId || !item.parentId) {
+              return false
+            }
+            if (next === 'all') {
+              return true
+            }
+            const parentBrand = (brandsQuery.data ?? []).find((brand) => brand.id === item.parentId)
+            return parentBrand?.parentId === next
+          })
+        : modelId === 'all' ||
+          (modelsQuery.data ?? []).some((item) => item.id === modelId && item.parentId === nextBrand)
+    patchFilters({
+      group: next,
+      brand: nextBrand === 'all' ? null : nextBrand,
+      model: modelStillValid ? (modelId === 'all' ? null : modelId) : null,
+      attention: null,
+      active: null,
+    })
+  }
+
+  function setBrandFilter(next: string) {
+    const modelStillValid =
+      next === 'all' ||
+      modelId === 'all' ||
+      (modelsQuery.data ?? []).some((item) => item.id === modelId && item.parentId === next)
+    patchFilters({
+      brand: next,
+      model: modelStillValid ? (modelId === 'all' ? null : modelId) : null,
+      attention: null,
+      active: null,
+    })
+  }
+
+  const statusOptions = (catalogQuery.data ?? []).filter((item) => item.isActive)
+
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-col gap-4">
       <PageHeader
@@ -221,97 +281,151 @@ export function OrdersScreen() {
         }
       />
 
-      <FilterBar
-        end={
-          <>
+      <div className="space-y-2">
+        <FilterBar>
+          <SegmentedFilter
+            aria-label="Назначение"
+            value={assignmentFilter}
+            options={[
+              { value: 'all', label: 'Все заказы' },
+              { value: 'me', label: 'Назначены мне' },
+            ]}
+            onChange={setAssignmentFilter}
+          />
+          {attentionOnly || activeOnly ? (
             <Button
               type="button"
-              variant={showClosed ? 'secondary' : 'outline'}
-              className="h-9"
-              aria-pressed={showClosed}
-              onClick={() =>
-                patchFilters(showClosed ? { closed: null } : { closed: '1', active: null })
-              }
+              variant="outline"
+              onClick={() => patchFilters({ attention: null, active: null })}
             >
-              <Archive className="size-4" />
-              {showClosed ? 'Скрыть закрытые' : 'Закрытые'}
-              {closedCount > 0 ? (
-                <span className="rounded-full bg-muted px-1.5 text-xs font-medium text-muted-foreground">
-                  {closedCount}
-                </span>
-              ) : null}
+              {attentionOnly ? 'Требуют внимания' : 'Только активные'}
+              <span className="text-muted-foreground">Сбросить</span>
             </Button>
-            {canCreate ? (
-              <Button type="button" onClick={() => setCreateOpen(true)}>
-                Новый заказ
-              </Button>
-            ) : null}
-          </>
-        }
-      >
-        <SegmentedFilter
-          aria-label="Назначение"
-          value={assignmentFilter}
-          options={[
-            { value: 'all', label: 'Все заказы' },
-            { value: 'me', label: 'Назначены мне' },
-          ]}
-          onChange={setAssignmentFilter}
-        />
-        <SearchInput
-          value={search}
-          onChange={(next) => {
-            setSearch(next)
-            if (searchParams.has('page')) {
-              patchFilters({ page: null })
-            }
-          }}
-          label="Поиск заказов"
-          placeholder="Номер, клиент или серийный номер"
-        />
-        <Select
-          value={responsibleSelectValue}
-          onValueChange={(value) => {
-            const next = value === user?.id ? 'me' : value
-            patchFilters({ responsible: next, attention: null, active: null })
-          }}
-        >
-          <SelectTrigger aria-label="Фильтр по ответственному">
-            <SelectValue placeholder="Ответственный" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все ответственные</SelectItem>
-            <SelectItem value="unassigned">Без ответственного</SelectItem>
-            {(employees.data ?? []).map((employee) => (
-              <SelectItem key={employee.id} value={employee.id}>
-                {employee.fullName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={deadlineState} onValueChange={(value) => patchFilters({ deadline: value, attention: null, active: null })}>
-          <SelectTrigger aria-label="Фильтр по сроку">
-            <SelectValue placeholder="Срок" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Все сроки</SelectItem>
-            <SelectItem value={DeadlineState.Overdue}>{deadlineStateLabels.overdue}</SelectItem>
-            <SelectItem value={DeadlineState.Approaching}>{deadlineStateLabels.approaching}</SelectItem>
-            <SelectItem value={DeadlineState.Normal}>{deadlineStateLabels.normal}</SelectItem>
-            <SelectItem value={DeadlineState.None}>{deadlineStateLabels.none}</SelectItem>
-          </SelectContent>
-        </Select>
-        {attentionOnly || activeOnly || statusCode !== 'all' ? (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => patchFilters({ attention: null, active: null, status: null })}
+          ) : null}
+          <SearchInput
+            value={search}
+            onChange={(next) => {
+              setSearch(next)
+              if (searchParams.has('page')) {
+                patchFilters({ page: null })
+              }
+            }}
+            label="Поиск заказов"
+            placeholder="Номер, клиент или серийный номер"
+            className="min-w-[12rem] max-w-none flex-1"
+          />
+          {canCreate ? (
+            <Button type="button" onClick={() => setCreateOpen(true)}>
+              Новый заказ
+            </Button>
+          ) : null}
+        </FilterBar>
+
+        <FilterBar className="overflow-visible [&_[data-slot=select-trigger]]:min-w-0 [&_[data-slot=select-trigger]]:flex-1 [&_[data-slot=select-trigger]]:shrink">
+          <Select
+            value={responsibleSelectValue}
+            onValueChange={(value) => {
+              const next = value === user?.id ? 'me' : value
+              patchFilters({ responsible: next, attention: null, active: null })
+            }}
           >
-            {attentionOnly ? 'Требуют внимания' : activeOnly ? 'Только активные' : 'Фильтр статуса'}
-            <span className="text-muted-foreground">Сбросить</span>
-          </Button>
-        ) : null}
-      </FilterBar>
+            <SelectTrigger aria-label="Фильтр по ответственному" className="w-auto min-w-0 flex-1">
+              <SelectValue placeholder="Ответственный" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все ответственные</SelectItem>
+              <SelectItem value="unassigned">Без ответственного</SelectItem>
+              {(employees.data ?? []).map((employee) => (
+                <SelectItem key={employee.id} value={employee.id}>
+                  {employee.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={statusCode}
+            onValueChange={(value) => patchFilters({ status: value, attention: null, active: null })}
+          >
+            <SelectTrigger aria-label="Фильтр по статусу" className="w-auto min-w-0 flex-1">
+              <SelectValue placeholder="Статус" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все статусы</SelectItem>
+              {statusOptions.map((status) => (
+                <SelectItem key={status.id} value={status.code}>
+                  {status.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={customerId}
+            onValueChange={(value) => patchFilters({ customer: value, attention: null, active: null })}
+          >
+            <SelectTrigger aria-label="Фильтр по клиенту" className="w-auto min-w-0 flex-1">
+              <SelectValue placeholder="Клиент" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все клиенты</SelectItem>
+              {(customersQuery.data?.items ?? []).map((customer) => (
+                <SelectItem key={customer.id} value={customer.id}>
+                  {customer.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={groupId} onValueChange={setGroupFilter}>
+            <SelectTrigger aria-label="Фильтр по группе прибора" className="w-auto min-w-0 flex-1">
+              <SelectValue placeholder="Группа" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все группы</SelectItem>
+              {(groupsQuery.data ?? [])
+                .filter((item) => item.isActive)
+                .map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={brandId} onValueChange={setBrandFilter} disabled={groupId !== 'all' && brandOptions.length === 0}>
+            <SelectTrigger aria-label="Фильтр по бренду" className="w-auto min-w-0 flex-1">
+              <SelectValue placeholder="Бренд" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все бренды</SelectItem>
+              {brandOptions.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={modelId}
+            onValueChange={(value) => patchFilters({ model: value, attention: null, active: null })}
+            disabled={brandId !== 'all' && modelOptions.length === 0}
+          >
+            <SelectTrigger aria-label="Фильтр по модели" className="w-auto min-w-0 flex-1">
+              <SelectValue placeholder="Модель" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Все модели</SelectItem>
+              {modelOptions.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </FilterBar>
+      </div>
 
       {isList && selectedIds.length > 0 ? (
         <OrderBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
@@ -346,7 +460,7 @@ export function OrdersScreen() {
               Показаны последние {ORDER_BOARD_PAGE_SIZE} из {total}. Уточните поиск или фильтр.
             </p>
           ) : null}
-          <OrderKanbanBoard orders={items} showClosed={showClosed} onOpenOrder={openOrder} />
+          <OrderKanbanBoard orders={items} onOpenOrder={openOrder} />
         </>
       )}
 

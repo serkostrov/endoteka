@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { getErrorMessage } from '@/lib/errors'
+import { markNestedDialogClosing } from '@/components/ui/sheet'
 
 import { referenceItemSchema, type ReferenceItemFormValues } from '../schemas'
 import type { ReferenceItem } from '../services/references-service'
@@ -34,6 +35,8 @@ type ReferenceItemDialogProps = {
   parentOptions: ParentOption[]
   item: ReferenceItem | null
   defaultParentId?: string
+  /** Предзаполнить название (например, текст поиска). */
+  defaultName?: string
   /** Родитель зафиксирован (выбор слева) — сверху и только для чтения. */
   lockParent?: boolean
   isPending: boolean
@@ -50,6 +53,7 @@ export function ReferenceItemDialog({
   parentOptions,
   item,
   defaultParentId = '',
+  defaultName = '',
   lockParent = false,
   isPending,
   onOpenChange,
@@ -64,7 +68,7 @@ export function ReferenceItemDialog({
   const form = useForm<ReferenceItemFormValues>({
     resolver: zodResolver(referenceItemSchema),
     values: {
-      name: item?.name ?? '',
+      name: item?.name ?? defaultName,
       description: item?.description ?? '',
       parentId,
     },
@@ -77,7 +81,10 @@ export function ReferenceItemDialog({
     }
 
     try {
+      // До await: пока закрывается Dialog, Sheet может получить dismiss.
+      markNestedDialogClosing()
       await onSubmit(values)
+      markNestedDialogClosing()
       onOpenChange(false)
     } catch (error) {
       form.setError('name', { message: getErrorMessage(error) })
@@ -120,14 +127,36 @@ export function ReferenceItemDialog({
   ) : null
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent actions={item && onDelete ? <SheetEntityToolbar onDelete={onDelete} /> : null}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          markNestedDialogClosing()
+        }
+        onOpenChange(next)
+      }}
+    >
+      <DialogContent
+        actions={item && onDelete ? <SheetEntityToolbar onDelete={onDelete} /> : null}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader className="pr-14">
           <DialogTitle>{item ? 'Изменить запись' : 'Новая запись'}</DialogTitle>
           <DialogDescription>Справочник: {setName}.</DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form className="space-y-4" onSubmit={form.handleSubmit(handleSubmit)} noValidate>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              // Портал Dialog внутри Sheet-формы: submit иначе всплывает по React-дереву
+              // и сохраняет/закрывает «Новый прибор» / заказ.
+              event.stopPropagation()
+              void form.handleSubmit(handleSubmit)(event)
+            }}
+            noValidate
+          >
             {lockParent ? parentField : null}
             <FormField
               control={form.control}
@@ -157,7 +186,14 @@ export function ReferenceItemDialog({
               )}
             />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  markNestedDialogClosing()
+                  onOpenChange(false)
+                }}
+              >
                 Отмена
               </Button>
               <Button type="submit" disabled={isPending}>

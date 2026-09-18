@@ -17,6 +17,7 @@ import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 import { Permission } from '@/lib/constants/permissions'
+import { formatInteger } from '@/lib/utils/number'
 import {
   TASK_SEARCH_DEBOUNCE_MS,
   TaskDueFilter,
@@ -286,7 +287,7 @@ export function TasksScreen() {
           ))}
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             {!fromMe && total > 0 ? (
-              <p className="text-sm text-muted-foreground">Всего — {total.toLocaleString('ru-RU')}</p>
+              <p className="text-sm text-muted-foreground">Всего — {formatInteger(total)}</p>
             ) : (
               <span />
             )}

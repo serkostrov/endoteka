@@ -1,9 +1,11 @@
-import { ExternalLink, FileText, Paperclip } from 'lucide-react'
+import { ExternalLink, FileText, Paperclip, Trash2 } from 'lucide-react'
 import { type ChangeEvent, useRef, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { IconActionButton } from '@/components/shared/IconActionButton'
 import { ImageHoverPreview, ImageLightbox, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -34,11 +36,13 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
   const canUpdate = useHasPermission(Permission.OrdersUpdate)
   const canCreate = useHasPermission(Permission.OrdersCreate)
   const canAddFiles = canUpdate || canCreate
+  const canDelete = canUpdate
   const attachmentsQuery = useOrderAttachments(orderId)
   const upload = useUploadOrderFile(orderId)
   const remove = useDeleteOrderAttachment(orderId)
   const fileInput = useRef<HTMLInputElement>(null)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<OrderAttachment | null>(null)
 
   if (attachmentsQuery.isLoading) {
     return <LoadingState label="Загрузка вложений" />
@@ -96,13 +100,20 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
     }
   }
 
+  async function deleteAttachment(item: OrderAttachment) {
+    await remove.mutateAsync({ id: item.id, filePath: item.filePath ?? null })
+    toast.success('Файл удалён')
+  }
+
   async function handleDeletePhoto(item: ImageLightboxItem) {
     if (!item.id) {
       return
     }
     const attachment = items.find((entry) => entry.id === item.id)
-    await remove.mutateAsync({ id: item.id, filePath: attachment?.filePath ?? null })
-    toast.success('Файл удалён')
+    if (!attachment) {
+      return
+    }
+    await deleteAttachment(attachment)
   }
 
   return (
@@ -143,6 +154,11 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
                 <TableRow>
                   <TableHead>Название файла</TableHead>
                   <TableHead>Загружено</TableHead>
+                  {canDelete ? (
+                    <TableHead className="w-12">
+                      <span className="sr-only">Действия</span>
+                    </TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -159,6 +175,18 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
                       <p className="font-medium">{item.createdByName || '—'}</p>
                       <p className="text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</p>
                     </TableCell>
+                    {canDelete ? (
+                      <TableCell className="w-12" onClick={(event) => event.stopPropagation()}>
+                        <IconActionButton
+                          label="Удалить"
+                          variant="ghost"
+                          disabled={remove.isPending}
+                          onClick={() => setDeleteTarget(item)}
+                        >
+                          <Trash2 />
+                        </IconActionButton>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -178,7 +206,31 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
         items={photos}
         index={viewerIndex ?? 0}
         onIndexChange={setViewerIndex}
-        onDelete={canUpdate ? handleDeletePhoto : undefined}
+        onDelete={canDelete ? handleDeletePhoto : undefined}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Удалить файл"
+        description={`«${deleteTarget?.fileName || deleteTarget?.caption || 'Вложение'}» будет удалён. Это действие необратимо.`}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null)
+          }
+        }}
+        onConfirm={async () => {
+          if (!deleteTarget) {
+            return
+          }
+          try {
+            await deleteAttachment(deleteTarget)
+            setDeleteTarget(null)
+          } catch (error) {
+            toast.error(getErrorMessage(error))
+          }
+        }}
       />
     </div>
   )

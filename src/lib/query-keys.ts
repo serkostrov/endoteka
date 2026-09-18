@@ -28,6 +28,7 @@ export const queryKeys = {
       ['fields', 'values', entityCode, recordId] as const,
     usage: (fieldId: string) => ['fields', 'usage', fieldId] as const,
     types: ['fields', 'types'] as const,
+    documentPlaceholders: ['fields', 'document-placeholders'] as const,
   },
   customers: {
     all: ['customers'] as const,

@@ -8,6 +8,7 @@ export function orderBuiltinValuesFromOrder(order: OrderDetail): Record<string, 
     [OrderBuiltinField.CoverNote]: order.claimedMalfunction,
     [OrderBuiltinField.Completeness]: order.completeness,
     [OrderBuiltinField.Deadline]: order.deadline ?? '',
+    [OrderBuiltinField.ReadyDate]: order.readyDate ?? '',
     [OrderBuiltinField.Responsible]: order.responsibleId ?? '',
   }
 }
@@ -49,12 +50,14 @@ export function asOrderText(value: DynamicFieldValueData | undefined) {
 
 export function orderColumnsFromBuiltin(builtin: Record<string, DynamicFieldValueData>) {
   const deadline = asOrderText(builtin[OrderBuiltinField.Deadline])
+  const readyDate = asOrderText(builtin[OrderBuiltinField.ReadyDate])
   const responsible = asOrderText(builtin[OrderBuiltinField.Responsible])
 
   return {
     claimedMalfunction: asOrderText(builtin[OrderBuiltinField.CoverNote]),
     completeness: asOrderText(builtin[OrderBuiltinField.Completeness]),
     deadline: deadline || null,
+    readyDate: readyDate || null,
     responsibleId: responsible || null,
   }
 }

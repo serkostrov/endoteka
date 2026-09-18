@@ -1,11 +1,13 @@
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
-import { Calendar, FileText, Link2, ListTodo, User } from 'lucide-react'
+import { Calendar, ExternalLink, FileText, ListTodo, Trash2, User } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
-import { OpenableImage } from '@/components/shared/ImageLightbox'
+import { ImageHoverPreview, ImageLightbox, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { useHasPermission, useCurrentUser } from '@/features/auth'
@@ -24,20 +26,29 @@ import { toDate } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 import type { Json } from '@/types/database'
 
-import { useOrderAttachments, useUploadOrderFile } from '../hooks/use-orders'
+import { useDeleteOrderAttachment, useOrderAttachments, useUploadOrderFile } from '../hooks/use-orders'
 import { orderJournalEventTypeLabel } from '../lib/journal-labels'
 import type { OrderAttachment } from '../services/orders-service'
 import { OrderJournalComposer } from './OrderJournalComposer'
+
+/** Окно склейки подряд загруженных файлов в одну запись ленты. */
+const ATTACHMENT_BATCH_MS = 20_000
+const ATTACHMENT_PREVIEW_LIMIT = 3
 
 type OrderActivityFeedProps = {
   orderId: string
   orderNumber?: string
 }
 
+type FeedEntry =
+  | { kind: 'single'; event: OrderJournalEvent }
+  | { kind: 'attachments'; events: OrderJournalEvent[] }
+
 export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedProps) {
   const user = useCurrentUser()
   const canWrite =
     useHasPermission(Permission.OrdersUpdate) || useHasPermission(Permission.OrdersCreate)
+  const canDelete = useHasPermission(Permission.OrdersUpdate)
   const canCreateTask = useHasPermission(Permission.TasksCreate)
   const canReadTasks = useHasPermission(Permission.TasksRead)
   const historyQuery = useOrderJournal(orderId)
@@ -58,6 +69,7 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
   )
   const addNote = useAddOrderJournalNote(orderId)
   const upload = useUploadOrderFile(orderId)
+  const removeAttachment = useDeleteOrderAttachment(orderId)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
@@ -66,6 +78,12 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
     () => new Map((tasksQuery.data?.items ?? []).map((task) => [task.id, task])),
     [tasksQuery.data],
   )
+  const attachmentsById = useMemo(
+    () => new Map((attachmentsQuery.data ?? []).map((item) => [item.id, item])),
+    [attachmentsQuery.data],
+  )
+  const feedEntries = useMemo(() => collapseAttachmentBatches(events), [events])
+  const dayGroups = useMemo(() => groupFeedByDay(feedEntries), [feedEntries])
 
   useEffect(() => {
     const node = scrollerRef.current
@@ -73,7 +91,12 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
       return
     }
     node.scrollTop = node.scrollHeight
-  }, [events])
+  }, [feedEntries])
+
+  async function handleDeleteAttachment(item: OrderAttachment) {
+    await removeAttachment.mutateAsync({ id: item.id, filePath: item.filePath ?? null })
+    toast.success('Файл удалён')
+  }
 
   if (historyQuery.isLoading) {
     return <LoadingState label="Загрузка событий" className="min-h-32" />
@@ -83,8 +106,6 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
     return <ErrorState description={getErrorMessage(historyQuery.error)} />
   }
 
-  const groups = groupEventsByDay(events)
-  const attachments = new Map((attachmentsQuery.data ?? []).map((item) => [item.id, item]))
   const showComposer = canWrite || canCreateTask
 
   return (
@@ -102,56 +123,96 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
           />
         ) : (
           <div className="space-y-5">
-            {groups.map((group) => (
+            {dayGroups.map((group) => (
               <section key={group.label}>
-                <h3 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">{group.label}</h3>
+                <h3 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                  {group.label}
+                </h3>
                 <ol className="relative space-y-4 border-l border-border pl-4">
-                  {group.events.map((event) => (
-                    <li key={event.id} className="relative">
-                      <span className="absolute top-1.5 -left-5 size-2 rounded-full bg-primary" />
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <span className="rounded-md bg-info/12 px-1.5 py-0.5 text-xs font-medium text-info">
-                          {orderJournalEventTypeLabel(event.eventType)}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          {toDate(event.createdAt) ? format(toDate(event.createdAt) as Date, 'HH:mm') : ''}
-                        </span>
-                      </div>
-                      {isTaskJournalEvent(event.eventType) ? null : (
-                        <p
-                          className={
-                            event.eventType === OrderJournalEventType.Comment
-                              ? 'text-sm whitespace-pre-wrap'
-                              : 'text-sm'
-                          }
-                        >
-                          {event.summary}
-                        </p>
-                      )}
-                      {event.actorName ? (
-                        <p className="mt-0.5 text-xs text-muted-foreground">{event.actorName}</p>
-                      ) : null}
-                      {event.changes.length > 0 ? (
-                        <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                          {event.changes.map((change) => (
-                            <li key={`${event.id}-${change.field}`}>
-                              {change.label}: {formatJournalValue(change.from)} → {formatJournalValue(change.to)}
-                            </li>
-                          ))}
-                        </ul>
-                      ) : null}
-                      <JournalAttachmentPreview
-                        event={event}
-                        attachment={attachments.get(payloadString(event.payload, 'attachment_id') ?? '')}
-                      />
-                      <JournalTaskPreview
-                        event={event}
-                        task={tasks.get(payloadString(event.payload, 'task_id') ?? '')}
-                        currentUserId={user?.id}
-                        onOpen={(taskId) => setOpenTaskId(taskId)}
-                      />
-                    </li>
-                  ))}
+                  {group.entries.map((entry) => {
+                    if (entry.kind === 'attachments') {
+                      const head = entry.events[0]
+                      const batchAttachments = entry.events
+                        .map((event) =>
+                          attachmentsById.get(payloadString(event.payload, 'attachment_id') ?? ''),
+                        )
+                        .filter((item): item is OrderAttachment => Boolean(item))
+                      if (batchAttachments.length === 0) {
+                        return null
+                      }
+                      return (
+                        <li key={entry.events.map((event) => event.id).join('-')} className="relative">
+                          <span className="absolute top-1.5 -left-5 size-2 rounded-full bg-primary" />
+                          <div className="mb-1 flex flex-wrap items-center gap-2">
+                            <span className="rounded-md bg-info/12 px-1.5 py-0.5 text-xs font-medium text-info">
+                              {orderJournalEventTypeLabel(OrderJournalEventType.Attachment)}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {toDate(head.createdAt)
+                                ? format(toDate(head.createdAt) as Date, 'HH:mm')
+                                : ''}
+                            </span>
+                          </div>
+                          {head.actorName ? (
+                            <p className="mt-0.5 text-xs text-muted-foreground">{head.actorName}</p>
+                          ) : null}
+                          <JournalAttachmentBatch
+                            attachments={batchAttachments}
+                            canDelete={canDelete}
+                            deleting={removeAttachment.isPending}
+                            onDelete={handleDeleteAttachment}
+                          />
+                        </li>
+                      )
+                    }
+
+                    const event = entry.event
+                    return (
+                      <li key={event.id} className="relative">
+                        <span className="absolute top-1.5 -left-5 size-2 rounded-full bg-primary" />
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="rounded-md bg-info/12 px-1.5 py-0.5 text-xs font-medium text-info">
+                            {orderJournalEventTypeLabel(event.eventType)}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {toDate(event.createdAt)
+                              ? format(toDate(event.createdAt) as Date, 'HH:mm')
+                              : ''}
+                          </span>
+                        </div>
+                        {isTaskJournalEvent(event.eventType) ? null : (
+                          <p
+                            className={
+                              event.eventType === OrderJournalEventType.Comment
+                                ? 'text-sm whitespace-pre-wrap'
+                                : 'text-sm'
+                            }
+                          >
+                            {event.summary}
+                          </p>
+                        )}
+                        {event.actorName ? (
+                          <p className="mt-0.5 text-xs text-muted-foreground">{event.actorName}</p>
+                        ) : null}
+                        {event.changes.length > 0 ? (
+                          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                            {event.changes.map((change) => (
+                              <li key={`${event.id}-${change.field}`}>
+                                {change.label}: {formatJournalValue(change.from)} →{' '}
+                                {formatJournalValue(change.to)}
+                              </li>
+                            ))}
+                          </ul>
+                        ) : null}
+                        <JournalTaskPreview
+                          event={event}
+                          task={tasks.get(payloadString(event.payload, 'task_id') ?? '')}
+                          currentUserId={user?.id}
+                          onOpen={(taskId) => setOpenTaskId(taskId)}
+                        />
+                      </li>
+                    )
+                  })}
                 </ol>
               </section>
             ))}
@@ -193,45 +254,191 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
   )
 }
 
-function JournalAttachmentPreview({
-  event,
-  attachment,
+function JournalAttachmentBatch({
+  attachments,
+  canDelete,
+  deleting,
+  onDelete,
 }: {
-  event: OrderJournalEvent
-  attachment: OrderAttachment | undefined
+  attachments: OrderAttachment[]
+  canDelete: boolean
+  deleting: boolean
+  onDelete: (item: OrderAttachment) => Promise<void>
 }) {
-  if (event.eventType !== OrderJournalEventType.Attachment) {
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<OrderAttachment | null>(null)
+
+  if (attachments.length === 0) {
     return null
   }
 
-  if (!attachment) {
-    return null
+  const photos = attachments.filter((item) => item.kind === 'photo' && item.signedUrl)
+  const lightboxItems: ImageLightboxItem[] = photos.map((item) => ({
+    id: item.id,
+    src: item.signedUrl as string,
+    alt: item.fileName || item.caption || 'Фото',
+    title: item.fileName || item.caption || 'Фото',
+  }))
+
+  const visible = attachments.slice(0, ATTACHMENT_PREVIEW_LIMIT)
+  const overflow = Math.max(0, attachments.length - ATTACHMENT_PREVIEW_LIMIT)
+
+  function openAttachment(item: OrderAttachment) {
+    if (item.kind === 'photo' && item.signedUrl) {
+      const index = photos.findIndex((entry) => entry.id === item.id)
+      if (index >= 0) {
+        setViewerIndex(index)
+      }
+      return
+    }
+    const href = item.kind === 'url' ? item.url : item.signedUrl
+    if (href) {
+      window.open(href, '_blank', 'noopener,noreferrer')
+    }
   }
 
-  if (attachment.kind === 'photo' && attachment.signedUrl) {
-    const label = attachment.fileName || attachment.caption || 'Фото'
+  async function handleLightboxDelete(item: ImageLightboxItem) {
+    if (!item.id) {
+      return
+    }
+    const attachment = attachments.find((entry) => entry.id === item.id)
+    if (!attachment) {
+      return
+    }
+    await onDelete(attachment)
+  }
+
+  return (
+    <>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {visible.map((item, index) => {
+          const showOverflow = overflow > 0 && index === visible.length - 1
+          return (
+            <AttachmentFeedTile
+              key={item.id}
+              item={item}
+              overflow={showOverflow ? overflow : 0}
+              canDelete={canDelete && !showOverflow}
+              deleting={deleting}
+              onOpen={() => openAttachment(item)}
+              onDelete={() => setDeleteTarget(item)}
+            />
+          )
+        })}
+      </div>
+      <ImageLightbox
+        open={viewerIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewerIndex(null)
+          }
+        }}
+        items={lightboxItems}
+        index={viewerIndex ?? 0}
+        onIndexChange={setViewerIndex}
+        onDelete={canDelete ? handleLightboxDelete : undefined}
+      />
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title="Удалить файл"
+        description={`«${deleteTarget?.fileName || deleteTarget?.caption || 'Вложение'}» будет удалён. Это действие необратимо.`}
+        confirmLabel="Удалить"
+        isPending={deleting}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null)
+          }
+        }}
+        onConfirm={async () => {
+          if (!deleteTarget) {
+            return
+          }
+          try {
+            await onDelete(deleteTarget)
+            setDeleteTarget(null)
+          } catch (error) {
+            toast.error(getErrorMessage(error))
+          }
+        }}
+      />
+    </>
+  )
+}
+
+function AttachmentFeedTile({
+  item,
+  overflow,
+  canDelete,
+  deleting,
+  onOpen,
+  onDelete,
+}: {
+  item: OrderAttachment
+  overflow: number
+  canDelete: boolean
+  deleting: boolean
+  onOpen: () => void
+  onDelete: () => void
+}) {
+  const label = item.fileName || item.caption || item.url || 'Вложение'
+  const thumb = <AttachmentFeedThumb item={item} />
+
+  return (
+    <div className="group relative size-16 shrink-0">
+      <button
+        type="button"
+        className="size-full overflow-hidden rounded-md border bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        aria-label={overflow > 0 ? `${label}, ещё ${overflow}` : `Открыть «${label}»`}
+        onClick={onOpen}
+      >
+        {item.kind === 'photo' && item.signedUrl && overflow === 0 ? (
+          <ImageHoverPreview src={item.signedUrl} alt={label} className="size-full">
+            <span className="block size-full">{thumb}</span>
+          </ImageHoverPreview>
+        ) : (
+          thumb
+        )}
+        {overflow > 0 ? (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-sm font-semibold text-white">
+            +{overflow}
+          </span>
+        ) : null}
+      </button>
+      {canDelete ? (
+        <button
+          type="button"
+          className="absolute top-0.5 right-0.5 flex size-6 items-center justify-center rounded-md bg-background/90 text-destructive opacity-0 shadow-sm ring-1 ring-border transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          aria-label={`Удалить «${label}»`}
+          disabled={deleting}
+          onClick={(event) => {
+            event.stopPropagation()
+            onDelete()
+          }}
+        >
+          <Trash2 className="size-3.5" />
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function AttachmentFeedThumb({ item }: { item: OrderAttachment }) {
+  if (item.kind === 'photo' && item.signedUrl) {
+    return <img src={item.signedUrl} alt="" draggable={false} className="size-full object-cover" />
+  }
+
+  if (item.kind === 'pdf') {
     return (
-      <div className="mt-2 w-fit">
-        <OpenableImage src={attachment.signedUrl} alt={label} title={label} className="size-16" />
+      <div className="flex size-full items-center justify-center bg-red-600 text-[11px] font-bold text-white">
+        PDF
       </div>
     )
   }
 
-  const href = attachment.kind === 'url' ? attachment.url : attachment.signedUrl
-  if (!href) {
-    return null
-  }
-
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="mt-2 inline-flex items-center gap-1 text-xs text-primary hover:underline"
-    >
-      {attachment.kind === 'pdf' ? <FileText className="size-3" /> : <Link2 className="size-3" />}
-      {attachment.fileName || attachment.caption || attachment.url || 'Открыть'}
-    </a>
+    <div className="flex size-full items-center justify-center bg-muted text-muted-foreground">
+      {item.kind === 'url' ? <ExternalLink className="size-5" /> : <FileText className="size-5" />}
+    </div>
   )
 }
 
@@ -333,17 +540,70 @@ function payloadString(payload: Json, key: string): string | null {
   return typeof value === 'string' ? value : null
 }
 
-function groupEventsByDay(events: OrderJournalEvent[]) {
-  const groups: { label: string; events: OrderJournalEvent[] }[] = []
+function payloadDeleted(payload: Json): boolean {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return false
+  }
+  return payload.deleted === true
+}
+
+function isAttachmentUploadEvent(event: OrderJournalEvent) {
+  return event.eventType === OrderJournalEventType.Attachment && !payloadDeleted(event.payload)
+}
+
+function sameActor(a: OrderJournalEvent, b: OrderJournalEvent) {
+  if (a.actorId && b.actorId) {
+    return a.actorId === b.actorId
+  }
+  return a.actorName === b.actorName
+}
+
+function withinBatchWindow(a: OrderJournalEvent, b: OrderJournalEvent) {
+  const left = toDate(a.createdAt)?.getTime()
+  const right = toDate(b.createdAt)?.getTime()
+  if (left == null || right == null) {
+    return false
+  }
+  return Math.abs(right - left) <= ATTACHMENT_BATCH_MS
+}
+
+function collapseAttachmentBatches(events: OrderJournalEvent[]): FeedEntry[] {
+  const entries: FeedEntry[] = []
 
   for (const event of events) {
-    const date = toDate(event.createdAt)
+    if (!isAttachmentUploadEvent(event)) {
+      entries.push({ kind: 'single', event })
+      continue
+    }
+
+    const last = entries[entries.length - 1]
+    if (last?.kind === 'attachments') {
+      const head = last.events[0]
+      const prev = last.events[last.events.length - 1]
+      if (sameActor(head, event) && withinBatchWindow(prev, event)) {
+        last.events.push(event)
+        continue
+      }
+    }
+
+    entries.push({ kind: 'attachments', events: [event] })
+  }
+
+  return entries
+}
+
+function groupFeedByDay(entries: FeedEntry[]) {
+  const groups: { label: string; entries: FeedEntry[] }[] = []
+
+  for (const entry of entries) {
+    const createdAt = entry.kind === 'attachments' ? entry.events[0].createdAt : entry.event.createdAt
+    const date = toDate(createdAt)
     const label = date ? format(date, 'd MMMM', { locale: ru }) : 'Дата неизвестна'
     const current = groups[groups.length - 1]
     if (current?.label === label) {
-      current.events.push(event)
+      current.entries.push(entry)
     } else {
-      groups.push({ label, events: [event] })
+      groups.push({ label, entries: [entry] })
     }
   }
 

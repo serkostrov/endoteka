@@ -1,13 +1,13 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format } from 'date-fns'
-import { Cpu, FileText, User, X } from 'lucide-react'
+import { Cpu, User, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { EmptyState } from '@/components/shared/EmptyState'
-import { OpenableImage } from '@/components/shared/ImageLightbox'
+import { ImageHoverPreview, ImageLightbox, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
 import { Button } from '@/components/ui/button'
 import { Form, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import {
@@ -18,6 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
   runSheetFormSave,
+  shouldIgnoreNestedDialogClose,
   useSheetDirty,
 } from '@/components/ui/sheet'
 import { useCurrentUser, useHasPermission } from '@/features/auth'
@@ -61,11 +62,26 @@ type AfterCreate = 'close' | 'open' | 'again'
 
 type JournalDraft =
   | { id: string; kind: 'comment'; body: string; createdAt: string }
-  | { id: string; kind: 'attachment'; file: File; previewUrl: string | null; createdAt: string }
+  | {
+      id: string
+      kind: 'attachments'
+      files: { file: File; previewUrl: string | null }[]
+      createdAt: string
+    }
+
+type DraftAttachmentFile = { file: File; previewUrl: string | null }
 
 export function CreateOrderDialog({ open, onOpenChange }: CreateOrderDialogProps) {
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && shouldIgnoreNestedDialogClose()) {
+          return
+        }
+        onOpenChange(next)
+      }}
+    >
       <SheetContent
         side="right"
         className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,80rem)]"
@@ -113,9 +129,10 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
   const [serial, setSerial] = useState('')
   const [createdDeviceId, setCreatedDeviceId] = useState<string | null>(null)
   const customerId = form.watch('customerId')
+  const deviceId = form.watch('deviceId')
   const debouncedSerial = useDebouncedValue(serial.trim(), SERIAL_LOOKUP_DEBOUNCE_MS)
   const serialSearch = useSerialSearch(debouncedSerial)
-  const selectedDevice = serialSearch.data?.kind === 'exact' ? serialSearch.data.device : null
+  const pickedDeviceId = deviceId || createdDeviceId
   const extraDirty = Object.values(extraValues).some((value) => value !== '' && value !== null && value !== false)
   const dirty =
     form.formState.isDirty ||
@@ -126,23 +143,26 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
 
   useSheetDirty(dirty, async () => {
     afterCreateRef.current = 'close'
-    const deviceId = selectedDevice?.id ?? createdDeviceId ?? ''
-    form.setValue('deviceId', deviceId, { shouldValidate: true })
+    const nextDeviceId = pickedDeviceId ?? ''
+    form.setValue('deviceId', nextDeviceId, { shouldValidate: true })
     await runSheetFormSave(form.handleSubmit, persistOrder)
   })
 
-  useEffect(() => {
-    if (!selectedDevice?.id) {
-      return
-    }
-    form.setValue('deviceId', selectedDevice.id, { shouldValidate: true })
-  }, [form, selectedDevice?.id])
-
+  function clearDevice() {
+    setSerial('')
+    setCreatedDeviceId(null)
+    form.setValue('deviceId', '', { shouldValidate: false })
+    form.clearErrors('deviceId')
+  }
   function clearJournalDrafts() {
     setJournalDrafts((current) => {
       for (const entry of current) {
-        if (entry.kind === 'attachment' && entry.previewUrl) {
-          URL.revokeObjectURL(entry.previewUrl)
+        if (entry.kind === 'attachments') {
+          for (const file of entry.files) {
+            if (file.previewUrl) {
+              URL.revokeObjectURL(file.previewUrl)
+            }
+          }
         }
       }
       return []
@@ -160,8 +180,12 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
   useEffect(() => {
     return () => {
       for (const entry of journalDraftsRef.current) {
-        if (entry.kind === 'attachment' && entry.previewUrl) {
-          URL.revokeObjectURL(entry.previewUrl)
+        if (entry.kind === 'attachments') {
+          for (const file of entry.files) {
+            if (file.previewUrl) {
+              URL.revokeObjectURL(file.previewUrl)
+            }
+          }
         }
       }
     }
@@ -178,8 +202,8 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
       throw new Error('Заполните обязательные поля заказа.')
     }
 
-    const deviceId = selectedDevice?.id ?? createdDeviceId
-    if (!deviceId) {
+    const nextDeviceId = pickedDeviceId
+    if (!nextDeviceId) {
       form.setError('deviceId', { message: 'Выберите прибор по серийному номеру' })
       throw new Error('Выберите прибор по серийному номеру')
     }
@@ -191,11 +215,12 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
     try {
       const orderId = await create.mutateAsync({
         customerId: values.customerId,
-        deviceId,
+        deviceId: nextDeviceId,
         claimedMalfunction: columns.claimedMalfunction,
         completeness: columns.completeness,
         externalCondition: '',
         deadline: columns.deadline,
+        readyDate: columns.readyDate,
         responsibleId: columns.responsibleId,
       })
 
@@ -244,8 +269,7 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
       <form
         className="flex min-h-0 flex-1 flex-col"
         onSubmit={(event) => {
-          const deviceId = selectedDevice?.id ?? createdDeviceId ?? ''
-          form.setValue('deviceId', deviceId, { shouldValidate: true })
+          form.setValue('deviceId', pickedDeviceId ?? '', { shouldValidate: true })
           void form.handleSubmit(onSubmit)(event)
         }}
         noValidate
@@ -262,13 +286,30 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
 
             <div className="mt-5 flex flex-col gap-4">
               <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4">
-                <div className="flex items-center gap-2">
-                  <Cpu className="size-4 text-muted-foreground" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">
-                    Прибор <span className="text-destructive">*</span>
-                  </h3>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Cpu className="size-4 text-muted-foreground" aria-hidden="true" />
+                      <h3 className="text-sm font-semibold">
+                        Прибор <span className="text-destructive">*</span>
+                      </h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      По серийному номеру. История ремонтов не зависит от клиента.
+                    </p>
+                  </div>
+                  {pickedDeviceId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto shrink-0 px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={clearDevice}
+                    >
+                      Сменить
+                    </Button>
+                  ) : null}
                 </div>
-                <p className="text-xs text-muted-foreground">По серийному номеру. История ремонтов не зависит от клиента.</p>
                 <FormField
                   control={form.control}
                   name="deviceId"
@@ -277,7 +318,9 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                       <FormLabel className="sr-only">Серийный номер и модель</FormLabel>
                       <DevicePicker
                         serial={serial}
+                        selectedId={pickedDeviceId}
                         customerId={customerId || undefined}
+                        hideChangeButton
                         onSerialChange={(next) => {
                           setSerial(next)
                           setCreatedDeviceId(null)
@@ -287,6 +330,7 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                         onSelectDevice={(device) => {
                           form.setValue('deviceId', device.id, { shouldValidate: true })
                         }}
+                        onClear={clearDevice}
                         result={serialSearch}
                         isDebouncing={serial.trim() !== debouncedSerial}
                         onCreated={(device) => {
@@ -302,13 +346,28 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
               </section>
 
               <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4">
-                <div className="flex items-center gap-2">
-                  <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">
-                    Клиент <span className="text-destructive">*</span>
-                  </h3>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                      <h3 className="text-sm font-semibold">
+                        Клиент <span className="text-destructive">*</span>
+                      </h3>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Кто сдаёт прибор. Найдите или создайте карточку.</p>
+                  </div>
+                  {customerId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto shrink-0 px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => form.setValue('customerId', '', { shouldValidate: false })}
+                    >
+                      Сменить
+                    </Button>
+                  ) : null}
                 </div>
-                <p className="text-xs text-muted-foreground">Кто сдаёт прибор. Найдите или создайте карточку.</p>
                 <FormField
                   control={form.control}
                   name="customerId"
@@ -317,6 +376,7 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                       <FormLabel className="sr-only">Клиент</FormLabel>
                       <CustomerPicker
                         value={field.value}
+                        hideChangeButton
                         onChange={(customer) => field.onChange(customer?.id ?? '')}
                       />
                       <FormMessage />
@@ -384,8 +444,12 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                           onClick={() => {
                             setJournalDrafts((current) => {
                               const next = current.filter((item) => item.id !== entry.id)
-                              if (entry.kind === 'attachment' && entry.previewUrl) {
-                                URL.revokeObjectURL(entry.previewUrl)
+                              if (entry.kind === 'attachments') {
+                                for (const file of entry.files) {
+                                  if (file.previewUrl) {
+                                    URL.revokeObjectURL(file.previewUrl)
+                                  }
+                                }
                               }
                               return next
                             })
@@ -397,24 +461,7 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                       {entry.kind === 'comment' ? (
                         <p className="text-sm whitespace-pre-wrap">{entry.body}</p>
                       ) : (
-                        <>
-                          <p className="text-sm">Добавлен файл: {entry.file.name}</p>
-                          {entry.previewUrl ? (
-                            <div className="mt-2 w-fit">
-                              <OpenableImage
-                                src={entry.previewUrl}
-                                alt={entry.file.name}
-                                title={entry.file.name}
-                                className="size-16"
-                              />
-                            </div>
-                          ) : (
-                            <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                              <FileText className="size-3" />
-                              PDF
-                            </p>
-                          )}
-                        </>
+                        <DraftAttachmentBatch files={entry.files} />
                       )}
                       {user?.fullName ? (
                         <p className="mt-0.5 text-xs text-muted-foreground">{user.fullName}</p>
@@ -431,12 +478,14 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                 const createdAt = new Date().toISOString()
                 const next: JournalDraft[] = []
 
-                for (const file of files) {
+                if (files.length > 0) {
                   next.push({
                     id: crypto.randomUUID(),
-                    kind: 'attachment',
-                    file,
-                    previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+                    kind: 'attachments',
+                    files: files.map((file) => ({
+                      file,
+                      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+                    })),
                     createdAt,
                   })
                 }
@@ -491,7 +540,81 @@ async function persistJournalDrafts(orderId: string, drafts: JournalDraft[]) {
     if (entry.kind === 'comment') {
       await addOrderJournalNote(orderId, entry.body)
     } else {
-      await uploadOrderFile(orderId, entry.file, '')
+      for (const file of entry.files) {
+        await uploadOrderFile(orderId, file.file, '')
+      }
     }
   }
+}
+
+const DRAFT_PREVIEW_LIMIT = 3
+
+function DraftAttachmentBatch({ files }: { files: DraftAttachmentFile[] }) {
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const photos = files
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => Boolean(item.previewUrl))
+  const lightboxItems: ImageLightboxItem[] = photos.map(({ item }) => ({
+    src: item.previewUrl as string,
+    alt: item.file.name,
+    title: item.file.name,
+  }))
+  const visible = files.slice(0, DRAFT_PREVIEW_LIMIT)
+  const overflow = Math.max(0, files.length - DRAFT_PREVIEW_LIMIT)
+
+  return (
+    <>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {visible.map((item, index) => {
+          const showOverflow = overflow > 0 && index === visible.length - 1
+          return (
+            <button
+              key={`${item.file.name}-${index}`}
+              type="button"
+              className="relative size-16 shrink-0 overflow-hidden rounded-md border bg-muted"
+              aria-label={item.file.name}
+              onClick={() => {
+                if (item.previewUrl) {
+                  const photoIndex = photos.findIndex(({ item: row }) => row === item)
+                  if (photoIndex >= 0) {
+                    setViewerIndex(photoIndex)
+                  }
+                }
+              }}
+            >
+              {item.previewUrl ? (
+                showOverflow ? (
+                  <img src={item.previewUrl} alt="" className="size-full object-cover" />
+                ) : (
+                  <ImageHoverPreview src={item.previewUrl} alt={item.file.name} className="size-full">
+                    <img src={item.previewUrl} alt="" className="size-full object-cover" />
+                  </ImageHoverPreview>
+                )
+              ) : (
+                <div className="flex size-full items-center justify-center bg-red-600 text-[11px] font-bold text-white">
+                  PDF
+                </div>
+              )}
+              {showOverflow ? (
+                <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-sm font-semibold text-white">
+                  +{overflow}
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
+      <ImageLightbox
+        open={viewerIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewerIndex(null)
+          }
+        }}
+        items={lightboxItems}
+        index={viewerIndex ?? 0}
+        onIndexChange={setViewerIndex}
+      />
+    </>
+  )
 }

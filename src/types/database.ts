@@ -230,6 +230,7 @@ type Row = {
     completeness: string
     external_condition: string
     deadline: string | null
+    ready_date: string | null
     responsible_id: string | null
     status_id: string
     created_by: string | null
@@ -244,6 +245,9 @@ type Row = {
     customer_name: string
     device_id: string
     serial_number: string
+    device_group_id: string | null
+    device_brand_id: string | null
+    device_model_id: string | null
     device_brand: string
     device_model: string
     device_label: string
@@ -1561,6 +1565,7 @@ export type Database = {
           external_condition?: string
           target_deadline?: string | null
           target_responsible_id?: string | null
+          target_ready_date?: string | null
         }
         Returns: string
       }
@@ -1586,6 +1591,8 @@ export type Database = {
           change_customer?: boolean
           target_device_id?: string | null
           change_device?: boolean
+          target_ready_date?: string | null
+          clear_ready_date?: boolean
         }
         Returns: undefined
       }
@@ -1989,6 +1996,15 @@ export type Database = {
           line_unit_price?: number
         }
         Returns: string
+      }
+      update_order_custom_part_line: {
+        Args: {
+          target_line_id: string
+          line_name: string
+          line_quantity: number
+          line_unit_price: number
+        }
+        Returns: undefined
       }
       set_order_part_line: {
         Args: { target_line_id: string; line_quantity: number; line_unit_price: number }
@@ -2407,6 +2423,16 @@ export type Database = {
           line_unit_price?: number
         }
         Returns: string
+      }
+      update_order_custom_service_line: {
+        Args: {
+          target_line_id: string
+          line_name: string
+          line_description: string
+          line_quantity: number
+          line_unit_price: number
+        }
+        Returns: undefined
       }
       set_order_service_line: {
         Args: { target_line_id: string; line_quantity: number; line_unit_price: number }

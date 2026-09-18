@@ -24,6 +24,7 @@ import { getDocument } from '@/features/documents/services/documents-service'
 import { DocumentSourceType, sourceTypeForTemplate } from '@/lib/constants/documents'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { formatInteger } from '@/lib/utils/number'
 
 import { useDeleteOrder, useMoveOrderStatus, useOrderStatusCatalog } from '../hooks/use-orders'
 import { groupStatusCatalog, statusBadgeStyle, type OrderStatusCatalogItem } from '../lib/status-catalog'
@@ -90,7 +91,7 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
         await deleteOrder.mutateAsync(id)
       }
       toast.success(
-        count === 1 ? 'Заказ удалён' : `Удалено заказов: ${count.toLocaleString('ru-RU')}`,
+        count === 1 ? 'Заказ удалён' : `Удалено заказов: ${formatInteger(count)}`,
       )
       setDeleteOpen(false)
       onClear()
@@ -112,7 +113,7 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
       toast.success(
         count === 1
           ? `Статус: ${status.name}`
-          : `Статус «${status.name}» — ${count.toLocaleString('ru-RU')} заказ.`,
+          : `Статус «${status.name}» — ${formatInteger(count)} заказ.`,
       )
       setStatusTarget(null)
       setWarrantyDraft(null)
@@ -174,7 +175,7 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
     <>
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
         <p className="mr-1 text-sm font-medium">
-          Выбрано: {count.toLocaleString('ru-RU')}
+          Выбрано: {formatInteger(count)}
         </p>
         {canChangeStatus ? (
           <DropdownMenu open={statusOpen} onOpenChange={setStatusOpen}>
@@ -314,7 +315,7 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
         description={
           count === 1
             ? 'Выбранный заказ будет удалён безвозвратно.'
-            : `Будет удалено заказов: ${count.toLocaleString('ru-RU')}. Действие необратимо.`
+            : `Будет удалено заказов: ${formatInteger(count)}. Действие необратимо.`
         }
         confirmLabel="Удалить"
         confirmVariant="destructive"
@@ -340,8 +341,8 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
         description={
           statusTarget
             ? isIssue
-              ? `Выбранные заказы (${count.toLocaleString('ru-RU')}) будут переведены в статус «${statusTarget.name}».`
-              : `Выбранные заказы (${count.toLocaleString('ru-RU')}) будут переведены в статус «${statusTarget.name}».`
+              ? `Выбранные заказы (${formatInteger(count)}) будут переведены в статус «${statusTarget.name}».`
+              : `Выбранные заказы (${formatInteger(count)}) будут переведены в статус «${statusTarget.name}».`
             : ''
         }
         confirmLabel={

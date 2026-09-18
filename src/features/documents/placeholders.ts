@@ -1,3 +1,7 @@
+import { isOrderBuiltinField, OrderBuiltinField, type FieldType } from '@/lib/constants/fields'
+
+import { isDocumentDateKey } from './date-formats'
+
 export const placeholderKeys = [
   'company.name',
   'document.number',
@@ -9,6 +13,7 @@ export const placeholderKeys = [
   'order.completeness',
   'order.externalCondition',
   'order.deadline',
+  'order.readyDate',
   'order.responsible',
   'customer.name',
   'customer.phone',
@@ -48,18 +53,39 @@ export const placeholderKeys = [
 export type PlaceholderKey = (typeof placeholderKeys)[number]
 
 export type PlaceholderDefinition = {
-  key: PlaceholderKey
+  key: string
   label: string
   group: string
   scope: 'document' | 'row'
+  isDate?: boolean
+}
+
+const ORDER_BUILTIN_PLACEHOLDER: Record<string, PlaceholderKey> = {
+  [OrderBuiltinField.CoverNote]: 'order.claimedMalfunction',
+  [OrderBuiltinField.Completeness]: 'order.completeness',
+  [OrderBuiltinField.Deadline]: 'order.deadline',
+  [OrderBuiltinField.ReadyDate]: 'order.readyDate',
+  [OrderBuiltinField.Responsible]: 'order.responsible',
 }
 
 export const placeholderRegistry: Record<PlaceholderKey, PlaceholderDefinition> = {
   'company.name': { key: 'company.name', label: 'Название компании', group: 'Компания', scope: 'document' },
   'document.number': { key: 'document.number', label: 'Номер документа', group: 'Документ', scope: 'document' },
-  'document.issuedAt': { key: 'document.issuedAt', label: 'Дата выпуска', group: 'Документ', scope: 'document' },
+  'document.issuedAt': {
+    key: 'document.issuedAt',
+    label: 'Дата выпуска',
+    group: 'Документ',
+    scope: 'document',
+    isDate: true,
+  },
   'order.number': { key: 'order.number', label: 'Номер заказа', group: 'Заказ', scope: 'document' },
-  'order.createdAt': { key: 'order.createdAt', label: 'Дата заказа', group: 'Заказ', scope: 'document' },
+  'order.createdAt': {
+    key: 'order.createdAt',
+    label: 'Дата заказа',
+    group: 'Заказ',
+    scope: 'document',
+    isDate: true,
+  },
   'order.status': { key: 'order.status', label: 'Статус заказа', group: 'Заказ', scope: 'document' },
   'order.claimedMalfunction': {
     key: 'order.claimedMalfunction',
@@ -74,7 +100,14 @@ export const placeholderRegistry: Record<PlaceholderKey, PlaceholderDefinition> 
     group: 'Заказ',
     scope: 'document',
   },
-  'order.deadline': { key: 'order.deadline', label: 'Срок заказа', group: 'Заказ', scope: 'document' },
+  'order.deadline': { key: 'order.deadline', label: 'Срок заказа', group: 'Заказ', scope: 'document', isDate: true },
+  'order.readyDate': {
+    key: 'order.readyDate',
+    label: 'Дата готовности',
+    group: 'Заказ',
+    scope: 'document',
+    isDate: true,
+  },
   'order.responsible': { key: 'order.responsible', label: 'Ответственный', group: 'Заказ', scope: 'document' },
   'customer.name': { key: 'customer.name', label: 'Клиент', group: 'Клиент', scope: 'document' },
   'customer.phone': { key: 'customer.phone', label: 'Телефон клиента', group: 'Клиент', scope: 'document' },
@@ -98,7 +131,7 @@ export const placeholderRegistry: Record<PlaceholderKey, PlaceholderDefinition> 
   'device.group': { key: 'device.group', label: 'Тип прибора', group: 'Прибор', scope: 'document' },
   'device.label': { key: 'device.label', label: 'Прибор', group: 'Прибор', scope: 'document' },
   'sale.invoiceNumber': { key: 'sale.invoiceNumber', label: 'Номер счёта', group: 'Продажа', scope: 'document' },
-  'sale.date': { key: 'sale.date', label: 'Дата продажи', group: 'Продажа', scope: 'document' },
+  'sale.date': { key: 'sale.date', label: 'Дата продажи', group: 'Продажа', scope: 'document', isDate: true },
   'sale.total': { key: 'sale.total', label: 'Сумма продажи', group: 'Продажа', scope: 'document' },
   'sale.customerName': { key: 'sale.customerName', label: 'Покупатель', group: 'Продажа', scope: 'document' },
   'sale.status': { key: 'sale.status', label: 'Статус продажи', group: 'Продажа', scope: 'document' },
@@ -131,9 +164,10 @@ export type PlaceholderInsertContext = 'document' | 'parts' | 'lines'
 
 export type TemplateTextSegment =
   | { type: 'text'; value: string }
-  | { type: 'field'; key: PlaceholderKey }
+  | { type: 'field'; key: string }
 
-const PLACEHOLDER_TOKEN_PATTERN = /\{\{\s*([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z][a-zA-Z0-9]*)?)\s*\}\}/g
+const PLACEHOLDER_TOKEN_PATTERN =
+  /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+)(?:\|[^}]*)?\s*\}\}/g
 
 export function parseTemplateText(value: string): TemplateTextSegment[] {
   const segments: TemplateTextSegment[] = []
@@ -146,7 +180,7 @@ export function parseTemplateText(value: string): TemplateTextSegment[] {
       segments.push({ type: 'text', value: value.slice(lastIndex, match.index) })
     }
     const key = match[1]
-    if (key && isPlaceholderKey(key)) {
+    if (key && (isPlaceholderKey(key) || isSettingsFieldKey(key))) {
       segments.push({ type: 'field', key })
     } else {
       segments.push({ type: 'text', value: match[0] })
@@ -159,6 +193,58 @@ export function parseTemplateText(value: string): TemplateTextSegment[] {
   }
 
   return segments
+}
+
+export function isSettingsFieldKey(key: string) {
+  return /^field\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(key)
+}
+
+export function settingsFieldPlaceholderKey(entityCode: string, code: string) {
+  if (entityCode === 'orders' && isOrderBuiltinField(code)) {
+    return ORDER_BUILTIN_PLACEHOLDER[code]
+  }
+  return `field.${entityCode}.${code}`
+}
+
+export function settingsFieldDefinition(input: {
+  entityCode: string
+  entityName: string
+  code: string
+  name: string
+  fieldType: FieldType
+}): PlaceholderDefinition | null {
+  const key = settingsFieldPlaceholderKey(input.entityCode, input.code)
+  if (!key) {
+    return null
+  }
+  if (isPlaceholderKey(key)) {
+    return {
+      ...placeholderRegistry[key],
+      isDate: isDocumentDateKey(key) || input.fieldType === 'date',
+    }
+  }
+  return {
+    key,
+    label: input.name,
+    group: input.entityName,
+    scope: 'document',
+    isDate: input.fieldType === 'date',
+  }
+}
+
+export function mergePlaceholderCatalog(
+  base: PlaceholderDefinition[],
+  settingsFields: PlaceholderDefinition[],
+) {
+  const seen = new Set(base.map((item) => item.key))
+  const extras = settingsFields.filter((item) => {
+    if (seen.has(item.key)) {
+      return false
+    }
+    seen.add(item.key)
+    return true
+  })
+  return [...base, ...extras]
 }
 
 export function placeholdersForContext(context: PlaceholderInsertContext): PlaceholderDefinition[] {
@@ -191,17 +277,18 @@ export function groupPlaceholders(items: PlaceholderDefinition[]) {
   return groups
 }
 
-export const SAMPLE_PLACEHOLDER_VALUES: Record<PlaceholderKey, string> = {
+export const SAMPLE_PLACEHOLDER_VALUES: Record<string, string> = {
   'company.name': 'Эндотека',
   'document.number': 'ДОК-000001',
-  'document.issuedAt': '25.08.2026 12:00',
+  'document.issuedAt': '2026-08-25T12:00:00',
   'order.number': 'ЗК-0001',
-  'order.createdAt': '25.08.2026',
+  'order.createdAt': '2026-08-25',
   'order.status': 'В ремонте',
   'order.claimedMalfunction': 'Нет изображения',
   'order.completeness': 'Прибор, кейс, кабель',
   'order.externalCondition': 'Царапины корпуса',
-  'order.deadline': '01.09.2026',
+  'order.deadline': '2026-09-01',
+  'order.readyDate': '2026-09-03',
   'order.responsible': 'Иванов И. И.',
   'customer.name': 'ООО «Клиника»',
   'customer.phone': '+7 495 000-00-00',
@@ -215,7 +302,7 @@ export const SAMPLE_PLACEHOLDER_VALUES: Record<PlaceholderKey, string> = {
   'device.group': 'Гастроскоп',
   'device.label': 'Гастроскоп · Olympus · GIF-H190',
   'sale.invoiceNumber': 'СЧ-000001',
-  'sale.date': '25.08.2026',
+  'sale.date': '2026-08-25',
   'sale.total': '15000.00',
   'sale.customerName': 'ООО «Клиника»',
   'sale.status': 'Подтверждена',

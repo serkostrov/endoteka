@@ -28,6 +28,7 @@ import {
 } from '@/lib/constants/documents'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
+import { useDocumentSettingsFields } from '@/features/dynamic-fields/hooks/use-fields'
 
 import { TemplateRenderer } from './TemplateRenderer'
 import { TinyMceDocumentEditor } from './TinyMceDocumentEditor'
@@ -66,6 +67,7 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
   const update = useUpdateDocumentTemplate(template.id)
   const remove = useDeleteDocumentTemplate()
   const navigate = useNavigate()
+  const settingsFieldsQuery = useDocumentSettingsFields()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -75,6 +77,7 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
   const initialHtml = useMemo(() => templateHtml(template.body), [template.body])
   const [html, setHtml] = useState(initialHtml)
   const htmlBlockId = template.body.find((block) => block.type === 'html')?.id
+  const settingsFields = settingsFieldsQuery.data ?? []
 
   async function save() {
     try {
@@ -138,7 +141,7 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
         }
       />
 
-      <TinyMceDocumentEditor value={html} onChange={setHtml} />
+      <TinyMceDocumentEditor value={html} onChange={setHtml} settingsFields={settingsFields} />
 
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="flex max-h-[90vh] flex-col gap-3 overflow-hidden sm:max-w-4xl">

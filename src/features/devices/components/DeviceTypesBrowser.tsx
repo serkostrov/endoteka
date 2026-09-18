@@ -22,24 +22,17 @@ import { Permission } from '@/lib/constants/permissions'
 import { ReferenceSetCode } from '@/lib/constants/references'
 import { getErrorMessage } from '@/lib/errors'
 import { uniqueCode } from '@/lib/utils/code'
+import { formatInteger } from '@/lib/utils/number'
 import { cn } from '@/lib/utils'
 
 type ColumnKey = 'group' | 'brand' | 'model' | 'modification'
 
-/** Дети выбранного родителя. Для брендов без parent_id — сироты (данные до миграции). */
-function filterChildren(
-  items: ReferenceItem[],
-  parentId: string | null,
-  options?: { includeOrphans?: boolean },
-) {
+/** Дети выбранного родителя — только жёсткая привязка по parent_id. */
+function filterChildren(items: ReferenceItem[], parentId: string | null) {
   if (!parentId) {
     return []
   }
-  const linked = items.filter((item) => item.parentId === parentId)
-  if (linked.length > 0 || !options?.includeOrphans) {
-    return linked
-  }
-  return items.filter((item) => !item.parentId)
+  return items.filter((item) => Boolean(item.parentId) && item.parentId === parentId)
 }
 
 const COLUMNS: {
@@ -90,16 +83,17 @@ export function DeviceTypesBrowser() {
   }, [setsQuery.data])
 
   const groups = groupsQuery.data ?? []
+  const allBrands = brandsQuery.data ?? []
   const brands = useMemo(
-    () => filterChildren(brandsQuery.data ?? [], selectedGroupId, { includeOrphans: true }),
-    [brandsQuery.data, selectedGroupId],
+    () => filterChildren(allBrands, selectedGroupId),
+    [allBrands, selectedGroupId],
   )
   const models = useMemo(
     () => filterChildren(modelsQuery.data ?? [], selectedBrandId),
     [modelsQuery.data, selectedBrandId],
   )
   const modifications = useMemo(
-    () => filterChildren(modsQuery.data ?? [], selectedModelId, { includeOrphans: true }),
+    () => filterChildren(modsQuery.data ?? [], selectedModelId),
     [modsQuery.data, selectedModelId],
   )
   const columnItems: Record<ColumnKey, ReferenceItem[]> = {
@@ -181,7 +175,14 @@ export function DeviceTypesBrowser() {
     setEditor({
       column,
       item,
-      parentId: item.parentId ?? '',
+      parentId:
+        column === 'brand'
+          ? (item.parentId ?? selectedGroupId ?? '')
+          : column === 'model'
+            ? (item.parentId ?? selectedBrandId ?? '')
+            : column === 'modification'
+              ? (item.parentId ?? selectedModelId ?? '')
+              : (item.parentId ?? ''),
     })
   }
 
@@ -213,9 +214,9 @@ export function DeviceTypesBrowser() {
               return true
             }
             if (!modelParentGroupId) {
-              return true
+              return false
             }
-            return item.parentId === modelParentGroupId || !item.parentId
+            return item.parentId === modelParentGroupId
           })
         : editor?.column === 'modification'
           ? (modelsQuery.data ?? []).filter((item) => {
@@ -226,7 +227,7 @@ export function DeviceTypesBrowser() {
                 return true
               }
               if (!selectedBrandId) {
-                return true
+                return false
               }
               return item.parentId === selectedBrandId
             })
@@ -237,9 +238,7 @@ export function DeviceTypesBrowser() {
       ? groups
       : editor?.column === 'brand'
         ? (brandsQuery.data ?? []).filter(
-            (item) =>
-              item.parentId === (editor.parentId || selectedGroupId) ||
-              (!item.parentId && Boolean(editor.parentId || selectedGroupId)),
+            (item) => item.parentId === (editor.parentId || selectedGroupId),
           )
         : editor?.column === 'model'
           ? (modelsQuery.data ?? []).filter(
@@ -247,9 +246,7 @@ export function DeviceTypesBrowser() {
             )
           : editor?.column === 'modification'
             ? (modsQuery.data ?? []).filter(
-                (item) =>
-                  item.parentId === (editor.parentId || selectedModelId) ||
-                  (!item.parentId && Boolean(editor.parentId || selectedModelId)),
+                (item) => item.parentId === (editor.parentId || selectedModelId),
               )
             : []
 
@@ -372,6 +369,68 @@ export function DeviceTypesBrowser() {
   )
 }
 
+
+function MillerColumnRow({
+  item,
+  selected,
+  showCascadeHint,
+  canUpdate,
+  onSelect,
+  onEdit,
+  onDelete,
+}: {
+  item: ReferenceItem
+  selected: boolean
+  showCascadeHint?: boolean
+  canUpdate: boolean
+  onSelect: (id: string) => void
+  onEdit: (item: ReferenceItem) => void
+  onDelete: (item: ReferenceItem) => void
+}) {
+  return (
+    <li>
+      <div
+        className={cn(
+          'group flex w-full items-center gap-1 px-1 py-0.5 text-sm transition-colors',
+          selected ? 'bg-accent' : 'hover:bg-accent/60',
+          !item.isActive && 'opacity-60',
+        )}
+      >
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
+          onClick={() => onSelect(item.id)}
+        >
+          <span className="min-w-0 flex-1 truncate font-medium">{item.name}</span>
+          {showCascadeHint ? (
+            <ChevronRight
+              className={cn(
+                'size-3.5 shrink-0 text-muted-foreground',
+                !selected && 'opacity-0 group-hover:opacity-40',
+              )}
+            />
+          ) : null}
+        </button>
+        {canUpdate ? (
+          <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <IconActionButton label="Изменить" size="icon-sm" onClick={() => onEdit(item)}>
+              <Pencil />
+            </IconActionButton>
+            <IconActionButton
+              label="Удалить"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() => onDelete(item)}
+            >
+              <Trash2 />
+            </IconActionButton>
+          </div>
+        ) : null}
+      </div>
+    </li>
+  )
+}
+
 function MillerColumn({
   title,
   addLabel,
@@ -431,57 +490,24 @@ function MillerColumn({
           />
         ) : (
           <ul>
-            {items.map((item) => {
-              const selected = item.id === selectedId
-              return (
-                <li key={item.id}>
-                  <div
-                    className={cn(
-                      'group flex w-full items-center gap-1 px-1 py-0.5 text-sm transition-colors',
-                      selected ? 'bg-accent' : 'hover:bg-accent/60',
-                      !item.isActive && 'opacity-60',
-                    )}
-                  >
-                    <button
-                      type="button"
-                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
-                      onClick={() => onSelect(item.id)}
-                    >
-                      <span className="min-w-0 flex-1 truncate font-medium">{item.name}</span>
-                      {showCascadeHint ? (
-                        <ChevronRight
-                          className={cn(
-                            'size-3.5 shrink-0 text-muted-foreground',
-                            !selected && 'opacity-0 group-hover:opacity-40',
-                          )}
-                        />
-                      ) : null}
-                    </button>
-                    {canUpdate ? (
-                      <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                        <IconActionButton label="Изменить" size="icon-sm" onClick={() => onEdit(item)}>
-                          <Pencil />
-                        </IconActionButton>
-                        <IconActionButton
-                          label="Удалить"
-                          size="icon-sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => onDelete(item)}
-                        >
-                          <Trash2 />
-                        </IconActionButton>
-                      </div>
-                    ) : null}
-                  </div>
-                </li>
-              )
-            })}
+            {items.map((item) => (
+              <MillerColumnRow
+                key={item.id}
+                item={item}
+                selected={item.id === selectedId}
+                showCascadeHint={showCascadeHint}
+                canUpdate={canUpdate}
+                onSelect={onSelect}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
           </ul>
         )}
       </div>
 
       <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-        Всего — {items.length.toLocaleString('ru-RU')}
+        Всего — {formatInteger(items.length)}
       </p>
     </section>
   )
@@ -525,13 +551,24 @@ function ColumnEditor({
         }
       }}
       onSubmit={async (values: ReferenceItemFormValues) => {
+        const effectiveParentId = requiresParent ? parentId || values.parentId || null : null
+        const siblingRows = allItems.filter(
+          (row) => row.id !== item?.id && (row.parentId ?? null) === effectiveParentId,
+        )
+        const nameTaken = siblingRows.some(
+          (row) => row.name.trim().toLowerCase() === values.name.trim().toLowerCase(),
+        )
+        if (nameTaken) {
+          throw new Error('Запись с таким названием уже есть на этом уровне.')
+        }
+        const setCodes = allItems.filter((row) => row.id !== item?.id).map((row) => row.code ?? '')
         await save.mutateAsync({
           id: item?.id,
           setId: set.id,
-          code: item?.code ?? uniqueCode(values.name, allItems.map((row) => row.code)),
+          code: item?.code ?? uniqueCode(values.name, setCodes),
           name: values.name,
           description: values.description,
-          parentId: requiresParent ? parentId || values.parentId || null : null,
+          parentId: effectiveParentId,
         })
         toast.success('Запись сохранена')
         onClose()

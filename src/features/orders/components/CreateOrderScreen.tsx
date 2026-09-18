@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -61,14 +61,15 @@ export function CreateOrderScreen() {
   const [createdDeviceId, setCreatedDeviceId] = useState<string | null>(null)
   const debouncedSerial = useDebouncedValue(serial.trim(), SERIAL_LOOKUP_DEBOUNCE_MS)
   const serialSearch = useSerialSearch(debouncedSerial)
-  const selectedDevice = serialSearch.data?.kind === 'exact' ? serialSearch.data.device : null
+  const deviceId = form.watch('deviceId')
+  const pickedDeviceId = deviceId || createdDeviceId
 
-  useEffect(() => {
-    if (!selectedDevice?.id) {
-      return
-    }
-    form.setValue('deviceId', selectedDevice.id, { shouldValidate: true })
-  }, [form, selectedDevice?.id])
+  function clearDevice() {
+    setSerial('')
+    setCreatedDeviceId(null)
+    form.setValue('deviceId', '', { shouldValidate: false })
+    form.clearErrors('deviceId')
+  }
 
   async function onSubmit(values: CreateOrderFormValues) {
     if (createInFlight.current) {
@@ -82,8 +83,8 @@ export function CreateOrderScreen() {
       return
     }
 
-    const deviceId = selectedDevice?.id ?? createdDeviceId
-    if (!deviceId) {
+    const nextDeviceId = pickedDeviceId
+    if (!nextDeviceId) {
       form.setError('deviceId', { message: 'Выберите прибор по серийному номеру' })
       return
     }
@@ -95,11 +96,12 @@ export function CreateOrderScreen() {
     try {
       const orderId = await create.mutateAsync({
         customerId: values.customerId,
-        deviceId,
+        deviceId: nextDeviceId,
         claimedMalfunction: columns.claimedMalfunction,
         completeness: columns.completeness,
         externalCondition: '',
         deadline: columns.deadline,
+        readyDate: columns.readyDate,
         responsibleId: columns.responsibleId,
       })
 
@@ -128,8 +130,7 @@ export function CreateOrderScreen() {
           <form
             className="space-y-4"
             onSubmit={(event) => {
-              const deviceId = selectedDevice?.id ?? createdDeviceId ?? ''
-              form.setValue('deviceId', deviceId, { shouldValidate: true })
+              form.setValue('deviceId', pickedDeviceId ?? '', { shouldValidate: true })
               void form.handleSubmit(onSubmit)(event)
             }}
             noValidate
@@ -153,6 +154,7 @@ export function CreateOrderScreen() {
                       <FormLabel>Серийный номер и модель</FormLabel>
                       <DevicePicker
                         serial={serial}
+                        selectedId={pickedDeviceId}
                         onSerialChange={(next) => {
                           setSerial(next)
                           setCreatedDeviceId(null)
@@ -162,6 +164,7 @@ export function CreateOrderScreen() {
                         onSelectDevice={(device) => {
                           form.setValue('deviceId', device.id, { shouldValidate: true })
                         }}
+                        onClear={clearDevice}
                         result={serialSearch}
                         isDebouncing={serial.trim() !== debouncedSerial}
                         onCreated={(device) => {

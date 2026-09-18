@@ -197,12 +197,9 @@ export function OrderPartsTab({ orderId, showLines = true }: OrderPartsTabProps)
         onOpenChange={setCreateItemOpen}
         initialQuery={createQuery}
         orderId={orderId}
-        onCreatedForOrder={() => {
-          setCreateItemOpen(false)
-        }}
+        onCreatedForOrder={() => undefined}
         onCreated={(item) => {
           pickItem(item)
-          setCreateItemOpen(false)
         }}
       />
     </>

@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { markNestedDialogClosing } from '@/components/ui/sheet'
 import { useHasPermission } from '@/features/auth'
 import {
   ReferenceItemDialog,
@@ -245,12 +246,12 @@ export function ItemFields({
               description: values.description,
               parentId: null,
             })
+            markNestedDialogClosing()
             form.setValue(createKind === 'category' ? 'categoryId' : 'unitId', id, {
               shouldDirty: true,
               shouldValidate: true,
             })
             toast.success(createKind === 'category' ? 'Категория добавлена' : 'Единица добавлена')
-            setCreateKind(null)
           }}
         />
       ) : null}

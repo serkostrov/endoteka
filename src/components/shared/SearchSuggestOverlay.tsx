@@ -4,6 +4,10 @@ import { useRef, type ReactNode } from 'react'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 
+/** Высота попапа подсказки. */
+const PANEL_MAX_H =
+  'max-h-[min(32rem,var(--radix-popover-content-available-height,100dvh))]'
+
 type SearchSuggestOverlayProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -47,13 +51,49 @@ export function SearchSuggestOverlay({
         onPointerDownOutside={ignoreIfInsideAnchor}
         onInteractOutside={ignoreIfInsideAnchor}
         className={cn(
-          'z-[80] flex w-[var(--radix-popper-anchor-width)] max-h-[min(24rem,var(--radix-popover-content-available-height))] max-w-none flex-col overflow-hidden p-0',
+          'z-[80] w-[var(--radix-popper-anchor-width)] max-w-none overflow-hidden p-0',
           contentClassName,
         )}
       >
         {panel}
       </PopoverContent>
     </Popover>
+  )
+}
+
+/**
+ * Панель со скроллом: max-height на flex-контейнере (не на предке),
+ * иначе overflow-y-auto у flex-1 ребёнка не срабатывает.
+ */
+export function SearchSuggestPanel({
+  children,
+  footer,
+  className,
+}: {
+  children: ReactNode
+  footer?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('flex flex-col overflow-hidden', PANEL_MAX_H, className)}>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+      {footer ? <div className="shrink-0">{footer}</div> : null}
+    </div>
+  )
+}
+
+/** Скролл-область внутри попапа с шапкой/футером (max-height на себе). */
+export function SearchSuggestScroll({
+  children,
+  className,
+}: {
+  children: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', className)}>
+      {children}
+    </div>
   )
 }
 
@@ -116,4 +156,3 @@ export function SearchEmptyCreate({
     </div>
   )
 }
-
