@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -16,7 +16,6 @@ import { useHasPermission } from '@/features/auth'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { formatMoney } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import {
   SALES_SEARCH_DEBOUNCE_MS,
   SaleStatus,
@@ -27,10 +26,12 @@ import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate } from '@/lib/utils/date'
 
+import { SaleDetailSheet } from './SaleDetailScreen'
 import { useCreateSale, useDeleteSale, useSales } from '../hooks/use-sales'
 import type { SaleListItem } from '../services/sales-service'
 
 export function SalesScreen() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [page, setPage] = useState(1)
@@ -42,9 +43,15 @@ export function SalesScreen() {
   const salesQuery = useSales(debouncedSearch, status, page, pageSize)
   const create = useCreateSale()
   const remove = useDeleteSale()
-  const navigate = useNavigate()
+  const saleId = searchParams.get('sale')
   const total = salesQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function openSale(id: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('sale', id)
+    setSearchParams(next, { replace: true })
+  }
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
@@ -55,7 +62,7 @@ export function SalesScreen() {
     try {
       const id = await create.mutateAsync()
       toast.success('Счёт создан')
-      navigate(routes.sale.replace(':id', id))
+      openSale(id)
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -128,7 +135,7 @@ export function SalesScreen() {
         getRowId={(row) => row.id}
         emptyTitle="Продаж нет"
         emptyDescription="Создайте счёт, укажите покупателя и подтвердите списание."
-        onRowClick={(row) => navigate(routes.sale.replace(':id', row.id))}
+        onRowClick={(row) => openSale(row.id)}
         pagination={{
           page,
           pageCount,
@@ -196,6 +203,17 @@ export function SalesScreen() {
           }
         }}
         onConfirm={() => void handleDelete()}
+      />
+      <SaleDetailSheet
+        saleId={saleId}
+        open={Boolean(saleId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            const next = new URLSearchParams(searchParams)
+            next.delete('sale')
+            setSearchParams(next, { replace: true })
+          }
+        }}
       />
     </div>
   )

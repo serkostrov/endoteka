@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 
@@ -17,21 +17,23 @@ import {
   formatQuantity,
 } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 
-import { BarcodeScanInput } from './BarcodeScanInput'
+import { InventoryBulkActions } from './InventoryBulkActions'
+import { InventoryItemSheet } from './InventoryItemScreen'
 import { useDeleteInventoryItem, useInventoryStock } from '../hooks/use-inventory'
-import { findInventoryItemsByBarcode, type InventoryItem } from '../services/inventory-service'
+import type { InventoryItem } from '../services/inventory-service'
 
 export function InventoryStockScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const stockFilter = searchParams.get('stock') === 'zero' ? 'zero' : 'all'
+  const itemId = searchParams.get('item')
   const filterKey = stockFilter
   const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
   if (seenFilterKey !== filterKey) {
@@ -43,9 +45,24 @@ export function InventoryStockScreen() {
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const remove = useDeleteInventoryItem()
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null)
-  const navigate = useNavigate()
+  const items = stockQuery.data?.items ?? []
   const total = stockQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const pageIdsKey = items.map((item) => item.id).join('|')
+
+  useEffect(() => {
+    const visible = new Set(pageIdsKey ? pageIdsKey.split('|') : [])
+    setSelectedIds((current) => {
+      const next = current.filter((id) => visible.has(id))
+      return next.length === current.length ? current : next
+    })
+  }, [pageIdsKey])
+
+  function openItem(id: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('item', id)
+    setSearchParams(next, { replace: true })
+  }
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
@@ -60,27 +77,7 @@ export function InventoryStockScreen() {
       await remove.mutateAsync(deleteTarget.id)
       toast.success('Позиция удалена')
       setDeleteTarget(null)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
-  }
-
-  async function handleScan(code: string) {
-    try {
-      const items = await findInventoryItemsByBarcode(code)
-      const match = items[0]
-      if (items.length === 1 && match) {
-        navigate(routes.inventoryItem.replace(':id', match.id))
-        return
-      }
-      if (items.length === 0) {
-        toast.error('Позиция со штрихкодом не найдена')
-        setSearch(code)
-        setPage(1)
-        return
-      }
-      setSearch(code)
-      setPage(1)
+      setSelectedIds((current) => current.filter((id) => id !== deleteTarget.id))
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -90,18 +87,10 @@ export function InventoryStockScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Склад"
-        description="Текущий остаток по журналу движений. Карточка позиции открывается из строки или по штрихкоду."
+        description="Текущий остаток по журналу движений. Карточка позиции открывается из строки."
       />
 
       <FilterBar>
-        <div className="min-w-0 w-full max-w-sm space-y-1">
-          <p className="text-xs font-medium text-muted-foreground">Сканер</p>
-          <BarcodeScanInput
-            className="max-w-none"
-            onScan={(code) => void handleScan(code)}
-            placeholder="Штрихкод — Enter"
-          />
-        </div>
         <div className="min-w-0 w-full max-w-sm space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Поиск</p>
           <SearchInput
@@ -141,17 +130,25 @@ export function InventoryStockScreen() {
         </div>
       </FilterBar>
 
+      {selectedIds.length > 0 ? (
+        <InventoryBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
+      ) : null}
+
       <DataTable
         caption="Остатки"
         isLoading={stockQuery.isLoading}
         error={stockQuery.error ? getErrorMessage(stockQuery.error) : null}
-        data={stockQuery.data?.items ?? []}
+        data={items}
         getRowId={(row) => row.id}
         emptyTitle="Позиции не найдены"
         emptyDescription={
           stockFilter === 'zero' ? 'Нет позиций с нулевым остатком.' : 'Измените запрос или оформите приход.'
         }
-        onRowClick={(row) => navigate(routes.inventoryItem.replace(':id', row.id))}
+        onRowClick={(row) => openItem(row.id)}
+        selection={{
+          selectedIds,
+          onSelectedIdsChange: setSelectedIds,
+        }}
         pagination={{
           page,
           pageCount,
@@ -238,6 +235,17 @@ export function InventoryStockScreen() {
           }
         }}
         onConfirm={() => void handleDelete()}
+      />
+      <InventoryItemSheet
+        itemId={itemId}
+        open={Boolean(itemId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            const next = new URLSearchParams(searchParams)
+            next.delete('item')
+            setSearchParams(next, { replace: true })
+          }
+        }}
       />
     </div>
   )

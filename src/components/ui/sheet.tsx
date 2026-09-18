@@ -16,6 +16,68 @@ type SheetDirtyContextValue = {
 
 const SheetDirtyContext = React.createContext<SheetDirtyContextValue | null>(null)
 
+/** Уровень вложенности sheet’а: 0 — базовый, выше — поверх предыдущих. */
+const SheetLayerContext = React.createContext(0)
+
+/** Сколько уровней стека сейчас открыто (верхний layer = topLevel). */
+const SheetTopLevelContext = React.createContext(0)
+
+function SheetLayer({ level, children }: { level: number; children: React.ReactNode }) {
+  return <SheetLayerContext.Provider value={level}>{children}</SheetLayerContext.Provider>
+}
+
+function SheetStackMeta({ topLevel, children }: { topLevel: number; children: React.ReactNode }) {
+  return <SheetTopLevelContext.Provider value={topLevel}>{children}</SheetTopLevelContext.Provider>
+}
+
+function sheetZIndex(layer: number) {
+  return 50 + Math.max(0, layer) * 10
+}
+
+/** Насколько нижний sheet шире верхнего (выглядывает слева, правый край на месте). */
+const SHEET_PEEK_REM = 3.5
+
+/** Длительность slide-out; держим контент смонтированным, пока играет анимация. */
+export const SHEET_EXIT_MS = 320
+
+function sheetBaseMaxToken(className?: string): string | null {
+  if (!className) {
+    return null
+  }
+  const match = className.match(/max-w-\[min\(96vw,([^\]\)]+)\)\]/)
+  return match?.[1]?.trim() ?? null
+}
+
+/**
+ * Сохраняет id и контент на время закрытия, чтобы Radix успел проиграть exit-анимацию
+ * (родитель часто сразу сбрасывает open/id в URL).
+ */
+export function useSheetExitPresence(open: boolean, id: string | null | undefined) {
+  const [activeId, setActiveId] = React.useState<string | null>(id ?? null)
+  const [visible, setVisible] = React.useState(Boolean(open && id))
+
+  React.useLayoutEffect(() => {
+    if (open && id) {
+      setActiveId(id)
+      setVisible(true)
+      return
+    }
+    if (!open) {
+      setVisible(false)
+    }
+  }, [open, id])
+
+  React.useEffect(() => {
+    if (visible || !activeId) {
+      return
+    }
+    const timer = window.setTimeout(() => setActiveId(null), SHEET_EXIT_MS)
+    return () => window.clearTimeout(timer)
+  }, [visible, activeId])
+
+  return { open: visible, id: activeId }
+}
+
 export function useSheetDirty(dirty: boolean, save?: SheetSaveFn) {
   const id = React.useId()
   const ctx = React.useContext(SheetDirtyContext)
@@ -167,8 +229,8 @@ function Sheet({
               }
             : undefined
         }
-        overlayClassName="z-[80]"
-        className="z-[80]"
+        overlayClassName="z-[100]"
+        className="z-[100]"
         onOpenChange={setConfirmOpen}
         onConfirm={closeSheet}
       />
@@ -196,15 +258,21 @@ function SheetPortal({
 
 function SheetOverlay({
   className,
+  style,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Overlay>) {
+  const layer = React.useContext(SheetLayerContext)
+  const topLevel = React.useContext(SheetTopLevelContext)
+  const covered = topLevel > layer
   return (
     <SheetPrimitive.Overlay
       data-slot="sheet-overlay"
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        "fixed inset-0 bg-black/50 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0",
+        covered && "pointer-events-none opacity-0",
         className
       )}
+      style={{ zIndex: sheetZIndex(layer), ...style }}
       {...props}
     />
   )
@@ -215,18 +283,33 @@ function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  actions,
+  style,
   ...props
 }: React.ComponentProps<typeof SheetPrimitive.Content> & {
   side?: "top" | "right" | "bottom" | "left"
   showCloseButton?: boolean
+  /** Под крестиком столбиком: удалить, затем редактировать. */
+  actions?: React.ReactNode
 }) {
+  const layer = React.useContext(SheetLayerContext)
+  const topLevel = React.useContext(SheetTopLevelContext)
+  const coveredBy = Math.max(0, topLevel - layer)
+  const peekRem = side === "right" ? Math.min(coveredBy, 2) * SHEET_PEEK_REM : 0
+  const baseMax = sheetBaseMaxToken(className)
+  // Inline style: динамический Tailwind-класс не попадает в CSS. Правый край остаётся right:0.
+  const peekStyle =
+    peekRem > 0 && baseMax
+      ? { maxWidth: `min(96vw, calc(${baseMax} + ${peekRem}rem))` }
+      : null
   return (
     <SheetPortal>
       <SheetOverlay />
       <SheetPrimitive.Content
         data-slot="sheet-content"
+        data-sheet-covered={coveredBy > 0 ? String(coveredBy) : undefined}
         className={cn(
-          "fixed z-50 flex flex-col gap-4 bg-background shadow-lg transition ease-in-out data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:duration-500",
+          "fixed flex flex-col gap-4 bg-background shadow-lg transition-[max-width] duration-200 ease-out data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:duration-300 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:duration-500",
           side === "right" &&
             "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
           side === "left" &&
@@ -237,14 +320,24 @@ function SheetContent({
             "inset-x-0 bottom-0 h-auto border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
           className
         )}
+        style={{
+          zIndex: sheetZIndex(layer),
+          ...peekStyle,
+          ...style,
+        }}
         {...props}
       >
         {children}
-        {showCloseButton && (
-          <SheetPrimitive.Close className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-secondary">
-            <XIcon className="size-4" />
-            <span className="sr-only">Закрыть</span>
-          </SheetPrimitive.Close>
+        {(actions || showCloseButton) && (
+          <div className="absolute top-3 right-3 z-10 flex flex-col items-center gap-0.5">
+            {showCloseButton ? (
+              <SheetPrimitive.Close className="flex size-8 items-center justify-center rounded-md opacity-70 ring-offset-background transition-opacity hover:bg-muted hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-secondary">
+                <XIcon className="size-4" />
+                <span className="sr-only">Закрыть</span>
+              </SheetPrimitive.Close>
+            ) : null}
+            {actions}
+          </div>
         )}
       </SheetPrimitive.Content>
     </SheetPortal>
@@ -299,6 +392,8 @@ function SheetDescription({
 
 export {
   Sheet,
+  SheetLayer,
+  SheetStackMeta,
   SheetTrigger,
   SheetClose,
   SheetContent,

@@ -12,5 +12,10 @@ export const createDeviceSchema = deviceClassificationSchema.extend({
   customerId: z.string(),
 })
 
+export const editDeviceSchema = deviceClassificationSchema.extend({
+  serialNumber: z.string().trim().min(1, 'Укажите серийный номер'),
+})
+
 export type DeviceClassificationFormValues = z.infer<typeof deviceClassificationSchema>
 export type CreateDeviceFormValues = z.infer<typeof createDeviceSchema>
+export type EditDeviceFormValues = z.infer<typeof editDeviceSchema>

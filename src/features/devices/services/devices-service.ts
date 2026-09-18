@@ -95,6 +95,7 @@ export type DeviceInput = {
 
 export type UpdateDeviceInput = {
   deviceId: string
+  serialNumber: string
   groupId: string | null
   brandId: string | null
   modelId: string | null
@@ -394,6 +395,7 @@ export async function createDevice(input: DeviceInput): Promise<string> {
 export async function updateDevice(input: UpdateDeviceInput): Promise<void> {
   const { error } = await getSupabase().rpc('update_device', {
     target_device_id: input.deviceId,
+    device_serial: input.serialNumber,
     device_group_id: input.groupId,
     device_brand_id: input.brandId,
     device_model_id: input.modelId,
@@ -401,6 +403,10 @@ export async function updateDevice(input: UpdateDeviceInput): Promise<void> {
   })
 
   if (error) {
+    const message = typeof error.message === 'string' ? error.message : ''
+    if (message.includes('уже существует')) {
+      throw new DeviceDuplicateError(readHint(error) || null, error)
+    }
     throw toAppError(error, 'Не удалось сохранить прибор.')
   }
 }

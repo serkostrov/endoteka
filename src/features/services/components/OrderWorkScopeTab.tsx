@@ -1,12 +1,13 @@
-import { OrderPartsTab } from '@/features/inventory'
+import { SectionCard } from '@/components/shared/SectionCard'
 
-import { OrderServicesBlock } from './OrderServicesBlock'
+import { OrderWorkCompositionSearch } from './OrderWorkCompositionSearch'
+import { OrderWorkCompositionTable } from './OrderWorkCompositionTable'
 
 export function OrderWorkScopeTab({ orderId }: { orderId: string }) {
   return (
-    <div className="space-y-4">
-      <OrderPartsTab orderId={orderId} />
-      <OrderServicesBlock orderId={orderId} />
-    </div>
+    <SectionCard title="Состав работы" flat className="space-y-4">
+      <OrderWorkCompositionSearch orderId={orderId} />
+      <OrderWorkCompositionTable orderId={orderId} />
+    </SectionCard>
   )
 }

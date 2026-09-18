@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { routes } from '@/lib/constants/routes'
+import { routes, sheets } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDateTime } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
@@ -31,10 +31,10 @@ export function NotificationsButton({
 
   function targetPath(entityType: string | null, entityId: string | null) {
     if (entityType === 'order' && entityId) {
-      return routes.order.replace(':id', entityId)
+      return sheets.order(entityId)
     }
     if (entityType === 'task' && entityId) {
-      return routes.task.replace(':id', entityId)
+      return sheets.task(entityId)
     }
     return null
   }

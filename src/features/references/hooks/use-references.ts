@@ -53,6 +53,7 @@ export function useUpsertReferenceItem(setId: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.references.items(setId) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.references.sets })
+      await queryClient.invalidateQueries({ queryKey: ['references', 'items-by-code'] })
     },
   })
 }
@@ -66,6 +67,7 @@ export function useSetReferenceItemActive(setId: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.references.items(setId) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.references.sets })
+      await queryClient.invalidateQueries({ queryKey: ['references', 'items-by-code'] })
     },
   })
 }
@@ -77,6 +79,7 @@ export function useReorderReferenceItems(setId: string) {
     mutationFn: (itemIds: string[]) => reorderReferenceItems(setId, itemIds),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.references.items(setId) })
+      await queryClient.invalidateQueries({ queryKey: ['references', 'items-by-code'] })
     },
   })
 }
@@ -89,6 +92,7 @@ export function useDeleteReferenceItem(setId: string) {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.references.items(setId) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.references.sets })
+      await queryClient.invalidateQueries({ queryKey: ['references', 'items-by-code'] })
     },
   })
 }

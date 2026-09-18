@@ -106,10 +106,11 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <SectionCard
         title="Файлы"
         description="Фото и PDF по этому заказу."
+        flat
         actions={
           canAddFiles ? (
             <div className="flex flex-wrap items-center gap-2">

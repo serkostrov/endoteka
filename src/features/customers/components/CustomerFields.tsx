@@ -1,15 +1,14 @@
-import { Link } from 'react-router-dom'
+import type { UseFormReturn } from 'react-hook-form'
 
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, CustomerKind, customerKindLabels } from '@/lib/constants/customers'
-import { routes } from '@/lib/constants/routes'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-import type { UseFormReturn } from 'react-hook-form'
+import { cn } from '@/lib/utils'
 
 import { useCustomerInnMatches } from '../hooks/use-customers'
 import { nameLabel, type CustomerFormValues } from '../schemas'
@@ -19,18 +18,30 @@ type CustomerFieldsProps = {
   disabled?: boolean
   excludeCustomerId?: string
   hideKind?: boolean
+  /** Скрыть имя — когда оно в шапке. */
+  hideName?: boolean
+  /** Карточка: сетка 2 колонки. */
+  layout?: 'form' | 'card'
 }
 
-export function CustomerFields({ form, disabled = false, excludeCustomerId, hideKind = false }: CustomerFieldsProps) {
+export function CustomerFields({
+  form,
+  disabled = false,
+  excludeCustomerId,
+  hideKind = false,
+  hideName = false,
+  layout = 'form',
+}: CustomerFieldsProps) {
   const kind = form.watch('kind')
   const inn = form.watch('inn')
   const isOrg = kind === CustomerKind.Organization
   const debouncedInn = useDebouncedValue(inn.trim(), CUSTOMER_SEARCH_DEBOUNCE_MS)
   const matchesQuery = useCustomerInnMatches(disabled ? '' : debouncedInn, excludeCustomerId)
   const matches = matchesQuery.data ?? []
+  const card = layout === 'card'
 
   return (
-    <div className="space-y-4">
+    <div className={cn(card ? 'space-y-3' : 'space-y-4')}>
       {matches.length > 0 ? (
         <Alert>
           <AlertTitle>Похожий ИНН уже есть</AlertTitle>
@@ -39,9 +50,9 @@ export function CustomerFields({ form, disabled = false, excludeCustomerId, hide
             <ul className="space-y-1">
               {matches.map((item) => (
                 <li key={item.id}>
-                  <Button asChild variant="link" className="h-auto px-0">
-                    <Link to={routes.customer.replace(':id', item.id)}>Открыть {item.name}</Link>
-                  </Button>
+                  <EntitySheetLink kind="customer" id={item.id}>
+                    Открыть {item.name}
+                  </EntitySheetLink>
                 </li>
               ))}
             </ul>
@@ -82,120 +93,49 @@ export function CustomerFields({ form, disabled = false, excludeCustomerId, hide
         />
       )}
 
-      <FormField
-        control={form.control}
-        name="name"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>{nameLabel(kind)}</FormLabel>
-            <FormControl>
-              <Input
-                {...field}
-                disabled={disabled}
-                autoComplete={isOrg ? 'organization' : 'name'}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <div className="grid gap-4 sm:grid-cols-2">
+      {hideName ? null : (
         <FormField
           control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>{nameLabel(kind)}</FormLabel>
+              <FormControl>
+                <Input {...field} disabled={disabled} autoComplete={isOrg ? 'organization' : 'name'} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
+      <div className={cn('grid gap-4 sm:grid-cols-2', card && 'gap-3')}>
+        <TextField
+          form={form}
           name="contactName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{isOrg ? 'Контактное лицо' : 'Доп. контакт'}</FormLabel>
-              <FormControl>
-                <Input {...field} disabled={disabled} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          label={isOrg ? 'Контактное лицо' : 'Доп. контакт'}
+          disabled={disabled}
         />
-        <FormField
-          control={form.control}
-          name="city"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Город</FormLabel>
-              <FormControl>
-                <Input {...field} disabled={disabled} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="phone"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Телефон</FormLabel>
-              <FormControl>
-                <Input {...field} disabled={disabled} inputMode="tel" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
+        <TextField form={form} name="city" label="Город" disabled={disabled} />
+        <TextField form={form} name="phone" label="Телефон" disabled={disabled} inputMode="tel" />
+        <TextField
+          form={form}
           name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input {...field} disabled={disabled} type="email" autoComplete="off" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          label="Email"
+          disabled={disabled}
+          type="email"
+          autoComplete="off"
         />
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name="inn"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>ИНН</FormLabel>
-              <FormControl>
-                <Input {...field} disabled={disabled} inputMode="numeric" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        <TextField form={form} name="inn" label="ИНН" disabled={disabled} inputMode="numeric" />
         {isOrg ? (
-          <FormField
-            control={form.control}
-            name="kpp"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>КПП</FormLabel>
-                <FormControl>
-                  <Input {...field} disabled={disabled} inputMode="numeric" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <TextField form={form} name="kpp" label="КПП" disabled={disabled} inputMode="numeric" />
         ) : null}
-        <FormField
-          control={form.control}
+        <TextField
+          form={form}
           name="ogrn"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>{isOrg ? 'ОГРН' : 'ОГРНИП'}</FormLabel>
-              <FormControl>
-                <Input {...field} disabled={disabled} inputMode="numeric" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+          label={isOrg ? 'ОГРН' : 'ОГРНИП'}
+          disabled={disabled}
+          inputMode="numeric"
         />
       </div>
 
@@ -213,5 +153,46 @@ export function CustomerFields({ form, disabled = false, excludeCustomerId, hide
         )}
       />
     </div>
+  )
+}
+
+function TextField({
+  form,
+  name,
+  label,
+  disabled,
+  type,
+  inputMode,
+  autoComplete,
+}: {
+  form: UseFormReturn<CustomerFormValues>
+  name: keyof CustomerFormValues
+  label: string
+  disabled: boolean
+  type?: string
+  inputMode?: 'tel' | 'numeric' | 'email' | 'text'
+  autoComplete?: string
+}) {
+  return (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <FormControl>
+            <Input
+              {...field}
+              value={typeof field.value === 'string' ? field.value : ''}
+              disabled={disabled}
+              type={type}
+              inputMode={inputMode}
+              autoComplete={autoComplete}
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   )
 }

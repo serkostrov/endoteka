@@ -24,6 +24,7 @@ export type InventoryItem = {
   code: string
   article: string
   barcode: string
+  barcodeType: string
   name: string
   categoryId: string
   categoryName: string
@@ -151,7 +152,7 @@ export type OrderPartBatch = {
 
 export type OrderInventoryUsage = {
   id: string
-  itemId: string
+  itemId: string | null
   itemName: string
   itemCode: string
   itemArticle: string
@@ -212,6 +213,7 @@ function mapItem(row: {
   code: string
   article: string
   barcode: string
+  barcode_type?: string
   name: string
   category_id: string
   category_name: string
@@ -229,6 +231,7 @@ function mapItem(row: {
     code: row.code,
     article: row.article,
     barcode: row.barcode,
+    barcodeType: row.barcode_type || 'code128',
     name: row.name,
     categoryId: row.category_id,
     categoryName: row.category_name,
@@ -254,6 +257,7 @@ function mapItemFromCard(value: Json | undefined): InventoryItem | null {
     code: asString(row.code),
     article: asString(row.article),
     barcode: asString(row.barcode),
+    barcodeType: asString(row.barcode_type) || 'code128',
     name: asString(row.name),
     categoryId: asString(row.category_id),
     categoryName: asString(row.category_name),
@@ -380,10 +384,20 @@ export async function getInventoryItemCard(id: string): Promise<InventoryItemCar
 
   return {
     item,
-    batches: Array.isArray(payload?.batches) ? payload.batches.flatMap((row) => {
-      const batch = mapBatch(row)
-      return batch ? [batch] : []
-    }) : [],
+    batches: Array.isArray(payload?.batches)
+      ? payload.batches
+          .flatMap((row) => {
+            const batch = mapBatch(row)
+            return batch ? [batch] : []
+          })
+          .sort((a, b) => {
+            const byDate = b.receiptDate.localeCompare(a.receiptDate)
+            if (byDate !== 0) {
+              return byDate
+            }
+            return b.createdAt.localeCompare(a.createdAt)
+          })
+      : [],
     movements: Array.isArray(payload?.movements) ? payload.movements.flatMap((row) => {
       const movement = mapMovement(row)
       return movement ? [movement] : []
@@ -482,6 +496,24 @@ export async function consumeInventoryForOrder(
   if (error) {
     throw toAppError(error, 'Не удалось списать позицию в заказ.')
   }
+}
+
+export async function addOrderCustomPartLine(
+  orderId: string,
+  input: { name: string; quantity: number; unitPrice: number },
+): Promise<string> {
+  const { data, error } = await getSupabase().rpc('add_order_custom_part_line', {
+    target_order_id: orderId,
+    line_name: input.name,
+    line_quantity: input.quantity,
+    line_unit_price: input.unitPrice,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось добавить позицию в заказ.')
+  }
+
+  return data
 }
 
 export async function setOrderPartLine(
@@ -663,12 +695,12 @@ export async function getOrderInventoryUsage(orderId: string): Promise<OrderInve
     return [
       {
         id: item.id,
-        itemId: asString(item.item_id),
+        itemId: asId(item.item_id),
         itemName: asString(item.item_name),
         itemCode: asString(item.item_code),
         itemArticle: asString(item.item_article),
         itemBarcode: asString(item.item_barcode),
-        unitName: asString(item.unit_name),
+        unitName: asString(item.unit_name) || 'шт',
         quantity: asNumber(item.quantity),
         unitPrice: asNumber(item.unit_price),
         batches: Array.isArray(item.batches)
@@ -692,3 +724,141 @@ export async function getOrderInventoryUsage(orderId: string): Promise<OrderInve
     ]
   })
 }
+
+const ITEM_PHOTOS_BUCKET = 'inventory-item-photos'
+const ITEM_PHOTO_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
+const ITEM_PHOTO_MAX_BYTES = 10 * 1024 * 1024
+
+export type InventoryItemPhoto = {
+  id: string
+  filePath: string
+  fileName: string
+  mimeType: string
+  fileSize: number
+  sortOrder: number
+  createdAt: string
+  signedUrl: string | null
+}
+
+export async function setInventoryItemLabel(
+  itemId: string,
+  barcode: string,
+  barcodeType: string,
+): Promise<void> {
+  const { error } = await getSupabase().rpc('set_inventory_item_label', {
+    target_item_id: itemId,
+    item_barcode: barcode,
+    item_barcode_type: barcodeType,
+  })
+  if (error) {
+    throw toAppError(error, 'Не удалось сохранить этикетку.')
+  }
+}
+
+export async function listInventoryItemPhotos(itemId: string): Promise<InventoryItemPhoto[]> {
+  const { data, error } = await getSupabase().rpc('list_inventory_item_photos', {
+    target_item_id: itemId,
+  })
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить фото.')
+  }
+
+  const rows = data ?? []
+  return Promise.all(
+    rows.map(async (row) => {
+      const signed = await getSupabase()
+        .storage.from(ITEM_PHOTOS_BUCKET)
+        .createSignedUrl(row.file_path, 3600)
+      return {
+        id: row.id,
+        filePath: row.file_path,
+        fileName: row.file_name,
+        mimeType: row.mime_type,
+        fileSize: row.file_size,
+        sortOrder: row.sort_order,
+        createdAt: row.created_at,
+        signedUrl: signed.data?.signedUrl ?? null,
+      }
+    }),
+  )
+}
+
+export function validateInventoryItemPhoto(file: File): void {
+  if (file.size > ITEM_PHOTO_MAX_BYTES) {
+    throw toAppError({ message: 'Фото больше 10 МБ.' }, 'Фото больше 10 МБ.')
+  }
+  const mime = resolvePhotoMime(file)
+  if (!mime) {
+    throw toAppError(
+      { message: 'Можно загрузить только JPEG, PNG или WebP.' },
+      'Можно загрузить только JPEG, PNG или WebP.',
+    )
+  }
+}
+
+function resolvePhotoMime(file: File): string | null {
+  const type = file.type.trim().toLowerCase()
+  if (ITEM_PHOTO_MIME.includes(type)) {
+    return type === 'image/jpg' ? 'image/jpeg' : type
+  }
+  const name = file.name.toLowerCase()
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+    return 'image/jpeg'
+  }
+  if (name.endsWith('.png')) {
+    return 'image/png'
+  }
+  if (name.endsWith('.webp')) {
+    return 'image/webp'
+  }
+  return null
+}
+
+export async function uploadInventoryItemPhoto(itemId: string, file: File): Promise<void> {
+  validateInventoryItemPhoto(file)
+  const mime = resolvePhotoMime(file) ?? 'image/jpeg'
+  const extension = file.name.includes('.')
+    ? file.name.slice(file.name.lastIndexOf('.'))
+    : mime === 'image/png'
+      ? '.png'
+      : mime === 'image/webp'
+        ? '.webp'
+        : '.jpg'
+  const path = `${itemId}/${crypto.randomUUID()}${extension}`
+  const supabase = getSupabase()
+  const { error: uploadError } = await supabase.storage.from(ITEM_PHOTOS_BUCKET).upload(path, file, {
+    contentType: mime,
+    upsert: false,
+  })
+  if (uploadError) {
+    throw toAppError(uploadError, 'Не удалось загрузить фото.')
+  }
+
+  const { error } = await supabase.rpc('register_inventory_item_photo', {
+    target_item_id: itemId,
+    file_path: path,
+    file_name: file.name || `photo${extension}`,
+    mime_type: mime,
+    file_size: file.size,
+  })
+  if (error) {
+    await supabase.storage.from(ITEM_PHOTOS_BUCKET).remove([path])
+    throw toAppError(error, 'Не удалось сохранить фото.')
+  }
+}
+
+export async function deleteInventoryItemPhoto(photoId: string, filePath: string | null): Promise<void> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase.rpc('delete_inventory_item_photo', {
+    target_photo_id: photoId,
+  })
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить фото.')
+  }
+  const path = filePath || data
+  if (path) {
+    await supabase.storage.from(ITEM_PHOTOS_BUCKET).remove([path])
+  }
+}
+
+export const INVENTORY_ITEM_PHOTO_ACCEPT = 'image/jpeg,image/png,image/webp,image/jpg,.jpg,.jpeg,.png,.webp'

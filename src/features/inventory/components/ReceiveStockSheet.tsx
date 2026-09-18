@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
+import { Briefcase, Trash2 } from 'lucide-react'
 
 import { DatePicker } from '@/components/shared/DatePicker'
 import { EmptyState } from '@/components/shared/EmptyState'
@@ -10,7 +10,6 @@ import { IconActionButton } from '@/components/shared/IconActionButton'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
   Sheet,
   SheetClose,
@@ -21,10 +20,19 @@ import {
   SheetTitle,
   runSheetFormSave,
 } from '@/components/ui/sheet'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { CustomerPicker } from '@/features/customers/components/CustomerPicker'
 import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
+import { cn } from '@/lib/utils'
 import { toIsoDate } from '@/lib/utils/date'
 
 import { CreateItemDialog } from './CreateItemDialog'
@@ -51,6 +59,10 @@ type ReceiveStockSheetProps = {
   onOpenChange: (open: boolean) => void
   presetSupplier?: ReceiptSupplierPreset
 }
+
+const cellPad = 'px-2 py-1.5'
+const spinless =
+  '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
 export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: ReceiveStockSheetProps) {
   const receive = useReceiveInventory()
@@ -255,28 +267,68 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                   <EmptyState
                     title="Строк пока нет"
                     description="Нажмите на поле поиска и выберите позицию."
-                    className="py-8"
+                    className="border-0 bg-transparent py-8"
                   />
                 ) : (
-                  <ul className="grid gap-1.5">
-                    {lines.map((line) => (
-                      <li key={line.key}>
-                        <ReceiptDraftCard
-                          line={line}
-                          onChange={(patch) => updateLine(line.key, patch)}
-                          onRemove={() => setLines((current) => current.filter((item) => item.key !== line.key))}
-                          onOpenItem={setOpenedItemId}
-                        />
-                      </li>
-                    ))}
-                  </ul>
+                  <>
+                    <div className="overflow-x-auto">
+                      <Table className="table-fixed">
+                        <colgroup>
+                          <col style={{ width: '2rem' }} />
+                          <col />
+                          <col style={{ width: '5.5rem' }} />
+                          <col style={{ width: '5.75rem' }} />
+                          <col style={{ width: '5.5rem' }} />
+                          <col style={{ width: '2rem' }} />
+                        </colgroup>
+                        <TableHeader>
+                          <TableRow className="border-b hover:bg-transparent">
+                            <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+                            <TableHead className={cn(cellPad, 'h-8 text-xs font-medium text-muted-foreground')}>
+                              Наименование
+                            </TableHead>
+                            <TableHead
+                              className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
+                            >
+                              Цена, ₽
+                            </TableHead>
+                            <TableHead
+                              className={cn(
+                                cellPad,
+                                'h-8 pr-5 text-right text-xs font-medium text-muted-foreground',
+                              )}
+                            >
+                              Кол-во
+                            </TableHead>
+                            <TableHead
+                              className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
+                            >
+                              Сумма, ₽
+                            </TableHead>
+                            <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {lines.map((line) => (
+                            <ReceiptDraftRow
+                              key={line.key}
+                              line={line}
+                              onChange={(patch) => updateLine(line.key, patch)}
+                              onRemove={() =>
+                                setLines((current) => current.filter((item) => item.key !== line.key))
+                              }
+                              onOpenItem={setOpenedItemId}
+                            />
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                    <p className="text-right text-sm">
+                      <span className="text-muted-foreground">Итого </span>
+                      <span className="font-semibold tabular-nums">{formatMoney(documentTotal)}</span>
+                    </p>
+                  </>
                 )}
-                {lines.length > 0 ? (
-                  <p className="text-right text-sm">
-                    <span className="text-muted-foreground">Итого </span>
-                    <span className="font-semibold tabular-nums">{formatMoney(documentTotal)} ₽</span>
-                  </p>
-                ) : null}
               </div>
 
               <SheetFooter className="px-0">
@@ -312,7 +364,7 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
   )
 }
 
-function ReceiptDraftCard({
+function ReceiptDraftRow({
   line,
   onChange,
   onRemove,
@@ -326,8 +378,6 @@ function ReceiptDraftCard({
   const amount = line.quantity * line.purchasePrice
   const meta = [line.item.code, line.item.article].filter(Boolean).join(' · ')
   const unit = line.item.unitName || 'шт'
-  const qtyId = `${line.key}-qty`
-  const priceId = `${line.key}-price`
 
   function commitQuantity(raw: string) {
     const parsed = Number(raw)
@@ -354,84 +404,88 @@ function ReceiptDraftCard({
   }
 
   return (
-    <article
-      className="group cursor-pointer rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50"
-      onClick={() => onOpenItem(line.item.id)}
-    >
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-baseline gap-2">
-            <p className="min-w-0 truncate text-sm font-medium text-primary underline-offset-2 group-hover:underline">
-              {line.item.name}
-            </p>
-            {meta ? <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">{meta}</span> : null}
-          </div>
-          {meta ? <p className="truncate text-xs text-muted-foreground sm:hidden">{meta}</p> : null}
+    <TableRow className="group/row border-b last:border-b-0 hover:bg-muted/20">
+      <TableCell className={cn(cellPad, 'w-8 text-muted-foreground')}>
+        <Briefcase className="size-3.5 opacity-70" aria-hidden />
+        <span className="sr-only">Товар</span>
+      </TableCell>
+      <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal')}>
+        <button
+          type="button"
+          className="flex min-w-0 max-w-full items-baseline gap-2 text-left text-primary underline-offset-2 hover:underline"
+          onClick={() => onOpenItem(line.item.id)}
+        >
+          <span className="truncate text-sm font-medium">{line.item.name}</span>
+          {meta ? (
+            <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground sm:inline">{meta}</span>
+          ) : null}
+        </button>
+        {meta ? <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:hidden">{meta}</p> : null}
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Остаток: {formatQuantity(line.item.stockQuantity)} {unit}
+        </p>
+      </TableCell>
+      <TableCell className={cn(cellPad, 'text-right')}>
+        <Input
+          key={`${line.key}-price-${line.purchasePrice}`}
+          type="number"
+          min={0}
+          step="0.01"
+          aria-label="Цена"
+          className={cn(
+            spinless,
+            'ml-auto h-7 w-[4.75rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
+            'hover:border-border hover:bg-background',
+            'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
+          )}
+          defaultValue={line.purchasePrice}
+          onFocus={(event) => event.target.select()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.currentTarget.blur()
+            }
+          }}
+          onBlur={(event) => commitPrice(event.target.value)}
+        />
+      </TableCell>
+      <TableCell className={cn(cellPad, 'text-right')}>
+        <div className="inline-flex w-full items-center justify-end gap-1">
+          <Input
+            key={`${line.key}-qty-${line.quantity}`}
+            type="number"
+            min={0.001}
+            step="0.001"
+            aria-label="Количество"
+            className={cn(
+              spinless,
+              'h-7 w-[2.75rem] shrink-0 border-transparent bg-transparent px-0.5 text-right text-sm shadow-none tabular-nums',
+              'hover:border-border hover:bg-background',
+              'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
+            )}
+            defaultValue={line.quantity}
+            onFocus={(event) => event.target.select()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur()
+              }
+            }}
+            onBlur={(event) => commitQuantity(event.target.value)}
+          />
+          <span className="w-8 shrink-0 text-left text-[11px] leading-none text-muted-foreground">{unit}</span>
         </div>
+      </TableCell>
+      <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>{formatMoney(amount)}</TableCell>
+      <TableCell className={cellPad}>
         <IconActionButton
           label="Убрать"
           variant="ghost"
           size="icon-xs"
-          className="-mt-0.5 -mr-1 shrink-0 text-destructive hover:text-destructive"
-          onClick={(event) => {
-            event.stopPropagation()
-            onRemove()
-          }}
+          className="opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100 text-destructive hover:text-destructive"
+          onClick={onRemove}
         >
           <Trash2 />
         </IconActionButton>
-      </div>
-
-      <div
-        className="mt-2 flex flex-wrap items-end gap-x-6 gap-y-2"
-        onClick={(event) => event.stopPropagation()}
-        onPointerDown={(event) => event.stopPropagation()}
-      >
-        <div className="space-y-0.5">
-          <Label htmlFor={qtyId} className="text-[11px] font-normal leading-none text-muted-foreground">
-            Кол-во
-          </Label>
-          <div className="flex items-center gap-1">
-            <Input
-              id={qtyId}
-              key={`${line.key}-qty-${line.quantity}`}
-              type="number"
-              min={0.001}
-              step="0.001"
-              className="h-7 w-[4.75rem] px-2 tabular-nums"
-              defaultValue={line.quantity}
-              onBlur={(event) => commitQuantity(event.target.value)}
-            />
-            <span className="text-xs text-muted-foreground">{unit}</span>
-          </div>
-        </div>
-        <div className="space-y-0.5">
-          <Label htmlFor={priceId} className="text-[11px] font-normal leading-none text-muted-foreground">
-            Цена
-          </Label>
-          <div className="flex items-center gap-1">
-            <Input
-              id={priceId}
-              key={`${line.key}-price-${line.purchasePrice}`}
-              type="number"
-              min={0}
-              step="0.01"
-              className="h-7 w-[4.75rem] px-2 tabular-nums"
-              defaultValue={line.purchasePrice}
-              onBlur={(event) => commitPrice(event.target.value)}
-            />
-            <span className="text-xs text-muted-foreground">₽</span>
-          </div>
-        </div>
-        <div className="min-w-16 space-y-0.5">
-          <p className="text-[11px] leading-none text-muted-foreground">Сумма</p>
-          <p className="flex h-7 items-center text-sm font-medium tabular-nums">{formatMoney(amount)} ₽</p>
-        </div>
-      </div>
-
-      <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-        Остаток: {formatQuantity(line.item.stockQuantity)} {unit}
-      </p>
-    </article>
+      </TableCell>
+    </TableRow>
   )
 }

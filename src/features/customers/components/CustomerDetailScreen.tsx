@@ -1,20 +1,31 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
-import { Pencil } from 'lucide-react'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
-import { IconActionButton } from '@/components/shared/IconActionButton'
+import { InlineTextInput } from '@/components/shared/InlineTextInput'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PageTabs } from '@/components/shared/PageTabs'
 import { SectionCard } from '@/components/shared/SectionCard'
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import { Button } from '@/components/ui/button'
-import { Form } from '@/components/ui/form'
+import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  useSheetDirty,
+  runSheetFormSave,
+  useSheetExitPresence,
+} from '@/components/ui/sheet'
 import { DynamicFieldRenderer, DynamicFieldValue, DynamicFieldsGrid, saveDynamicFieldValues } from '@/features/dynamic-fields'
 import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
@@ -22,12 +33,10 @@ import { useHasPermission } from '@/features/auth'
 import { deviceSerialLine, deviceTitle } from '@/features/devices/classification'
 import { ReceiveStockSheet } from '@/features/inventory/components/ReceiveStockSheet'
 import { ReceiptDeleteControl } from '@/features/inventory/components/ReceiptDeleteControl'
-import { useInventoryReceipt } from '@/features/inventory/hooks/use-inventory'
 import { CustomerKind } from '@/lib/constants/customers'
 import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
 import { formatDate, formatDateTime } from '@/lib/utils/date'
@@ -35,57 +44,139 @@ import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/f
 
 import { CustomerFields } from './CustomerFields'
 import { customerKindLabel, customerFormSchema, nameLabel, type CustomerFormValues } from '../schemas'
-import { useCustomerCard, useUpdateCustomer } from '../hooks/use-customers'
+import { useCustomerCard, useDeleteCustomer, useUpdateCustomer } from '../hooks/use-customers'
 import type { Customer, CustomerDevice, CustomerHistoryEvent, CustomerOrder, CustomerReceipt } from '../services/customers-service'
 
 type CustomerTab = 'card' | 'devices' | 'orders' | 'receipts' | 'history'
 
-export function CustomerDetailScreen() {
-  const { id } = useParams()
-  const cardQuery = useCustomerCard(id)
-
-  if (cardQuery.isLoading) {
-    return <LoadingState label="Загрузка контакта" />
-  }
-
-  if (cardQuery.error) {
-    return <ErrorState description={getErrorMessage(cardQuery.error)} />
-  }
-
-  const card = cardQuery.data
-  if (!card) {
-    return <ErrorState description="Контакт не найден." />
-  }
-
-  const { customer, devices, orders, receipts, history } = card
-
+export function CustomerDetailSheet({
+  customerId,
+  open,
+  onOpenChange,
+}: {
+  customerId: string | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /** Сохранено для совместимости: правка по клику, без режима редактирования. */
+  initialEditing?: boolean
+}) {
+  const presence = useSheetExitPresence(open, customerId)
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={customer.name}
-        description={`${customerKindLabel(customer.kind)} · обновлён ${formatDateTime(customer.updatedAt)}`}
-      />
-
-      <CustomerCardTabs customer={customer} devices={devices} orders={orders} receipts={receipts} history={history} />
-    </div>
+    <Sheet open={presence.open} onOpenChange={onOpenChange}>
+      {presence.id ? (
+        <CustomerDetailSheetContent
+          key={presence.id}
+          customerId={presence.id}
+          onClose={() => onOpenChange(false)}
+        />
+      ) : null}
+    </Sheet>
   )
 }
 
-function CustomerCardTabs({
+function CustomerDetailSheetContent({
+  customerId,
+  onClose,
+}: {
+  customerId: string
+  onClose: () => void
+}) {
+  const cardQuery = useCustomerCard(customerId)
+  const canUpdate = useHasPermission(Permission.CustomersUpdate)
+  const canDelete = useHasPermission(Permission.CustomersDelete)
+  const remove = useDeleteCustomer()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [tab, setTab] = useState<CustomerTab>('card')
+  const customer = cardQuery.data?.customer
+
+  async function handleDelete() {
+    try {
+      await remove.mutateAsync(customerId)
+      toast.success('Контакт удалён')
+      setDeleteOpen(false)
+      onClose()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  return (
+    <SheetContent
+      side="right"
+      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,40rem)]"
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      actions={
+        customer ? (
+          <SheetEntityToolbar onDelete={canDelete ? () => setDeleteOpen(true) : undefined} />
+        ) : null
+      }
+    >
+      <SheetHeader className="sr-only">
+        <SheetTitle>Карточка контакта</SheetTitle>
+        <SheetDescription>Просмотр и редактирование контакта. Список остаётся на фоне.</SheetDescription>
+      </SheetHeader>
+      <div className="space-y-4 p-4 pr-14">
+        {cardQuery.isLoading ? (
+          <LoadingState label="Загрузка контакта" className="min-h-40" />
+        ) : cardQuery.error ? (
+          <ErrorState description={getErrorMessage(cardQuery.error)} />
+        ) : !cardQuery.data ? (
+          <ErrorState description="Контакт не найден." />
+        ) : (
+          <CustomerCardBody
+            customer={cardQuery.data.customer}
+            devices={cardQuery.data.devices}
+            orders={cardQuery.data.orders}
+            receipts={cardQuery.data.receipts}
+            history={cardQuery.data.history}
+            layout="sheet"
+            canEdit={canUpdate}
+            tab={tab}
+            onTabChange={setTab}
+          />
+        )}
+      </div>
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить контакт"
+        description={
+          customer
+            ? `${customer.name} будет удалён. Если есть связанные заказы или приборы, удаление не пройдёт.`
+            : ''
+        }
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+      />
+    </SheetContent>
+  )
+}
+
+function CustomerCardBody({
   customer,
   devices,
   orders,
   receipts,
   history,
+  layout,
+  canEdit,
+  tab: tabProp,
+  onTabChange,
 }: {
   customer: Customer
   devices: CustomerDevice[]
   orders: CustomerOrder[]
   receipts: CustomerReceipt[]
   history: CustomerHistoryEvent[]
+  layout: 'page' | 'sheet'
+  canEdit: boolean
+  tab?: CustomerTab
+  onTabChange?: (tab: CustomerTab) => void
 }) {
-  const navigate = useNavigate()
-  const [tab, setTab] = useState<CustomerTab>('card')
+  const [tabLocal, setTabLocal] = useState<CustomerTab>('card')
+  const tab = tabProp ?? tabLocal
+  const setTab = onTabChange ?? setTabLocal
   const showReceipts = receipts.length > 0
   const tabItems = [
     { id: 'card' as const, label: 'Карточка' },
@@ -97,87 +188,127 @@ function CustomerCardTabs({
 
   return (
     <div className="space-y-4">
-      <PageTabs
-        aria-label="Разделы карточки контакта"
-        value={tab}
-        onChange={setTab}
-        items={tabItems}
-      />
+      {canEdit ? (
+        <CustomerEditableCard
+          customer={customer}
+          layout={layout}
+          tab={tab}
+          onTabChange={setTab}
+          tabItems={tabItems}
+        />
+      ) : (
+        <>
+          {layout === 'page' ? (
+            <PageHeader
+              title={customer.name}
+              description={`${customerKindLabel(customer.kind)} · обновлён ${formatDateTime(customer.updatedAt)}`}
+            />
+          ) : (
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight">{customer.name}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {customerKindLabel(customer.kind)} · обновлён {formatDateTime(customer.updatedAt)}
+              </p>
+            </div>
+          )}
 
-      {tab === 'card' ? (
-        <div className="grid items-stretch gap-4 lg:grid-cols-2">
-          <CustomerDataSection customer={customer} />
-          <CustomerFieldsSection customerId={customer.id} />
-        </div>
-      ) : null}
+          <PageTabs aria-label="Разделы карточки контакта" value={tab} onChange={setTab} items={tabItems} />
 
-      {tab === 'devices' ? (
-        <SectionCard title="Приборы" description="Приборы из заказов этого клиента и текущей привязки.">
-          <DataTable
-            caption="Приборы клиента"
-            data={devices}
-            getRowId={(row) => row.id}
-            emptyTitle="Приборов нет"
-            emptyDescription="Появятся, когда клиент сдаст эндоскоп в ремонт."
-            onRowClick={(row) => navigate(routes.device.replace(':id', row.id))}
-            columns={[
-              { id: 'device', header: 'Прибор', cell: (row) => deviceTitle(row) },
-              { id: 'serial', header: 'Серийный номер', cell: (row) => row.serialNumber },
-            ]}
-          />
-        </SectionCard>
-      ) : null}
+          {tab === 'card' ? (
+            <div className="grid items-stretch gap-4">
+              <SectionCard title="Данные контакта" className="h-full">
+                <CustomerView customer={customer} />
+              </SectionCard>
+              <CustomerFieldsSection customerId={customer.id} canEdit={false} />
+            </div>
+          ) : null}
+        </>
+      )}
 
-      {tab === 'orders' ? (
-        <SectionCard title="Заказы" description="Обращения этой организации или физлица.">
-          <DataTable
-            caption="Заказы клиента"
-            data={orders}
-            getRowId={(row) => row.id}
-            emptyTitle="Заказов нет"
-            emptyDescription="Новые заказы появятся после приёмки."
-            onRowClick={(row) => navigate(routes.order.replace(':id', row.id))}
-            columns={[
-              { id: 'number', header: 'Номер', cell: (row) => row.number },
-              { id: 'device', header: 'Прибор', cell: (row) => (
-                <span className="block">
-                  <span className="block">{row.deviceLabel || '—'}</span>
-                  {row.serialNumber ? (
-                    <span className="block text-muted-foreground">{deviceSerialLine(row.serialNumber)}</span>
-                  ) : null}
-                </span>
-              ) },
-              { id: 'status', header: 'Статус', cell: (row) => row.statusName },
-              { id: 'created', header: 'Принят', cell: (row) => formatDate(row.createdAt) },
-            ]}
-          />
-        </SectionCard>
-      ) : null}
-
+      {tab === 'devices' ? <CustomerDevicesSection devices={devices} /> : null}
+      {tab === 'orders' ? <CustomerOrdersSection orders={orders} /> : null}
       {tab === 'receipts' && showReceipts ? (
         <CustomerReceiptsSection customer={customer} receipts={receipts} />
       ) : null}
-
-      {tab === 'history' ? (
-        <SectionCard title="История" description="Создание и изменения карточки. Записи только для чтения.">
-          {history.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Записей пока нет.</p>
-          ) : (
-            <ol className="space-y-3">
-              {history.map((event) => (
-                <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
-                  <p className="text-sm font-medium">{event.summary}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatDateTime(event.createdAt)}
-                    {event.actorName ? ` · ${event.actorName}` : ''}
-                  </p>
-                </li>
-              ))}
-            </ol>
-          )}
-        </SectionCard>
-      ) : null}
+      {tab === 'history' ? <CustomerHistorySection history={history} /> : null}
     </div>
+  )
+}
+
+function CustomerDevicesSection({ devices }: { devices: CustomerDevice[] }) {
+  const openSheet = useOpenEntitySheet()
+
+  return (
+    <SectionCard title="Приборы" description="Приборы из заказов этого клиента и текущей привязки.">
+      <DataTable
+        caption="Приборы клиента"
+        data={devices}
+        getRowId={(row) => row.id}
+        emptyTitle="Приборов нет"
+        emptyDescription="Появятся, когда клиент сдаст эндоскоп в ремонт."
+        onRowClick={(row) => openSheet('device', row.id)}
+        columns={[
+          { id: 'device', header: 'Прибор', cell: (row) => deviceTitle(row) },
+          { id: 'serial', header: 'Серийный номер', cell: (row) => row.serialNumber },
+        ]}
+      />
+    </SectionCard>
+  )
+}
+
+function CustomerOrdersSection({ orders }: { orders: CustomerOrder[] }) {
+  const openSheet = useOpenEntitySheet()
+
+  return (
+    <SectionCard title="Заказы" description="Обращения этой организации или физлица.">
+      <DataTable
+        caption="Заказы клиента"
+        data={orders}
+        getRowId={(row) => row.id}
+        emptyTitle="Заказов нет"
+        emptyDescription="Новые заказы появятся после приёмки."
+        onRowClick={(row) => openSheet('order', row.id)}
+        columns={[
+          { id: 'number', header: 'Номер', cell: (row) => row.number },
+          {
+            id: 'device',
+            header: 'Прибор',
+            cell: (row) => (
+              <span className="block">
+                <span className="block">{row.deviceLabel || '—'}</span>
+                {row.serialNumber ? (
+                  <span className="block text-muted-foreground">{deviceSerialLine(row.serialNumber)}</span>
+                ) : null}
+              </span>
+            ),
+          },
+          { id: 'status', header: 'Статус', cell: (row) => row.statusName },
+          { id: 'created', header: 'Принят', cell: (row) => formatDate(row.createdAt) },
+        ]}
+      />
+    </SectionCard>
+  )
+}
+
+function CustomerHistorySection({ history }: { history: CustomerHistoryEvent[] }) {
+  return (
+    <SectionCard title="История" description="Создание и изменения карточки. Записи только для чтения.">
+      {history.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Записей пока нет.</p>
+      ) : (
+        <ol className="space-y-3">
+          {history.map((event) => (
+            <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
+              <p className="text-sm font-medium">{event.summary}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatDateTime(event.createdAt)}
+                {event.actorName ? ` · ${event.actorName}` : ''}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </SectionCard>
   )
 }
 
@@ -189,45 +320,11 @@ function CustomerReceiptsSection({
   receipts: CustomerReceipt[]
 }) {
   const canReceive = useHasPermission(Permission.InventoryReceive)
+  const openSheet = useOpenEntitySheet()
   const [createOpen, setCreateOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | undefined>()
-  const receiptQuery = useInventoryReceipt(selectedId)
 
   return (
     <>
-      {selectedId && receiptQuery.data ? (
-        <SectionCard
-          title={`Приход · ${receiptQuery.data.supplier}`}
-          description={`${formatDate(receiptQuery.data.receiptDate)}${receiptQuery.data.notes ? ` · ${receiptQuery.data.notes}` : ''}`}
-          actions={
-            <div className="flex items-center gap-2">
-              <ReceiptDeleteControl
-                receipt={{ id: receiptQuery.data.id, supplier: receiptQuery.data.supplier }}
-                variant="button"
-                onDeleted={() => setSelectedId(undefined)}
-              />
-              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedId(undefined)}>
-                Скрыть
-              </Button>
-            </div>
-          }
-        >
-          <DataTable
-            caption="Строки прихода"
-            data={receiptQuery.data.lines}
-            getRowId={(row) => row.id}
-            emptyTitle="Строк нет"
-            columns={[
-              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-              { id: 'code', header: 'Код', cell: (row) => row.itemCode },
-              { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.quantity) },
-              { id: 'price', header: 'Цена', cell: (row) => formatMoney(row.unitPrice) },
-              { id: 'left', header: 'Остаток партии', cell: (row) => formatQuantity(row.remainingQuantity) },
-            ]}
-          />
-        </SectionCard>
-      ) : null}
-
       <SectionCard
         title="Поставки"
         description="Приходы от этой организации."
@@ -245,7 +342,7 @@ function CustomerReceiptsSection({
           getRowId={(row) => row.id}
           emptyTitle="Поставок нет"
           emptyDescription="Оформите приход от этой организации."
-          onRowClick={(row) => setSelectedId(row.id)}
+          onRowClick={(row) => openSheet('receipt', row.id)}
           columns={[
             { id: 'date', header: 'Дата', cell: (row) => formatDate(row.receiptDate) },
             { id: 'lines', header: 'Строк', cell: (row) => String(row.lineCount) },
@@ -270,14 +367,7 @@ function CustomerReceiptsSection({
                     className: 'w-[1%] whitespace-nowrap',
                     cell: (row: CustomerReceipt) => (
                       <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
-                        <ReceiptDeleteControl
-                          receipt={{ id: row.id, supplier: row.supplier }}
-                          onDeleted={() => {
-                            if (selectedId === row.id) {
-                              setSelectedId(undefined)
-                            }
-                          }}
-                        />
+                        <ReceiptDeleteControl receipt={{ id: row.id, supplier: row.supplier }} />
                       </div>
                     ),
                   },
@@ -296,29 +386,94 @@ function CustomerReceiptsSection({
   )
 }
 
-function CustomerDataSection({ customer }: { customer: Customer }) {
-  const canUpdate = useHasPermission(Permission.CustomersUpdate)
-  const [editing, setEditing] = useState(false)
+function CustomerEditableCard({
+  customer,
+  layout,
+  tab,
+  onTabChange,
+  tabItems,
+}: {
+  customer: Customer
+  layout: 'page' | 'sheet'
+  tab: CustomerTab
+  onTabChange: (tab: CustomerTab) => void
+  tabItems: { id: CustomerTab; label: string; count?: number }[]
+}) {
+  const update = useUpdateCustomer(customer.id)
+  const form = useForm<CustomerFormValues>({
+    resolver: zodResolver(customerFormSchema),
+    defaultValues: customerToForm(customer),
+  })
+  const kind = form.watch('kind')
+
+  useSheetDirty(form.formState.isDirty, () =>
+    runSheetFormSave(form.handleSubmit, async (values) => {
+      await update.mutateAsync(values)
+      form.reset(values)
+      toast.success('Контакт сохранён')
+    }),
+  )
+
+  async function onSubmit(values: CustomerFormValues) {
+    try {
+      await update.mutateAsync(values)
+      form.reset(values)
+      toast.success('Контакт сохранён')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  const titleField = (
+    <FormField
+      control={form.control}
+      name="name"
+      render={({ field }) => (
+        <FormItem className="min-w-0 gap-0.5">
+          <FormControl>
+            <InlineTextInput
+              {...field}
+              fit="fill"
+              aria-label={nameLabel(kind)}
+              placeholder={nameLabel(kind)}
+              className="text-lg font-semibold tracking-tight text-foreground md:text-lg"
+            />
+          </FormControl>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
+  )
 
   return (
-    <SectionCard
-      title="Данные контакта"
-      description={editing ? 'Изменения сохраняются отдельной кнопкой.' : undefined}
-      className="h-full"
-      actions={
-        canUpdate && !editing ? (
-          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
-            <Pencil />
-          </IconActionButton>
-        ) : null
-      }
-    >
-      {editing ? (
-        <CustomerEditForm customer={customer} onDone={() => setEditing(false)} />
-      ) : (
-        <CustomerView customer={customer} />
-      )}
-    </SectionCard>
+    <Form {...form}>
+      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
+        {layout === 'page' ? (
+          <PageHeader
+            title={titleField}
+            description={`${customerKindLabel(kind)} · обновлён ${formatDateTime(customer.updatedAt)}`}
+          />
+        ) : (
+          <div className="min-w-0 space-y-1">
+            {titleField}
+            <p className="text-sm text-muted-foreground">
+              {customerKindLabel(kind)} · обновлён {formatDateTime(customer.updatedAt)}
+            </p>
+          </div>
+        )}
+
+        <PageTabs aria-label="Разделы карточки контакта" value={tab} onChange={onTabChange} items={tabItems} />
+
+        {tab === 'card' ? (
+          <div className="grid items-stretch gap-4">
+            <SectionCard title="Данные контакта" className="h-full">
+              <CustomerFields form={form} excludeCustomerId={customer.id} hideName layout="card" />
+            </SectionCard>
+            <CustomerFieldsSection customerId={customer.id} canEdit />
+          </div>
+        ) : null}
+      </form>
+    </Form>
   )
 }
 
@@ -343,40 +498,6 @@ function CustomerView({ customer }: { customer: Customer }) {
   )
 }
 
-function CustomerEditForm({ customer, onDone }: { customer: Customer; onDone: () => void }) {
-  const update = useUpdateCustomer(customer.id)
-  const form = useForm<CustomerFormValues>({
-    resolver: zodResolver(customerFormSchema),
-    defaultValues: customerToForm(customer),
-  })
-
-  async function onSubmit(values: CustomerFormValues) {
-    try {
-      await update.mutateAsync(values)
-      toast.success('Контакт сохранён')
-      onDone()
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
-  }
-
-  return (
-    <Form {...form}>
-      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
-        <CustomerFields form={form} excludeCustomerId={customer.id} />
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={onDone}>
-            Отмена
-          </Button>
-          <Button type="submit" disabled={update.isPending}>
-            {update.isPending ? 'Сохранение…' : 'Сохранить'}
-          </Button>
-        </div>
-      </form>
-    </Form>
-  )
-}
-
 function customerToForm(customer: Customer): CustomerFormValues {
   return {
     kind: customer.kind,
@@ -392,8 +513,13 @@ function customerToForm(customer: Customer): CustomerFormValues {
   }
 }
 
-function CustomerFieldsSection({ customerId }: { customerId: string }) {
-  const canUpdate = useHasPermission(Permission.CustomersUpdate)
+function CustomerFieldsSection({
+  customerId,
+  canEdit,
+}: {
+  customerId: string
+  canEdit: boolean
+}) {
   const fieldsQuery = useDynamicFields(FieldEntity.Customers)
   const valuesQuery = useDynamicFieldValues(FieldEntity.Customers, customerId)
   const queryClient = useQueryClient()
@@ -401,10 +527,10 @@ function CustomerFieldsSection({ customerId }: { customerId: string }) {
     () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
     [fieldsQuery.data],
   )
-  const [editing, setEditing] = useState(false)
   const [extraDraft, setExtraDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
   const extraValues = extraDraft ?? valuesQuery.data ?? {}
-  const [saving, setSaving] = useState(false)
+
+  useSheetDirty(canEdit && extraDraft !== null, extraDraft ? () => saveExtra() : undefined)
 
   if (activeFields.length === 0) {
     return (
@@ -418,25 +544,17 @@ function CustomerFieldsSection({ customerId }: { customerId: string }) {
     )
   }
 
-  function cancelEdit() {
-    setExtraDraft(null)
-    setEditing(false)
-  }
-
   async function saveExtra() {
-    setSaving(true)
     try {
       await saveDynamicFieldValues(FieldEntity.Customers, customerId, extraValues)
       setExtraDraft(null)
-      setEditing(false)
       await queryClient.invalidateQueries({
         queryKey: queryKeys.fields.values(FieldEntity.Customers, customerId),
       })
       toast.success('Поля клиента сохранены')
     } catch (error) {
       toast.error(getErrorMessage(error))
-    } finally {
-      setSaving(false)
+      throw error
     }
   }
 
@@ -445,37 +563,20 @@ function CustomerFieldsSection({ customerId }: { customerId: string }) {
       title="Дополнительные поля"
       description="Настраиваются в справочнике полей карточек."
       className="h-full"
-      actions={
-        canUpdate && !editing ? (
-          <IconActionButton label="Редактировать" onClick={() => setEditing(true)}>
-            <Pencil />
-          </IconActionButton>
-        ) : null
-      }
     >
-      {editing ? (
-        <>
-          <DynamicFieldsGrid>
-            {activeFields.map((field) => (
-              <DynamicFieldRenderer
-                key={field.id}
-                field={field}
-                value={extraValues[field.code] ?? emptyFieldValue(field)}
-                onChange={(value) =>
-                  setExtraDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [field.code]: value }))
-                }
-              />
-            ))}
-          </DynamicFieldsGrid>
-          <div className="mt-4 flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={cancelEdit} disabled={saving}>
-              Отмена
-            </Button>
-            <Button type="button" onClick={() => void saveExtra()} disabled={saving}>
-              {saving ? 'Сохранение…' : 'Сохранить'}
-            </Button>
-          </div>
-        </>
+      {canEdit ? (
+        <DynamicFieldsGrid className="gap-3">
+          {activeFields.map((field) => (
+            <DynamicFieldRenderer
+              key={field.id}
+              field={field}
+              value={extraValues[field.code] ?? emptyFieldValue(field)}
+              onChange={(value) =>
+                setExtraDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [field.code]: value }))
+              }
+            />
+          ))}
+        </DynamicFieldsGrid>
       ) : (
         <dl className="grid grid-cols-12 gap-3 text-sm">
           {activeFields.map((field) => (

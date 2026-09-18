@@ -16,21 +16,14 @@ import { SetPasswordPage } from '@/pages/SetPasswordPage'
 const DashboardPage = lazyNamedPage(() => import('@/pages/DashboardPage'), 'DashboardPage')
 const OrderNewPage = lazyNamedPage(() => import('@/pages/OrderNewPage'), 'OrderNewPage')
 const OrdersPage = lazyNamedPage(() => import('@/pages/OrdersPage'), 'OrdersPage')
-const OrderDetailPage = lazyNamedPage(() => import('@/pages/OrderDetailPage'), 'OrderDetailPage')
 const TasksPage = lazyNamedPage(() => import('@/pages/TasksPage'), 'TasksPage')
-const TaskDetailPage = lazyNamedPage(() => import('@/pages/TaskDetailPage'), 'TaskDetailPage')
 const CustomersPage = lazyNamedPage(() => import('@/pages/CustomersPage'), 'CustomersPage')
-const CustomerDetailPage = lazyNamedPage(() => import('@/pages/CustomerDetailPage'), 'CustomerDetailPage')
 const DevicesPage = lazyNamedPage(() => import('@/pages/DevicesPage'), 'DevicesPage')
-const DeviceDetailPage = lazyNamedPage(() => import('@/pages/DeviceDetailPage'), 'DeviceDetailPage')
 const InventoryPage = lazyNamedPage(() => import('@/pages/InventoryPage'), 'InventoryPage')
 const InventoryItemsPage = lazyNamedPage(() => import('@/pages/InventoryItemsPage'), 'InventoryItemsPage')
-const InventoryItemPage = lazyNamedPage(() => import('@/pages/InventoryItemPage'), 'InventoryItemPage')
 const InventoryReceiptsPage = lazyNamedPage(() => import('@/pages/InventoryReceiptsPage'), 'InventoryReceiptsPage')
 const InventoryCountsPage = lazyNamedPage(() => import('@/pages/InventoryCountsPage'), 'InventoryCountsPage')
-const InventoryCountPage = lazyNamedPage(() => import('@/pages/InventoryCountPage'), 'InventoryCountPage')
 const SalesPage = lazyNamedPage(() => import('@/pages/SalesPage'), 'SalesPage')
-const SaleDetailPage = lazyNamedPage(() => import('@/pages/SaleDetailPage'), 'SaleDetailPage')
 const DocumentTemplatesPage = lazyNamedPage(() => import('@/pages/DocumentTemplatesPage'), 'DocumentTemplatesPage')
 const DocumentTemplatePage = lazyNamedPage(() => import('@/pages/DocumentTemplatePage'), 'DocumentTemplatePage')
 const DocumentTemplatePrintPage = lazyNamedPage(
@@ -66,6 +59,15 @@ function LegacyDocumentTemplatePrintRedirect() {
   const { id } = useParams()
   return <Navigate to={routes.documentTemplatePrint.replace(':id', id ?? '')} replace />
 }
+
+function DetailSheetRedirect({ listPath, param }: { listPath: string; param: string }) {
+  const { id } = useParams()
+  if (!id) {
+    return <Navigate to={listPath} replace />
+  }
+  return <Navigate to={`${listPath}?${param}=${encodeURIComponent(id)}`} replace />
+}
+
 
 const router = createBrowserRouter([
   {
@@ -103,28 +105,28 @@ const router = createBrowserRouter([
             element: <RequirePermission permission={Permission.OrdersRead} />,
             children: [
               { path: routes.orders, element: <OrdersPage /> },
-              { path: routes.order, element: <OrderDetailPage /> },
+              { path: routes.order, element: <DetailSheetRedirect listPath={routes.orders} param="order" /> },
             ],
           },
           {
             element: <RequirePermission permission={Permission.TasksRead} />,
             children: [
               { path: routes.tasks, element: <TasksPage /> },
-              { path: routes.task, element: <TaskDetailPage /> },
+              { path: routes.task, element: <DetailSheetRedirect listPath={routes.tasks} param="task" /> },
             ],
           },
           {
             element: <RequirePermission permission={Permission.CustomersRead} />,
             children: [
               { path: routes.customers, element: <CustomersPage /> },
-              { path: routes.customer, element: <CustomerDetailPage /> },
+              { path: routes.customer, element: <DetailSheetRedirect listPath={routes.customers} param="customer" /> },
             ],
           },
           {
             element: <RequirePermission permission={Permission.DevicesRead} />,
             children: [
               { path: routes.devices, element: <DevicesPage /> },
-              { path: routes.device, element: <DeviceDetailPage /> },
+              { path: routes.device, element: <DetailSheetRedirect listPath={routes.devices} param="device" /> },
             ],
           },
           {
@@ -132,7 +134,7 @@ const router = createBrowserRouter([
             children: [
               { path: routes.inventory, element: <InventoryPage /> },
               { path: routes.inventoryItems, element: <InventoryItemsPage /> },
-              { path: routes.inventoryItem, element: <InventoryItemPage /> },
+              { path: routes.inventoryItem, element: <DetailSheetRedirect listPath={routes.inventoryItems} param="item" /> },
             ],
           },
           {
@@ -143,14 +145,14 @@ const router = createBrowserRouter([
             element: <RequirePermission permission={Permission.InventoryCount} />,
             children: [
               { path: routes.inventoryCounts, element: <InventoryCountsPage /> },
-              { path: routes.inventoryCount, element: <InventoryCountPage /> },
+              { path: routes.inventoryCount, element: <DetailSheetRedirect listPath={routes.inventoryCounts} param="count" /> },
             ],
           },
           {
             element: <RequirePermission permission={Permission.SalesRead} />,
             children: [
               { path: routes.sales, element: <SalesPage /> },
-              { path: routes.sale, element: <SaleDetailPage /> },
+              { path: routes.sale, element: <DetailSheetRedirect listPath={routes.sales} param="sale" /> },
             ],
           },
           {

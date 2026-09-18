@@ -66,8 +66,9 @@ export function ReceiptDeleteControl({
     ) : (
       <IconActionButton
         label="Удалить"
+        variant="ghost"
         size={size}
-        className="text-destructive hover:text-destructive"
+        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
         onClick={() => setOpen(true)}
       >
         <Trash2 />

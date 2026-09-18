@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Plus, Trash2 } from 'lucide-react'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -14,13 +14,12 @@ import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, CustomerKind } from '@/lib/constants/customers'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 
 import { CreateCustomerDialog } from './CreateCustomerDialog'
-import { EditCustomerDialog } from './EditCustomerDialog'
+import { CustomerDetailSheet } from './CustomerDetailScreen'
 import { useCustomers, useDeleteCustomer } from '../hooks/use-customers'
 import type { Customer } from '../services/customers-service'
 
@@ -41,10 +40,8 @@ export function CustomersScreen() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
-  const [editTarget, setEditTarget] = useState<Customer | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
   const canCreate = useHasPermission(Permission.CustomersCreate)
-  const canUpdate = useHasPermission(Permission.CustomersUpdate)
   const canDelete = useHasPermission(Permission.CustomersDelete)
   const tab = parseTab(searchParams.get('tab'))
   const isPeople = tab === 'people'
@@ -52,13 +49,20 @@ export function CustomersScreen() {
   const debouncedSearch = useDebouncedValue(search, CUSTOMER_SEARCH_DEBOUNCE_MS)
   const customersQuery = useCustomers(debouncedSearch, page, pageSize, kind)
   const remove = useDeleteCustomer()
-  const navigate = useNavigate()
+  const customerId = searchParams.get('customer')
   const total = customersQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+  }
+
+  function openCustomer(id: string) {
+    const params = new URLSearchParams(searchParams)
+    params.set('customer', id)
+    params.delete('edit')
+    setSearchParams(params, { replace: true })
   }
 
   function setTab(next: ContactsTab) {
@@ -116,7 +120,7 @@ export function CustomersScreen() {
       className: 'hidden lg:table-cell',
       cell: (row) => row.city || '—',
     },
-    ...(canUpdate || canDelete
+    ...(canDelete
       ? [
           {
             id: 'actions',
@@ -124,20 +128,13 @@ export function CustomersScreen() {
             className: 'w-[1%] whitespace-nowrap',
             cell: (row: Customer) => (
               <div className="flex gap-1" onClick={(event) => event.stopPropagation()}>
-                {canUpdate ? (
-                  <IconActionButton label="Изменить" onClick={() => setEditTarget(row)}>
-                    <Pencil />
-                  </IconActionButton>
-                ) : null}
-                {canDelete ? (
-                  <IconActionButton
-                    label="Удалить"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => setDeleteTarget(row)}
-                  >
-                    <Trash2 />
-                  </IconActionButton>
-                ) : null}
+                <IconActionButton
+                  label="Удалить"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleteTarget(row)}
+                >
+                  <Trash2 />
+                </IconActionButton>
               </div>
             ),
           } satisfies DataTableColumn<Customer>,
@@ -196,7 +193,7 @@ export function CustomersScreen() {
               ? 'Добавьте первого человека в справочник.'
               : 'Добавьте первую организацию в справочник.'
         }
-        onRowClick={(row) => navigate(routes.customer.replace(':id', row.id))}
+        onRowClick={(row) => openCustomer(row.id)}
         pagination={{
           page,
           pageCount,
@@ -219,15 +216,6 @@ export function CustomersScreen() {
             : 'Реквизиты и контакты организации.'
         }
       />
-      <EditCustomerDialog
-        customer={editTarget}
-        open={Boolean(editTarget)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditTarget(null)
-          }
-        }}
-      />
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title={isPeople ? 'Удалить контакт' : 'Удалить организацию'}
@@ -246,6 +234,18 @@ export function CustomersScreen() {
           }
         }}
         onConfirm={() => void handleDelete()}
+      />
+      <CustomerDetailSheet
+        customerId={customerId}
+        open={Boolean(customerId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            const params = new URLSearchParams(searchParams)
+            params.delete('customer')
+            params.delete('edit')
+            setSearchParams(params, { replace: true })
+          }
+        }}
       />
     </div>
   )

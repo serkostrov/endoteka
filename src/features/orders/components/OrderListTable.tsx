@@ -1,9 +1,10 @@
-import type { ReactNode } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { ListPagination } from '@/components/shared/ListPagination'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   Pagination,
   PaginationContent,
@@ -49,6 +50,8 @@ type OrderListTableProps = {
   pageSize: number
   sort: OrderSortColumn
   direction: 'asc' | 'desc'
+  selectedIds?: string[]
+  onSelectedIdsChange?: (ids: string[]) => void
   isLoading?: boolean
   error?: string | null
   onRetry?: () => void
@@ -65,6 +68,8 @@ export function OrderListTable({
   pageSize,
   sort,
   direction,
+  selectedIds = [],
+  onSelectedIdsChange,
   isLoading = false,
   error,
   onRetry,
@@ -74,6 +79,34 @@ export function OrderListTable({
   onOpenOrder,
 }: OrderListTableProps) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const selectable = Boolean(onSelectedIdsChange)
+  const pageIds = useMemo(() => data.map((order) => order.id), [data])
+  const selectedOnPage = pageIds.filter((id) => selectedIds.includes(id))
+  const allPageSelected = pageIds.length > 0 && selectedOnPage.length === pageIds.length
+  const somePageSelected = selectedOnPage.length > 0 && !allPageSelected
+
+  function toggleAllPage(checked: boolean) {
+    if (!onSelectedIdsChange) {
+      return
+    }
+    if (checked) {
+      onSelectedIdsChange([...new Set([...selectedIds, ...pageIds])])
+      return
+    }
+    const pageSet = new Set(pageIds)
+    onSelectedIdsChange(selectedIds.filter((id) => !pageSet.has(id)))
+  }
+
+  function toggleOne(orderId: string, checked: boolean) {
+    if (!onSelectedIdsChange) {
+      return
+    }
+    if (checked) {
+      onSelectedIdsChange(selectedIds.includes(orderId) ? selectedIds : [...selectedIds, orderId])
+      return
+    }
+    onSelectedIdsChange(selectedIds.filter((id) => id !== orderId))
+  }
 
   if (error) {
     return <ErrorState description={error} onRetry={onRetry} />
@@ -105,15 +138,33 @@ export function OrderListTable({
       <div className="overflow-hidden rounded-xl border bg-card">
         <Table className="min-w-5xl table-fixed">
           <TableCaption className="sr-only">Список заказов</TableCaption>
+          <colgroup>
+            {selectable ? <col className="w-10" /> : null}
+            {COLUMNS.map((column) => (
+              <col key={column.id} className={column.className} />
+            ))}
+          </colgroup>
           <TableHeader>
             <TableRow className="border-b bg-muted/50 hover:bg-muted/50">
+              {selectable ? (
+                <TableHead className="h-9 w-10 px-2 text-center">
+                  <Checkbox
+                    checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+                    onCheckedChange={(value) => toggleAllPage(value === true)}
+                    aria-label="Выбрать все на странице"
+                  />
+                </TableHead>
+              ) : null}
               {COLUMNS.map((column, index) => (
                 <SortableHead
                   key={column.id}
                   column={column.id}
                   label={column.label}
                   className={column.className}
-                  buttonClassName={cn(index === 0 && 'pl-4', index === COLUMNS.length - 1 && 'pr-4')}
+                  buttonClassName={cn(
+                    !selectable && index === 0 && 'pl-4',
+                    index === COLUMNS.length - 1 && 'pr-4',
+                  )}
                   sort={sort}
                   direction={direction}
                   onSort={onSort}
@@ -124,11 +175,17 @@ export function OrderListTable({
           <TableBody>
             {data.map((order, index) => {
               const deadline = deadlineLines(order)
+              const selected = selectedIds.includes(order.id)
 
               return (
                 <TableRow
                   key={order.id}
-                  className={cn('cursor-pointer', index % 2 === 1 && 'bg-muted/25')}
+                  data-state={selected ? 'selected' : undefined}
+                  className={cn(
+                    'cursor-pointer',
+                    index % 2 === 1 && 'bg-muted/25',
+                    selected && 'bg-primary/5',
+                  )}
                   onClick={() => onOpenOrder(order.id)}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -138,7 +195,21 @@ export function OrderListTable({
                   }}
                   tabIndex={0}
                 >
-                  <TableCell className={cn(cellClass, 'pl-4')}>
+                  {selectable ? (
+                    <TableCell
+                      className="w-10 px-2 text-center"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={(value) => toggleOne(order.id, value === true)}
+                        aria-label={`Выбрать заказ ${order.number}`}
+                      />
+                    </TableCell>
+                  ) : null}
+                  <TableCell className={cn(cellClass, !selectable && 'pl-4')}>
                     <TwoLine
                       primary={<span className="font-semibold text-primary">{order.number}</span>}
                       secondary={formatDateTime(order.createdAt)}

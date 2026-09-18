@@ -1,7 +1,7 @@
 import { Search } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 
-import { SearchEmptyCreate, SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
+import { SearchCreateAction, SearchEmptyCreate, SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { formatMoney } from '@/lib/constants/inventory'
@@ -80,54 +80,61 @@ export function ServiceSearchField({
         open={showPanel}
         onOpenChange={setOpen}
         panel={
-          <div className="max-h-80 overflow-auto">
-            {listQuery.error ? (
-              <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(listQuery.error)}</p>
-            ) : searching && items.length === 0 ? (
-              <p className="px-3 py-4 text-sm text-muted-foreground">Загрузка списка…</p>
-            ) : items.length === 0 ? (
-              <SearchEmptyCreate
-                message="Услуги не найдены"
-                actionLabel="Новый"
-                disabled={disabled}
-                onCreate={allowCreate ? requestCreate : undefined}
-              />
-            ) : (
-              <>
-                <ul>
-                  {items.map((item, index) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        disabled={disabled}
-                        className={cn(
-                          'flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-sm',
-                          index === activeIndex ? 'bg-accent' : 'hover:bg-accent/70',
-                        )}
-                        onMouseEnter={() => setActiveIndex(index)}
-                        onClick={() => choose(item)}
-                        onMouseDown={(event) => event.preventDefault()}
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate font-medium">{item.name}</span>
-                          {item.description ? (
-                            <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
-                          ) : null}
-                        </span>
-                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                          {formatMoney(item.unitPrice)} ₽
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {!debouncedSearch.trim() && total > items.length ? (
-                  <p className="border-t px-3 py-2 text-xs text-muted-foreground">
-                    Показаны первые {items.length} из {total}. Введите название.
-                  </p>
-                ) : null}
-              </>
-            )}
+          <div className="flex min-h-0 flex-col overflow-hidden">
+            <div className="max-h-80 overflow-auto">
+              {listQuery.error ? (
+                <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(listQuery.error)}</p>
+              ) : searching && items.length === 0 ? (
+                <p className="px-3 py-4 text-sm text-muted-foreground">Загрузка списка…</p>
+              ) : items.length === 0 ? (
+                <SearchEmptyCreate
+                  message="Услуги не найдены"
+                  actionLabel="Новый"
+                  disabled={disabled}
+                  onCreate={allowCreate ? requestCreate : undefined}
+                />
+              ) : (
+                <>
+                  <ul>
+                    {items.map((item, index) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          disabled={disabled}
+                          className={cn(
+                            'flex w-full items-start justify-between gap-3 px-3 py-2 text-left text-sm',
+                            index === activeIndex ? 'bg-accent' : 'hover:bg-accent/70',
+                          )}
+                          onMouseEnter={() => setActiveIndex(index)}
+                          onClick={() => choose(item)}
+                          onMouseDown={(event) => event.preventDefault()}
+                        >
+                          <span className="min-w-0">
+                            <span className="block truncate font-medium">{item.name}</span>
+                            {item.description ? (
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {item.description}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                            {formatMoney(item.unitPrice)} ₽
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {!debouncedSearch.trim() && total > items.length ? (
+                    <p className="border-t px-3 py-2 text-xs text-muted-foreground">
+                      Показаны первые {items.length} из {total}. Введите название.
+                    </p>
+                  ) : null}
+                </>
+              )}
+            </div>
+            {allowCreate && items.length > 0 ? (
+              <SearchCreateAction label="Новый" disabled={disabled} onCreate={requestCreate} />
+            ) : null}
           </div>
         }
       >
@@ -142,7 +149,7 @@ export function ServiceSearchField({
             disabled={disabled}
             autoComplete="off"
             placeholder="Найти услугу"
-            className="h-10 pl-8"
+            className="h-9 pl-8"
             onChange={(event) => {
               setSearch(event.target.value)
               setOpen(true)

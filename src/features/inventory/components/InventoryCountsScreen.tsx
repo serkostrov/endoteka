@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 
@@ -27,15 +27,16 @@ import {
   inventoryCountStatusTone,
 } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
 import { formatDateTime } from '@/lib/utils/date'
 
 import { useCreateInventoryCount, useDeleteInventoryCount, useInventoryCounts } from '../hooks/use-inventory'
 import type { InventoryCountListItem } from '../services/counts-service'
+import { InventoryCountSheet } from './InventoryCountScreen'
 
 export function InventoryCountsScreen() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [status, setStatus] = useState('all')
@@ -44,9 +45,15 @@ export function InventoryCountsScreen() {
   const canCount = useHasPermission(Permission.InventoryCount)
   const countsQuery = useInventoryCounts(status, page, pageSize)
   const remove = useDeleteInventoryCount()
-  const navigate = useNavigate()
+  const countId = searchParams.get('count')
   const total = countsQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function openCount(id: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('count', id)
+    setSearchParams(next, { replace: true })
+  }
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
@@ -111,7 +118,7 @@ export function InventoryCountsScreen() {
         getRowId={(row) => row.id}
         emptyTitle="Документов нет"
         emptyDescription="Создайте пересчёт и заполните факт сканером или вручную."
-        onRowClick={(row) => navigate(routes.inventoryCount.replace(':id', row.id))}
+        onRowClick={(row) => openCount(row.id)}
         pagination={{
           page,
           pageCount,
@@ -178,7 +185,11 @@ export function InventoryCountsScreen() {
         ]}
       />
 
-      <CreateCountDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <CreateCountDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={openCount}
+      />
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title="Удалить инвентаризацию"
@@ -196,13 +207,31 @@ export function InventoryCountsScreen() {
         }}
         onConfirm={() => void handleDelete()}
       />
+      <InventoryCountSheet
+        countId={countId}
+        open={Boolean(countId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            const next = new URLSearchParams(searchParams)
+            next.delete('count')
+            setSearchParams(next, { replace: true })
+          }
+        }}
+      />
     </div>
   )
 }
 
-function CreateCountDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function CreateCountDialog({
+  open,
+  onOpenChange,
+  onCreated,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCreated: (id: string) => void
+}) {
   const create = useCreateInventoryCount()
-  const navigate = useNavigate()
   const [seedMode, setSeedMode] = useState<InventoryCountSeedMode>(InventoryCountSeedMode.InStock)
 
   async function submit() {
@@ -210,7 +239,7 @@ function CreateCountDialog({ open, onOpenChange }: { open: boolean; onOpenChange
       const id = await create.mutateAsync({ seedMode })
       toast.success('Документ создан')
       onOpenChange(false)
-      navigate(routes.inventoryCount.replace(':id', id))
+      onCreated(id)
     } catch (error) {
       toast.error(getErrorMessage(error))
     }

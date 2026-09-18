@@ -1,10 +1,8 @@
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { toast } from 'sonner'
 import { useState } from 'react'
 
 import { DatePicker } from '@/components/shared/DatePicker'
-import { ErrorState } from '@/components/shared/ErrorState'
-import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { StatusBadge } from '@/components/shared/StatusBadge'
@@ -16,7 +14,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { useHasPermission } from '@/features/auth'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import {
   TASK_ASSIGNEE_NONE,
   TaskPriority,
@@ -31,29 +28,8 @@ import { useSheetDirty } from '@/components/ui/sheet'
 
 import { TaskCompleteControl } from './TaskCompleteControl'
 import { TaskDeleteControl } from './TaskDeleteControl'
-import { useTask, useUpdateTask } from '../hooks/use-tasks'
+import { useUpdateTask } from '../hooks/use-tasks'
 import { formatTaskDueDate, isTaskOverdue, type Task } from '../services/tasks-service'
-
-export function TaskDetailScreen() {
-  const { id } = useParams()
-  const navigate = useNavigate()
-  const taskQuery = useTask(id)
-
-  if (taskQuery.isLoading) {
-    return <LoadingState label="Загрузка задачи" />
-  }
-
-  if (taskQuery.error) {
-    return <ErrorState description={getErrorMessage(taskQuery.error)} />
-  }
-
-  const task = taskQuery.data
-  if (!task) {
-    return <ErrorState description="Задача не найдена." />
-  }
-
-  return <TaskDetailView task={task} onDeleted={() => navigate(routes.tasks)} />
-}
 
 export function TaskDetailView({
   task,
@@ -116,9 +92,9 @@ function TaskBody({
         <StatusBadge tone={taskPriorityTone(task.priority)}>{taskPriorityLabels[task.priority]}</StatusBadge>
         {task.orderId && task.orderNumber ? (
           showOrderLink ? (
-            <Link to={routes.order.replace(':id', task.orderId)} className="text-primary hover:underline">
+            <EntitySheetLink kind="order" id={task.orderId} className="text-primary hover:underline">
               Заказ {task.orderNumber}
-            </Link>
+            </EntitySheetLink>
           ) : (
             <span className="text-muted-foreground">Заказ {task.orderNumber}</span>
           )

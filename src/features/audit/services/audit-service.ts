@@ -1,5 +1,5 @@
 import { isAuditEntityId } from '@/lib/constants/audit'
-import { routes } from '@/lib/constants/routes'
+import { routes, sheets } from '@/lib/constants/routes'
 import { toAppError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase/client'
 import type { Json } from '@/types/database'
@@ -97,25 +97,25 @@ export function auditEntityHref(entityType: string, entityId: string | null): st
   }
 
   if (entityType === 'order') {
-    return routes.order.replace(':id', entityId)
+    return sheets.order(entityId)
   }
   if (entityType === 'sale') {
-    return routes.sale.replace(':id', entityId)
+    return sheets.sale(entityId)
   }
   if (entityType === 'inventory_item') {
-    return routes.inventoryItem.replace(':id', entityId)
+    return sheets.item(entityId)
   }
   if (entityType === 'inventory_count') {
-    return routes.inventoryCount.replace(':id', entityId)
+    return sheets.count(entityId)
   }
   if (entityType === 'document_template') {
     return routes.documentTemplate.replace(':id', entityId)
   }
   if (entityType === 'device') {
-    return routes.device.replace(':id', entityId)
+    return sheets.device(entityId)
   }
   if (entityType === 'customer') {
-    return routes.customer.replace(':id', entityId)
+    return sheets.customer(entityId)
   }
   if (entityType === 'role') {
     return routes.role.replace(':id', entityId)

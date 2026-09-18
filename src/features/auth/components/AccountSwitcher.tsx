@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { getInitials } from '@/lib/utils/initials'
@@ -127,6 +127,7 @@ function AccountRow({
         onClick={onSelect}
       >
         <Avatar size="sm" className="size-8">
+          {account.avatarUrl ? <AvatarImage src={account.avatarUrl} alt="" /> : null}
           <AvatarFallback className="text-xs">{getInitials(title)}</AvatarFallback>
         </Avatar>
         <span className="min-w-0 flex-1">
@@ -192,6 +193,7 @@ export function SavedAccountsOnLogin() {
                 onClick={() => void handleSwitch(account)}
               >
                 <Avatar className="size-9">
+                  {account.avatarUrl ? <AvatarImage src={account.avatarUrl} alt="" /> : null}
                   <AvatarFallback>{getInitials(title)}</AvatarFallback>
                 </Avatar>
                 <span className="min-w-0 flex-1">

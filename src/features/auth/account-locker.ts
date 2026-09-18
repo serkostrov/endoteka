@@ -5,6 +5,7 @@ export type SavedAccount = {
   userId: string
   email: string
   fullName: string
+  avatarUrl?: string | null
   accessToken: string
   refreshToken: string
   expiresAt: number | null
@@ -66,10 +67,18 @@ export function upsertSavedAccount(next: SavedAccount) {
   writeAccounts(accounts)
 }
 
-export function updateSavedAccountProfile(userId: string, profile: { email: string; fullName: string }) {
+export function updateSavedAccountProfile(
+  userId: string,
+  profile: { email: string; fullName: string; avatarUrl?: string | null },
+) {
   const accounts = readAccounts().map((account) =>
     account.userId === userId
-      ? { ...account, email: profile.email, fullName: profile.fullName || account.fullName }
+      ? {
+          ...account,
+          email: profile.email,
+          fullName: profile.fullName || account.fullName,
+          avatarUrl: profile.avatarUrl !== undefined ? profile.avatarUrl : account.avatarUrl,
+        }
       : account,
   )
   writeAccounts(accounts)

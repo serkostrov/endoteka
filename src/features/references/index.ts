@@ -1,3 +1,9 @@
 export { ReferencesScreen } from './components/ReferencesScreen'
 export { ReferenceSetScreen } from './components/ReferenceSetScreen'
-export { useReferenceSets, useReferenceItems, useReferenceItemsBySetCode } from './hooks/use-references'
+export { ReferenceItemDialog } from './components/ReferenceItemDialog'
+export {
+  useReferenceSets,
+  useReferenceItems,
+  useReferenceItemsBySetCode,
+  useUpsertReferenceItem,
+} from './hooks/use-references'

@@ -26,9 +26,16 @@ import {
 } from '../hooks/use-services'
 import type { OrderServiceLine, ServiceTemplate } from '../services/services-service'
 
-export function OrderServicesBlock({ orderId }: { orderId: string }) {
+export function OrderServicesBlock({
+  orderId,
+  showLines = true,
+}: {
+  orderId: string
+  /** When false, only the add form is rendered (list lives in work composition table). */
+  showLines?: boolean
+}) {
   const canUpdate = useHasPermission(Permission.OrdersUpdate)
-  const linesQuery = useOrderServiceLines(orderId)
+  const linesQuery = useOrderServiceLines(orderId, showLines)
   const add = useAddOrderServiceLine(orderId)
   const [createOpen, setCreateOpen] = useState(false)
   const [createQuery, setCreateQuery] = useState('')
@@ -51,23 +58,62 @@ export function OrderServicesBlock({ orderId }: { orderId: string }) {
     }
   }
 
+  const addForm = canUpdate ? (
+    <div className={showLines ? 'mb-4' : undefined}>
+      <ServiceSearchField
+        disabled={add.isPending}
+        onSelect={(item) => void addTemplate(item)}
+        allowCreate
+        onCreateRequest={(query) => {
+          setCreateQuery(query)
+          setCreateOpen(true)
+        }}
+      />
+    </div>
+  ) : (
+    <p className={`text-sm text-muted-foreground${showLines ? ' mb-4' : ''}`}>
+      Нет права на изменение состава заказа.
+    </p>
+  )
+
+  const dialogs = (
+    <>
+      <CreateServiceTemplateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        initialQuery={createQuery}
+        orderId={orderId}
+        onCreatedForOrder={() => {
+          setCreateOpen(false)
+        }}
+        onCreated={(item) => void addTemplate(item)}
+      />
+      {showLines ? (
+        <ServiceTemplateSheet
+          templateId={openedTemplateId}
+          open={Boolean(openedTemplateId)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setOpenedTemplateId(null)
+            }
+          }}
+        />
+      ) : null}
+    </>
+  )
+
+  if (!showLines) {
+    return (
+      <>
+        {addForm}
+        {dialogs}
+      </>
+    )
+  }
+
   return (
     <SectionCard title="Услуги" description="Количество и цена задаются для этого заказа.">
-      {canUpdate ? (
-        <div className="mb-4">
-          <ServiceSearchField
-            disabled={add.isPending}
-            onSelect={(item) => void addTemplate(item)}
-            allowCreate
-            onCreateRequest={(query) => {
-              setCreateQuery(query)
-              setCreateOpen(true)
-            }}
-          />
-        </div>
-      ) : (
-        <p className="mb-4 text-sm text-muted-foreground">Нет права на изменение состава заказа.</p>
-      )}
+      {addForm}
 
       {linesQuery.error ? (
         <ErrorState
@@ -100,21 +146,7 @@ export function OrderServicesBlock({ orderId }: { orderId: string }) {
         </ul>
       )}
 
-      <CreateServiceTemplateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        initialQuery={createQuery}
-        onCreated={(item) => void addTemplate(item)}
-      />
-      <ServiceTemplateSheet
-        templateId={openedTemplateId}
-        open={Boolean(openedTemplateId)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setOpenedTemplateId(null)
-          }
-        }}
-      />
+      {dialogs}
     </SectionCard>
   )
 }

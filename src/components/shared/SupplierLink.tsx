@@ -1,6 +1,4 @@
-import { Link } from 'react-router-dom'
-
-import { routes } from '@/lib/constants/routes'
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 
 type SupplierLinkProps = {
   name: string
@@ -16,12 +14,8 @@ export function SupplierLink({ name, customerId, className }: SupplierLinkProps)
   }
 
   return (
-    <Link
-      to={routes.customer.replace(':id', customerId)}
-      className={className ?? 'text-primary underline-offset-2 hover:underline'}
-      onClick={(event) => event.stopPropagation()}
-    >
+    <EntitySheetLink kind="customer" id={customerId} className={className}>
       {label}
-    </Link>
+    </EntitySheetLink>
   )
 }

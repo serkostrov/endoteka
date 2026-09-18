@@ -1,7 +1,10 @@
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import {
@@ -15,10 +18,12 @@ import {
   runSheetFormSave,
   useSheetDirty,
 } from '@/components/ui/sheet'
+import { useHasPermission } from '@/features/auth'
+import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 
 import { ServiceTemplateFields } from './CreateServiceTemplateDialog'
-import { useUpdateServiceTemplate } from '../hooks/use-services'
+import { useDeleteServiceTemplate, useUpdateServiceTemplate } from '../hooks/use-services'
 import { serviceTemplateFormSchema, type ServiceTemplateFormValues } from '../schemas'
 import type { ServiceTemplate } from '../services/services-service'
 
@@ -45,7 +50,10 @@ function EditServiceTemplateForm({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const canEdit = useHasPermission(Permission.SettingsUpdate)
   const update = useUpdateServiceTemplate(item.id)
+  const remove = useDeleteServiceTemplate()
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const form = useForm<ServiceTemplateFormValues>({
     resolver: zodResolver(serviceTemplateFormSchema),
     defaultValues: {
@@ -60,6 +68,17 @@ function EditServiceTemplateForm({
     await update.mutateAsync({ ...values, isActive: item.isActive })
     toast.success('Сохранено')
     form.reset(values)
+  }
+
+  async function handleDelete() {
+    try {
+      await remove.mutateAsync(item.id)
+      toast.success('Услуга удалена')
+      setDeleteOpen(false)
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
   }
 
   return (
@@ -77,8 +96,12 @@ function EditServiceTemplateForm({
         onOpenChange(next)
       }}
     >
-      <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
-        <SheetHeader>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col overflow-y-auto sm:max-w-lg"
+        actions={<SheetEntityToolbar onDelete={canEdit ? () => setDeleteOpen(true) : undefined} />}
+      >
+        <SheetHeader className="pr-14">
           <SheetTitle>Услуга</SheetTitle>
           <SheetDescription>Изменения шаблона не меняют уже добавленные в заказы строки.</SheetDescription>
         </SheetHeader>
@@ -103,6 +126,15 @@ function EditServiceTemplateForm({
             </SheetFooter>
           </form>
         </Form>
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить услугу"
+          description={`«${item.name}» будет удалена. Если она есть в заказах, удаление не пройдёт.`}
+          confirmLabel="Удалить"
+          isPending={remove.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => void handleDelete()}
+        />
       </SheetContent>
     </Sheet>
   )

@@ -71,6 +71,15 @@ export function ReferenceSetScreen() {
     return <Navigate to={routes.settingsOrderStatuses} replace />
   }
 
+  if (
+    set?.code === ReferenceSetCode.DeviceGroups ||
+    set?.code === ReferenceSetCode.DeviceBrands ||
+    set?.code === ReferenceSetCode.DeviceModels ||
+    set?.code === ReferenceSetCode.DeviceModifications
+  ) {
+    return <Navigate to={`${routes.devices}?tab=types`} replace />
+  }
+
   if (setsQuery.isLoading || itemsQuery.isLoading) {
     return <LoadingState label="Загружаем справочник…" />
   }
@@ -294,6 +303,15 @@ export function ReferenceSetScreen() {
           }
         }}
         onSubmit={handleSave}
+        onDelete={
+          editingItem
+            ? () => {
+                setDeleteTarget(editingItem)
+                setEditorOpen(false)
+                setEditingItem(null)
+              }
+            : undefined
+        }
       />
 
       <ConfirmDialog

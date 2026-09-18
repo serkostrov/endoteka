@@ -1,5 +1,5 @@
 import { Archive } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -24,6 +24,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 
 import { CreateOrderDialog } from './CreateOrderDialog'
+import { OrderBulkActions } from './OrderBulkActions'
 import { OrderDetailSheet } from './OrderDetailScreen'
 import { OrderKanbanBoard } from './OrderKanbanBoard'
 import { OrderListTable } from './OrderListTable'
@@ -77,6 +78,7 @@ export function OrdersScreen() {
   const canCreate = useHasPermission(Permission.OrdersCreate)
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const debouncedSearch = useDebouncedValue(search, ORDER_SEARCH_DEBOUNCE_MS)
   const [pageSize, setPageSize] = usePageSize()
 
@@ -133,6 +135,20 @@ export function OrdersScreen() {
   const closedCount = items.filter((order) => order.isTerminal || closedStatusIds.has(order.statusId)).length
   const listBlockedByBoardPlaceholder =
     isList && ordersQuery.isPlaceholderData && (ordersQuery.data?.items.length ?? 0) > pageSize
+
+  const pageOrderIdsKey = items.map((order) => order.id).join('|')
+
+  useEffect(() => {
+    if (!isList) {
+      setSelectedIds([])
+      return
+    }
+    const visible = new Set(pageOrderIdsKey ? pageOrderIdsKey.split('|') : [])
+    setSelectedIds((current) => {
+      const next = current.filter((id) => visible.has(id))
+      return next.length === current.length ? current : next
+    })
+  }, [isList, pageOrderIdsKey])
 
   const createOpen = canCreate && searchParams.get('new') === '1'
 
@@ -297,6 +313,10 @@ export function OrdersScreen() {
         ) : null}
       </FilterBar>
 
+      {isList && selectedIds.length > 0 ? (
+        <OrderBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
+      ) : null}
+
       {isList ? (
         <OrderListTable
           data={items}
@@ -305,6 +325,8 @@ export function OrdersScreen() {
           pageSize={pageSize}
           sort={listSort}
           direction={listDir}
+          selectedIds={selectedIds}
+          onSelectedIdsChange={setSelectedIds}
           isLoading={ordersQuery.isLoading || !filtersReady || listBlockedByBoardPlaceholder}
           error={ordersQuery.error ? getErrorMessage(ordersQuery.error) : null}
           onRetry={() => void ordersQuery.refetch()}

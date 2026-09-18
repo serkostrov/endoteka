@@ -159,7 +159,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('id, full_name, email, is_active')
+    .select('id, full_name, email, is_active, avatar_path')
     .eq('id', user.id)
     .maybeSingle()
 
@@ -193,11 +193,13 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     throw toAppError(permissionsError, 'Не удалось загрузить права пользователя.')
   }
 
+  const avatarUrl = publicAvatarUrl(profile.avatar_path)
   const currentUser: AuthUser = {
     id: user.id,
     email: profile.email || user.email || '',
     fullName: profile.full_name,
     isActive: profile.is_active,
+    avatarUrl,
     roles: parseRoles((roleRows ?? []).map((row) => row.code)),
     permissions: parsePermissions((permissionRows ?? []).map((row) => row.code)),
   }
@@ -205,10 +207,103 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   updateSavedAccountProfile(currentUser.id, {
     email: currentUser.email,
     fullName: currentUser.fullName,
+    avatarUrl: currentUser.avatarUrl,
   })
 
   return currentUser
 }
+
+const PROFILE_AVATARS_BUCKET = 'profile-avatars'
+const PROFILE_AVATAR_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg']
+const PROFILE_AVATAR_MAX_BYTES = 5 * 1024 * 1024
+
+export function publicAvatarUrl(path: string | null | undefined): string | null {
+  if (!path) {
+    return null
+  }
+  try {
+    const { data } = getSupabase().storage.from(PROFILE_AVATARS_BUCKET).getPublicUrl(path)
+    return data.publicUrl || null
+  } catch {
+    return null
+  }
+}
+
+function resolveAvatarMime(file: File): string | null {
+  const type = file.type.trim().toLowerCase()
+  if (PROFILE_AVATAR_MIME.includes(type)) {
+    return type === 'image/jpg' ? 'image/jpeg' : type
+  }
+  const name = file.name.toLowerCase()
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+    return 'image/jpeg'
+  }
+  if (name.endsWith('.png')) {
+    return 'image/png'
+  }
+  if (name.endsWith('.webp')) {
+    return 'image/webp'
+  }
+  return null
+}
+
+export async function uploadMyAvatar(file: File): Promise<string> {
+  const mime = resolveAvatarMime(file)
+  if (!mime) {
+    throw toAppError(
+      { message: 'Можно загрузить только JPEG, PNG или WebP.' },
+      'Можно загрузить только JPEG, PNG или WebP.',
+    )
+  }
+  if (file.size > PROFILE_AVATAR_MAX_BYTES) {
+    throw toAppError({ message: 'Фото больше 5 МБ.' }, 'Фото больше 5 МБ.')
+  }
+
+  const supabase = getSupabase()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+  if (userError || !user) {
+    throw toAppError(userError, 'Нужна авторизация.')
+  }
+
+  const extension = mime === 'image/png' ? '.png' : mime === 'image/webp' ? '.webp' : '.jpg'
+  const path = `${user.id}/${crypto.randomUUID()}${extension}`
+
+  const { error: uploadError } = await supabase.storage.from(PROFILE_AVATARS_BUCKET).upload(path, file, {
+    contentType: mime,
+    upsert: false,
+  })
+  if (uploadError) {
+    throw toAppError(uploadError, 'Не удалось загрузить фото.')
+  }
+
+  const { data: oldPath, error } = await supabase.rpc('set_my_avatar', { file_path: path })
+  if (error) {
+    await supabase.storage.from(PROFILE_AVATARS_BUCKET).remove([path])
+    throw toAppError(error, 'Не удалось сохранить аватар.')
+  }
+
+  if (oldPath) {
+    await supabase.storage.from(PROFILE_AVATARS_BUCKET).remove([oldPath])
+  }
+
+  return publicAvatarUrl(path) ?? path
+}
+
+export async function removeMyAvatar(): Promise<void> {
+  const supabase = getSupabase()
+  const { data: oldPath, error } = await supabase.rpc('clear_my_avatar')
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить аватар.')
+  }
+  if (oldPath) {
+    await supabase.storage.from(PROFILE_AVATARS_BUCKET).remove([oldPath])
+  }
+}
+
+export const PROFILE_AVATAR_ACCEPT = 'image/jpeg,image/png,image/webp,image/jpg,.jpg,.jpeg,.png,.webp'
 
 export async function updatePassword(password: string): Promise<void> {
   const { error } = await getSupabase().auth.updateUser({ password })

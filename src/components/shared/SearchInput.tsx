@@ -28,7 +28,7 @@ export function SearchInput({
   const id = useId()
 
   return (
-    <div className={cn('relative w-full min-w-0 max-w-sm', className)}>
+    <div data-slot="search-input" className={cn('relative w-full min-w-0 max-w-sm', className)}>
       <label className="sr-only" htmlFor={id}>
         {label}
       </label>

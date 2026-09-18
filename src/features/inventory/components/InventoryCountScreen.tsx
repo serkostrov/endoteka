@@ -1,38 +1,39 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
-import { FilterBar } from '@/components/shared/FilterBar'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { SearchInput } from '@/components/shared/SearchInput'
 import { SectionCard } from '@/components/shared/SectionCard'
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
-  INVENTORY_SEARCH_DEBOUNCE_MS,
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  useSheetExitPresence,
+} from '@/components/ui/sheet'
+import {
   InventoryCountLineFilter,
   InventoryCountStatus,
   formatQuantity,
-  inventoryCountLineFilterLabels,
   inventoryCountStatusLabels,
   inventoryCountStatusTone,
 } from '@/lib/constants/inventory'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
-import { useDebouncedValue } from '@/hooks/use-debounced-value'
-import { usePageSize } from '@/hooks/use-page-size'
 import { formatDateTime } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 
-import { BarcodeScanInput } from './BarcodeScanInput'
 import { ItemSearchField } from './ItemSearchField'
 import {
   useAddInventoryCountItem,
@@ -50,24 +51,85 @@ import {
 import type { InventoryCountDocument, InventoryCountLine } from '../services/counts-service'
 import { findInventoryItemsByBarcode, type InventoryItem } from '../services/inventory-service'
 
-export function InventoryCountScreen() {
-  const { id } = useParams()
-  const countQuery = useInventoryCount(id)
+/** Загружаем все строки документа без постраничной навигации в UI. */
+const COUNT_LINES_PAGE_SIZE = 2000
 
-  if (countQuery.isLoading) {
-    return <LoadingState label="Загрузка инвентаризации" />
-  }
+export function InventoryCountSheet({
+  countId,
+  open,
+  onOpenChange,
+}: {
+  countId: string | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const presence = useSheetExitPresence(open, countId)
+  return (
+    <Sheet open={presence.open} onOpenChange={onOpenChange}>
+      {presence.id ? (
+        <InventoryCountSheetContent key={presence.id} countId={presence.id} onClose={() => onOpenChange(false)} />
+      ) : null}
+    </Sheet>
+  )
+}
 
-  if (countQuery.error) {
-    return <ErrorState description={getErrorMessage(countQuery.error)} />
-  }
-
+function InventoryCountSheetContent({ countId, onClose }: { countId: string; onClose: () => void }) {
+  const countQuery = useInventoryCount(countId)
+  const remove = useDeleteInventoryCount()
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const document = countQuery.data
-  if (!document) {
-    return <ErrorState description="Документ не найден." />
+  const canDelete = Boolean(document && document.status !== InventoryCountStatus.Completed)
+
+  async function handleDelete() {
+    if (!document) {
+      return
+    }
+    try {
+      await remove.mutateAsync(document.id)
+      toast.success('Документ удалён')
+      setDeleteOpen(false)
+      onClose()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
   }
 
-  return <CountDocumentBody document={document} />
+  return (
+    <SheetContent
+      side="right"
+      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,40rem)]"
+      actions={
+        document ? (
+          <SheetEntityToolbar onDelete={canDelete ? () => setDeleteOpen(true) : undefined} />
+        ) : null
+      }
+    >
+      <SheetHeader className="sr-only">
+        <SheetTitle>Инвентаризация</SheetTitle>
+        <SheetDescription>Пересчёт остатков. Список документов остаётся на фоне.</SheetDescription>
+      </SheetHeader>
+      <div className="p-4 pr-14">
+        {countQuery.isLoading ? (
+          <LoadingState label="Загрузка инвентаризации" className="min-h-40" />
+        ) : countQuery.error ? (
+          <ErrorState description={getErrorMessage(countQuery.error)} />
+        ) : !document ? (
+          <ErrorState description="Документ не найден." />
+        ) : (
+          <CountDocumentBody document={document} layout="sheet" hideChromeDelete onDeleted={onClose} />
+        )}
+      </div>
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить инвентаризацию"
+        description={document ? `${document.number} будет удалена без возможности восстановления.` : ''}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+      />
+    </SheetContent>
+  )
 }
 
 const countTabs = [
@@ -75,24 +137,29 @@ const countTabs = [
   { id: 'statement' as const, label: 'Акт расхождений' },
 ]
 
-function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
+function CountDocumentBody({
+  document,
+  layout,
+  onDeleted,
+  hideChromeDelete = false,
+}: {
+  document: InventoryCountDocument
+  layout: 'page' | 'sheet'
+  onDeleted?: () => void
+  hideChromeDelete?: boolean
+}) {
   const navigate = useNavigate()
   const editable =
     document.status === InventoryCountStatus.Draft || document.status === InventoryCountStatus.InProgress
-  const canDelete = document.status !== InventoryCountStatus.Completed
+  const canDelete = document.status !== InventoryCountStatus.Completed && !hideChromeDelete
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [tab, setTab] = useState<(typeof countTabs)[number]['id']>('count')
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState<InventoryCountLineFilter>(InventoryCountLineFilter.All)
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = usePageSize()
-  const debouncedSearch = useDebouncedValue(search, INVENTORY_SEARCH_DEBOUNCE_MS)
   const linesQuery = useInventoryCountLines(
     document.id,
-    debouncedSearch,
-    filter,
-    page,
-    pageSize,
+    '',
+    InventoryCountLineFilter.All,
+    1,
+    COUNT_LINES_PAGE_SIZE,
   )
   const statementQuery = useInventoryCountStatement(document.id)
   const start = useStartInventoryCount(document.id)
@@ -103,14 +170,7 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
   const increment = useIncrementInventoryCountItem(document.id)
   const removeLine = useRemoveInventoryCountLine(document.id)
   const setActual = useSetInventoryCountLineActual(document.id)
-  const total = linesQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(Number(total) / pageSize))
   const progress = document.lineCount === 0 ? 0 : Math.round((document.countedCount / document.lineCount) * 100)
-
-  function handlePageSizeChange(size: number) {
-    setPageSize(size)
-    setPage(1)
-  }
 
   async function handleScan(code: string) {
     try {
@@ -145,7 +205,11 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
       await remove.mutateAsync(document.id)
       toast.success('Документ удалён')
       setDeleteOpen(false)
-      navigate(routes.inventoryCounts)
+      if (onDeleted) {
+        onDeleted()
+      } else {
+        navigate(routes.inventoryCounts)
+      }
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -153,14 +217,85 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title={document.number}
-        description={
-          document.completedAt
-            ? `Ответственный: ${document.actorName || '—'}. Проведена ${formatDateTime(document.completedAt)}`
-            : `Ответственный: ${document.actorName || '—'}. Факт сохраняется по строке, проведение пишет журнал.`
-        }
-        actions={
+      {layout === 'page' ? (
+        <PageHeader
+          title={document.number}
+          description={
+            document.completedAt
+              ? `Ответственный: ${document.actorName || '—'}. Проведена ${formatDateTime(document.completedAt)}`
+              : `Ответственный: ${document.actorName || '—'}. Факт сохраняется по строке, проведение пишет журнал.`
+          }
+          actions={
+            <div className="flex flex-wrap gap-2">
+              {document.status === InventoryCountStatus.Draft ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={start.isPending}
+                  onClick={() => {
+                    start.mutate(undefined, {
+                      onSuccess: () => toast.success('Пересчёт начат'),
+                      onError: (error) => toast.error(getErrorMessage(error)),
+                    })
+                  }}
+                >
+                  Начать
+                </Button>
+              ) : null}
+              {editable ? (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={complete.isPending || document.uncountedCount > 0 || document.lineCount === 0}
+                    onClick={() => {
+                      complete.mutate(undefined, {
+                        onSuccess: () => toast.success('Инвентаризация проведена'),
+                        onError: (error) => toast.error(getErrorMessage(error)),
+                      })
+                    }}
+                  >
+                    {complete.isPending ? 'Проведение…' : 'Провести'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={cancel.isPending}
+                    onClick={() => {
+                      cancel.mutate(undefined, {
+                        onSuccess: () => toast.success('Документ отменён'),
+                        onError: (error) => toast.error(getErrorMessage(error)),
+                      })
+                    }}
+                  >
+                    Отменить
+                  </Button>
+                </>
+              ) : null}
+              {canDelete ? (
+                <IconActionButton
+                  label="Удалить"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  <Trash2 />
+                </IconActionButton>
+              ) : null}
+            </div>
+          }
+        />
+      ) : (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold tracking-tight">{document.number}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {document.completedAt
+                ? `Ответственный: ${document.actorName || '—'}. Проведена ${formatDateTime(document.completedAt)}`
+                : `Ответственный: ${document.actorName || '—'}. Факт сохраняется по строке, проведение пишет журнал.`}
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             {document.status === InventoryCountStatus.Draft ? (
               <Button
@@ -219,8 +354,8 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
               </IconActionButton>
             ) : null}
           </div>
-        }
-      />
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
         <StatusBadge tone={inventoryCountStatusTone(document.status)}>
@@ -266,139 +401,89 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
       </div>
 
       {tab === 'count' ? (
-        <SectionCard
-          title="Строки пересчёта"
-          description={
-            editable
-              ? 'Сканер увеличивает факт на 1. Список добавляет позицию в документ. Поиск ниже только фильтрует уже добавленные строки.'
-              : 'Таблица позиций этого документа.'
-          }
-        >
-          {editable ? (
-            <div className="mb-4 space-y-2">
-              <BarcodeScanInput
-                autoFocus
-                disabled={increment.isPending}
-                onScan={(code) => void handleScan(code)}
-                placeholder="Считайте штрихкод — факт увеличится на 1"
-              />
+        <SectionCard title="Позиции" className="gap-3 py-4">
+          <div className="space-y-3">
+            {editable ? (
               <ItemSearchField
                 onSelect={(item) => void handleAdd(item)}
-                showScan={false}
-                searchPlaceholder="Все позиции — введите, чтобы сузить"
-                disabled={addItem.isPending}
+                onBarcode={(code) => handleScan(code)}
+                searchPlaceholder="Найти или считать штрихкод"
+                disabled={addItem.isPending || increment.isPending}
               />
-            </div>
-          ) : null}
+            ) : null}
 
-          <FilterBar className="mb-4">
-            <SearchInput
-              value={search}
-              onChange={(next) => {
-                setSearch(next)
-                setPage(1)
-              }}
-              label="Фильтр строк документа"
-              placeholder="Найти в этом документе"
+            <DataTable
+              caption="Строки инвентаризации"
+              isLoading={linesQuery.isLoading}
+              error={linesQuery.error ? getErrorMessage(linesQuery.error) : null}
+              onRetry={() => void linesQuery.refetch()}
+              data={linesQuery.data?.items ?? []}
+              getRowId={(row) => row.id}
+              emptyTitle="Позиций нет"
+              emptyDescription={editable ? 'Найдите товар выше или считайте штрихкод.' : 'В документе нет строк.'}
+              columns={[
+                { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
+                {
+                  id: 'code',
+                  header: 'Код',
+                  className: 'hidden md:table-cell',
+                  cell: (row) => row.itemCode,
+                },
+                { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
+                {
+                  id: 'actual',
+                  header: 'Факт',
+                  cell: (row) =>
+                    editable ? (
+                      <CountActualInput
+                        line={row}
+                        disabled={setActual.isPending}
+                        onSave={(actual) => {
+                          setActual.mutate(
+                            { lineId: row.id, actual },
+                            { onError: (error) => toast.error(getErrorMessage(error)) },
+                          )
+                        }}
+                      />
+                    ) : (
+                      row.actualQuantity === null ? '—' : formatQuantity(row.actualQuantity)
+                    ),
+                },
+                {
+                  id: 'diff',
+                  header: 'Разница',
+                  cell: (row) => <DifferenceCell difference={row.difference} />,
+                },
+                {
+                  id: 'unit',
+                  header: 'Ед.',
+                  cell: (row) => row.unitName,
+                },
+                ...(editable
+                  ? [
+                      {
+                        id: 'remove',
+                        header: '',
+                        cell: (row: InventoryCountLine) => (
+                          <IconActionButton
+                            label="Убрать"
+                            variant="ghost"
+                            disabled={removeLine.isPending}
+                            onClick={() => {
+                              removeLine.mutate(row.id, {
+                                onError: (error) => toast.error(getErrorMessage(error)),
+                              })
+                            }}
+                          >
+                            <Trash2 />
+                          </IconActionButton>
+                        ),
+                      },
+                    ]
+                  : []),
+              ]}
             />
-            <Select
-              value={filter}
-              onValueChange={(value) => {
-                setFilter(value as InventoryCountLineFilter)
-                setPage(1)
-              }}
-            >
-              <SelectTrigger aria-label="Какие строки показать" className="w-44">
-                <SelectValue placeholder="Все строки" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.values(InventoryCountLineFilter).map((code) => (
-                  <SelectItem key={code} value={code}>
-                    {inventoryCountLineFilterLabels[code]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </FilterBar>
-
-          <DataTable
-            caption="Строки инвентаризации"
-            isLoading={linesQuery.isLoading}
-            error={linesQuery.error ? getErrorMessage(linesQuery.error) : null}
-            onRetry={() => void linesQuery.refetch()}
-            data={linesQuery.data?.items ?? []}
-            getRowId={(row) => row.id}
-            emptyTitle="Строк нет"
-            emptyDescription={editable ? 'Добавьте позиции сканером или из списка номенклатуры.' : 'В документе нет строк.'}
-            pagination={{
-              page,
-              pageCount,
-              onPageChange: setPage,
-              pageSize,
-              onPageSizeChange: handlePageSizeChange,
-            }}
-            columns={[
-              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-              {
-                id: 'code',
-                header: 'Код',
-                className: 'hidden md:table-cell',
-                cell: (row) => row.itemCode,
-              },
-              { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
-              {
-                id: 'actual',
-                header: 'Факт',
-                cell: (row) =>
-                  editable ? (
-                    <CountActualInput
-                      line={row}
-                      disabled={setActual.isPending}
-                      onSave={(actual) => {
-                        setActual.mutate(
-                          { lineId: row.id, actual },
-                          { onError: (error) => toast.error(getErrorMessage(error)) },
-                        )
-                      }}
-                    />
-                  ) : (
-                    row.actualQuantity === null ? '—' : formatQuantity(row.actualQuantity)
-                  ),
-              },
-              {
-                id: 'diff',
-                header: 'Разница',
-                cell: (row) => <DifferenceCell difference={row.difference} />,
-              },
-              {
-                id: 'unit',
-                header: 'Ед.',
-                cell: (row) => row.unitName,
-              },
-              ...(editable
-                ? [
-                    {
-                      id: 'remove',
-                      header: '',
-                      cell: (row: InventoryCountLine) => (
-                        <IconActionButton
-                          label="Убрать"
-                          variant="ghost"
-                          disabled={removeLine.isPending}
-                          onClick={() => {
-                            removeLine.mutate(row.id, {
-                              onError: (error) => toast.error(getErrorMessage(error)),
-                            })
-                          }}
-                        >
-                          <Trash2 />
-                        </IconActionButton>
-                      ),
-                    },
-                  ]
-                : []),
-            ]}
-          />
+          </div>
         </SectionCard>
       ) : (
         <SectionCard
@@ -429,15 +514,17 @@ function CountDocumentBody({ document }: { document: InventoryCountDocument }) {
           />
         </SectionCard>
       )}
-      <ConfirmDialog
-        open={deleteOpen}
-        title="Удалить инвентаризацию"
-        description={`${document.number} будет удалена без возможности восстановления.`}
-        confirmLabel="Удалить"
-        isPending={remove.isPending}
-        onOpenChange={setDeleteOpen}
-        onConfirm={() => void handleDelete()}
-      />
+      {!hideChromeDelete ? (
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить инвентаризацию"
+          description={`${document.number} будет удалена без возможности восстановления.`}
+          confirmLabel="Удалить"
+          isPending={remove.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => void handleDelete()}
+        />
+      ) : null}
     </div>
   )
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
-import { Link } from 'react-router-dom'
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -17,11 +17,10 @@ import {
   SheetTitle,
   runSheetFormSave,
 } from '@/components/ui/sheet'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 
 import { ItemFields } from './ItemFields'
-import { useCreateInventoryItem } from '../hooks/use-inventory'
+import { useAddOrderCustomPartLine, useCreateInventoryItem } from '../hooks/use-inventory'
 import { emptyInventoryItemFormValues, inventoryItemFormSchema, type InventoryItemFormValues } from '../schemas'
 import { getInventoryItemCard, isInventoryDuplicateError, type InventoryItem } from '../services/inventory-service'
 
@@ -29,6 +28,9 @@ type CreateItemDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (item: InventoryItem) => void
+  /** Если задан — можно создать строку только в этот заказ, без справочника. */
+  orderId?: string
+  onCreatedForOrder?: () => void
   initialQuery?: string
 }
 
@@ -36,14 +38,19 @@ export function CreateItemDialog({
   open,
   onOpenChange,
   onCreated,
+  orderId,
+  onCreatedForOrder,
   initialQuery = '',
 }: CreateItemDialogProps) {
   const create = useCreateInventoryItem()
+  const addCustom = useAddOrderCustomPartLine(orderId ?? '')
   const [duplicateId, setDuplicateId] = useState<string | null>(null)
   const form = useForm<InventoryItemFormValues>({
     resolver: zodResolver(inventoryItemFormSchema),
     defaultValues: emptyInventoryItemFormValues,
   })
+  const canSaveCatalog = Boolean(onCreated) || !orderId
+  const pending = create.isPending || addCustom.isPending
 
   useEffect(() => {
     if (!open) {
@@ -56,11 +63,11 @@ export function CreateItemDialog({
     setDuplicateId(null)
   }, [form, initialQuery, open])
 
-  async function persist(values: InventoryItemFormValues) {
+  async function persistCatalog(values: InventoryItemFormValues) {
     try {
       const id = await create.mutateAsync(values)
       const card = await getInventoryItemCard(id)
-      toast.success('Позиция создана')
+      toast.success('Позиция добавлена в справочник')
       if (card) {
         onCreated?.(card.item)
       }
@@ -75,9 +82,39 @@ export function CreateItemDialog({
     }
   }
 
+  async function persistForOrder() {
+    if (!orderId) {
+      return
+    }
+    const name = form.getValues('name').trim()
+    const unitPrice = form.getValues('repairPrice')
+    if (!name) {
+      form.setError('name', { message: 'Укажите наименование' })
+      return
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
+      form.setError('repairPrice', { message: 'Цена не может быть отрицательной' })
+      return
+    }
+    await addCustom.mutateAsync({ name, unitPrice, quantity: 1 })
+    toast.success('Позиция добавлена в заказ')
+    form.reset(emptyInventoryItemFormValues)
+    setDuplicateId(null)
+    onOpenChange(false)
+    onCreatedForOrder?.()
+  }
+
   async function onSubmit(values: InventoryItemFormValues) {
+    if (orderId) {
+      try {
+        await persistForOrder()
+      } catch (error) {
+        toast.error(getErrorMessage(error))
+      }
+      return
+    }
     try {
-      await persist(values)
+      await persistCatalog(values)
       form.reset(emptyInventoryItemFormValues)
       setDuplicateId(null)
       onOpenChange(false)
@@ -90,7 +127,9 @@ export function CreateItemDialog({
     <Sheet
       open={open}
       dirty={form.formState.isDirty}
-      onSave={() => runSheetFormSave(form.handleSubmit, persist)}
+      onSave={() =>
+        runSheetFormSave(form.handleSubmit, orderId ? async () => persistForOrder() : persistCatalog)
+      }
       onOpenChange={(next) => {
         if (!next) {
           form.reset(emptyInventoryItemFormValues)
@@ -103,7 +142,9 @@ export function CreateItemDialog({
         <SheetHeader>
           <SheetTitle>Новая позиция</SheetTitle>
           <SheetDescription>
-            Наименование уникально. Приход и заказ остаются открытыми — данные не сбрасываются.
+            {orderId
+              ? 'Можно добавить только в этот заказ (без склада) или сохранить в справочник.'
+              : 'Наименование уникально. Приход и заказ остаются открытыми — данные не сбрасываются.'}
           </SheetDescription>
         </SheetHeader>
         <Form {...form}>
@@ -112,9 +153,9 @@ export function CreateItemDialog({
               <Alert>
                 <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
                 <AlertDescription>
-                  <Button asChild variant="link" className="h-auto px-0">
-                    <Link to={routes.inventoryItem.replace(':id', duplicateId)}>Открыть существующую позицию</Link>
-                  </Button>
+                  <EntitySheetLink kind="item" id={duplicateId}>
+                    Открыть существующую позицию
+                  </EntitySheetLink>
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -125,9 +166,48 @@ export function CreateItemDialog({
                   Отмена
                 </Button>
               </SheetClose>
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? 'Сохранение…' : 'Создать'}
-              </Button>
+              {canSaveCatalog ? (
+                <Button
+                  type={orderId ? 'button' : 'submit'}
+                  variant={orderId ? 'outline' : 'default'}
+                  disabled={pending}
+                  onClick={
+                    orderId
+                      ? () => {
+                          void form.handleSubmit(async (values) => {
+                            try {
+                              await persistCatalog(values)
+                              form.reset(emptyInventoryItemFormValues)
+                              setDuplicateId(null)
+                              onOpenChange(false)
+                            } catch {
+                              return
+                            }
+                          })()
+                        }
+                      : undefined
+                  }
+                >
+                  {create.isPending
+                    ? 'Сохранение…'
+                    : orderId
+                      ? 'В справочник'
+                      : 'Создать'}
+                </Button>
+              ) : null}
+              {orderId ? (
+                <Button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    void persistForOrder().catch((error) => {
+                      toast.error(getErrorMessage(error))
+                    })
+                  }}
+                >
+                  {addCustom.isPending ? 'Добавление…' : 'Создать в заказ'}
+                </Button>
+              ) : null}
             </SheetFooter>
           </form>
         </Form>

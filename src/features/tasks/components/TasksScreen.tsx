@@ -31,6 +31,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
 import { CreateTaskDialog } from './CreateTaskDialog'
+import { TaskDetailSheet } from './TaskDetailSheet'
 import { TaskListCard } from './TaskListCard'
 import { groupTasks } from './task-groups'
 import { useTasks } from '../hooks/use-tasks'
@@ -122,6 +123,14 @@ export function TasksScreen() {
     }
     patchFilters({ assignee: 'all' })
   }
+
+  function openTask(taskId: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('task', taskId)
+    setSearchParams(next, { replace: true })
+  }
+
+  const taskId = searchParams.get('task')
 
   return (
     <div className="space-y-4">
@@ -270,7 +279,7 @@ export function TasksScreen() {
               </h2>
               <div className="space-y-2">
                 {group.items.map((task) => (
-                  <TaskListCard key={task.id} task={task} />
+                  <TaskListCard key={task.id} task={task} onOpen={openTask} />
                 ))}
               </div>
             </section>
@@ -294,6 +303,17 @@ export function TasksScreen() {
       )}
 
       <CreateTaskDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <TaskDetailSheet
+        taskId={taskId}
+        open={Boolean(taskId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            const next = new URLSearchParams(searchParams)
+            next.delete('task')
+            setSearchParams(next, { replace: true })
+          }
+        }}
+      />
     </div>
   )
 }

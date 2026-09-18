@@ -1,6 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -32,9 +33,13 @@ type ReferenceItemDialogProps = {
   parentLabel?: string | null
   parentOptions: ParentOption[]
   item: ReferenceItem | null
+  defaultParentId?: string
+  /** Родитель зафиксирован (выбор слева) — сверху и только для чтения. */
+  lockParent?: boolean
   isPending: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (values: ReferenceItemFormValues) => Promise<void>
+  onDelete?: () => void
 }
 
 export function ReferenceItemDialog({
@@ -44,16 +49,24 @@ export function ReferenceItemDialog({
   parentLabel,
   parentOptions,
   item,
+  defaultParentId = '',
+  lockParent = false,
   isPending,
   onOpenChange,
   onSubmit,
+  onDelete,
 }: ReferenceItemDialogProps) {
+  const parentId = item?.parentId ?? defaultParentId
+  const lockedParentName =
+    parentOptions.find((option) => option.id === parentId)?.name ??
+    parentOptions.find((option) => option.id === defaultParentId)?.name
+
   const form = useForm<ReferenceItemFormValues>({
     resolver: zodResolver(referenceItemSchema),
     values: {
       name: item?.name ?? '',
       description: item?.description ?? '',
-      parentId: item?.parentId ?? '',
+      parentId,
     },
   })
 
@@ -71,15 +84,51 @@ export function ReferenceItemDialog({
     }
   }
 
+  const parentField = requiresParent ? (
+    lockParent ? (
+      <div className="grid gap-2">
+        <label className="text-sm font-medium leading-none">{parentLabel ?? 'Родитель'}</label>
+        <Input value={lockedParentName ?? '—'} readOnly disabled className="bg-muted" />
+      </div>
+    ) : (
+      <FormField
+        control={form.control}
+        name="parentId"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>{parentLabel ?? 'Родитель'}</FormLabel>
+            <Select value={field.value} onValueChange={field.onChange}>
+              <FormControl>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Выберите значение" />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent>
+                {parentOptions.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.name}
+                    {option.isActive ? '' : ' (скрыт)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+    )
+  ) : null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent actions={item && onDelete ? <SheetEntityToolbar onDelete={onDelete} /> : null}>
+        <DialogHeader className="pr-14">
           <DialogTitle>{item ? 'Изменить запись' : 'Новая запись'}</DialogTitle>
           <DialogDescription>Справочник: {setName}.</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form className="space-y-4" onSubmit={form.handleSubmit(handleSubmit)} noValidate>
+            {lockParent ? parentField : null}
             <FormField
               control={form.control}
               name="name"
@@ -93,33 +142,7 @@ export function ReferenceItemDialog({
                 </FormItem>
               )}
             />
-            {requiresParent ? (
-              <FormField
-                control={form.control}
-                name="parentId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{parentLabel ?? 'Родитель'}</FormLabel>
-                    <Select value={field.value} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Выберите значение" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {parentOptions.map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {option.name}
-                            {option.isActive ? '' : ' (скрыт)'}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : null}
+            {!lockParent ? parentField : null}
             <FormField
               control={form.control}
               name="description"

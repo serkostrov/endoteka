@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { toast } from 'sonner'
 
+import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { SectionCard } from '@/components/shared/SectionCard'
-import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
 import { CustomerPicker } from '@/features/customers'
 import { DevicePicker } from '@/features/devices'
@@ -23,7 +22,6 @@ import { SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
 import { FieldEntity, OrderBuiltinField, fieldLayoutWidthClass, isOrderBuiltinField } from '@/lib/constants/fields'
 import { deviceSerialLine } from '@/features/devices/classification'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { useAutosave } from '@/hooks/use-autosave'
@@ -48,6 +46,7 @@ type OrderOverviewTabProps = {
 }
 
 export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
+  const openSheet = useOpenEntitySheet()
   const canUpdate = useHasPermission(Permission.OrdersUpdate)
   const canAssign = useHasPermission(Permission.OrdersAssign)
   const update = useUpdateOrder(order.id)
@@ -160,24 +159,24 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
       {canEditRepair ? (
         <OrderPartiesEditor order={order} />
       ) : (
-        <div className="grid gap-4">
-          <EntityCard
-            title="Клиент"
-            name={order.customerName}
-            href={routes.customer.replace(':id', order.customerId)}
-          />
+        <div className="grid gap-2.5 md:grid-cols-2">
           <EntityCard
             title="Прибор"
             name={order.deviceLabel}
             detail={deviceSerialLine(order.serialNumber)}
-            href={routes.device.replace(':id', order.deviceId)}
+            onOpen={() => openSheet('device', order.deviceId)}
+          />
+          <EntityCard
+            title="Клиент"
+            name={order.customerName}
+            onOpen={() => openSheet('customer', order.customerId)}
           />
         </div>
       )}
 
       {fieldGroups.map((group) => (
-        <SectionCard key={group.name} title={group.name}>
-          <DynamicFieldsGrid>
+        <SectionCard key={group.name} title={group.name} flat>
+          <DynamicFieldsGrid className="gap-x-4 gap-y-3">
             {group.fields.map((field) => {
               const editable = canEditOrderCardField(field, { canUpdate, canAssign })
               return editable ? (
@@ -193,7 +192,7 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
                   }
                 />
               ) : (
-                <div key={field.id} className={cn('space-y-1', fieldLayoutWidthClass(field))}>
+                <div key={field.id} className={cn('space-y-1.5', fieldLayoutWidthClass(field))}>
                   <p className="text-sm text-muted-foreground">{field.name}</p>
                   <p className="text-sm">
                     <DynamicFieldValue field={field} value={cardValues[field.code] ?? emptyFieldValue(field)} />
@@ -287,20 +286,7 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
   }, [createdDeviceId, persistDevice, selectedDevice?.id])
 
   return (
-    <div className="flex w-full flex-col gap-4">
-      <CustomerPicker
-        framed
-        label="Клиент"
-        value={customerId}
-        disabled={pending}
-        onChange={(customer) => {
-          const nextId = customer?.id ?? ''
-          setCustomerId(nextId)
-          if (nextId) {
-            void persistCustomer(nextId)
-          }
-        }}
-      />
+    <div className="grid w-full gap-2.5 md:grid-cols-2">
       <DevicePicker
         framed
         label="Прибор"
@@ -322,6 +308,19 @@ function OrderPartiesEditor({ order }: { order: OrderDetail }) {
           void persistDevice(device.id)
         }}
       />
+      <CustomerPicker
+        framed
+        label="Клиент"
+        value={customerId}
+        disabled={pending}
+        onChange={(customer) => {
+          const nextId = customer?.id ?? ''
+          setCustomerId(nextId)
+          if (nextId) {
+            void persistCustomer(nextId)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -330,21 +329,22 @@ function EntityCard({
   title,
   name,
   detail,
-  href,
+  onOpen,
 }: {
   title: string
   name: string
   detail?: string
-  href: string
+  onOpen: () => void
 }) {
   return (
-    <div className="rounded-lg border bg-background p-4">
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</p>
-      <p className="mt-2 text-sm font-medium">{name}</p>
-      {detail ? <p className="mt-1 text-sm text-muted-foreground">{detail}</p> : null}
-      <Button asChild variant="link" className="mt-1 h-auto px-0">
-        <Link to={href}>Открыть карточку</Link>
-      </Button>
-    </div>
+    <button
+      type="button"
+      onClick={onOpen}
+      className="block w-full rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted/40"
+    >
+      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{title}</p>
+      <p className="mt-1 truncate text-sm font-medium">{name}</p>
+      {detail ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p> : null}
+    </button>
   )
 }

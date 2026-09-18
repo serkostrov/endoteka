@@ -15,6 +15,7 @@ import { useHasPermission } from '@/features/auth'
 import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { cn } from '@/lib/utils'
 import { formatDate } from '@/lib/utils/date'
 
 import { CreateItemDialog } from './CreateItemDialog'
@@ -30,12 +31,14 @@ import { findInventoryItemsByBarcode, type InventoryItem, type OrderInventoryUsa
 
 type OrderPartsTabProps = {
   orderId: string
+  /** When false, only the add form is rendered (list lives in work composition table). */
+  showLines?: boolean
 }
 
-export function OrderPartsTab({ orderId }: OrderPartsTabProps) {
+export function OrderPartsTab({ orderId, showLines = true }: OrderPartsTabProps) {
   const canWriteOff = useHasPermission(Permission.InventoryWriteOff)
   const canCreateItem = useHasPermission(Permission.InventoryReceive)
-  const usageQuery = useOrderInventoryUsage(orderId)
+  const usageQuery = useOrderInventoryUsage(orderId, showLines)
   const consume = useConsumeInventoryForOrder(orderId)
   const [picked, setPicked] = useState<InventoryItem | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -105,78 +108,121 @@ export function OrderPartsTab({ orderId }: OrderPartsTabProps) {
     await consumeItem(picked, quantity, unitPrice)
   }
 
+  const addForm = canWriteOff ? (
+    <div className={cn(showLines && 'mb-4', 'space-y-3')}>
+      <ItemSearchField
+        selected={picked}
+        disabled={consume.isPending}
+        onSelect={pickItem}
+        onClear={() => pickItem(null)}
+        onBarcode={(code) => void handleScan(code)}
+        allowCreate={canCreateItem}
+        searchPlaceholder={showLines ? undefined : 'Название, код или штрихкод'}
+        onCreateRequest={(query) => {
+          setCreateQuery(query)
+          setCreateItemOpen(true)
+        }}
+      />
+      {picked ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="space-y-0.5">
+            <Label htmlFor="order-part-qty" className="text-[11px] font-normal text-muted-foreground">
+              Кол-во
+            </Label>
+            <Input
+              id="order-part-qty"
+              type="number"
+              min={0.001}
+              step="0.001"
+              className="h-8 w-20 tabular-nums"
+              value={Number.isFinite(quantity) ? quantity : ''}
+              onChange={(event) => setQuantity(Number(event.target.value))}
+            />
+          </div>
+          <div className="space-y-0.5">
+            <Label htmlFor="order-part-price" className="text-[11px] font-normal text-muted-foreground">
+              Цена
+            </Label>
+            <Input
+              id="order-part-price"
+              type="number"
+              min={0}
+              step="0.01"
+              className="h-8 w-24 tabular-nums"
+              value={Number.isFinite(unitPrice) ? unitPrice : ''}
+              onChange={(event) => setUnitPrice(Number(event.target.value))}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={consume.isPending}
+            onClick={() => pickItem(null)}
+          >
+            Отменить
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={consume.isPending || quantity <= 0 || unitPrice < 0}
+            onClick={() => void handleAdd()}
+          >
+            {consume.isPending ? 'Добавление…' : 'Добавить'}
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  ) : (
+    <p className={cn('text-sm text-muted-foreground', showLines && 'mb-4')}>
+      Нет права на списание со склада.
+    </p>
+  )
+
+  const dialogs = (
+    <>
+      {showLines ? (
+        <InventoryItemSheet
+          itemId={openedItemId}
+          open={Boolean(openedItemId)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setOpenedItemId(null)
+            }
+          }}
+        />
+      ) : null}
+      <CreateItemDialog
+        open={createItemOpen}
+        onOpenChange={setCreateItemOpen}
+        initialQuery={createQuery}
+        orderId={orderId}
+        onCreatedForOrder={() => {
+          setCreateItemOpen(false)
+        }}
+        onCreated={(item) => {
+          pickItem(item)
+          setCreateItemOpen(false)
+        }}
+      />
+    </>
+  )
+
+  if (!showLines) {
+    return (
+      <>
+        {addForm}
+        {dialogs}
+      </>
+    )
+  }
+
   return (
     <SectionCard
       title="Запчасти"
       description="Количество и цена задаются для этого заказа. Списание со склада: сначала самые ранние поступления."
     >
-      {canWriteOff ? (
-        <div className="mb-4 space-y-3">
-          <ItemSearchField
-            selected={picked}
-            disabled={consume.isPending}
-            onSelect={pickItem}
-            onClear={() => pickItem(null)}
-            onBarcode={(code) => void handleScan(code)}
-            allowCreate={canCreateItem}
-            onCreateRequest={(query) => {
-              setCreateQuery(query)
-              setCreateItemOpen(true)
-            }}
-          />
-          {picked ? (
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="space-y-0.5">
-                <Label htmlFor="order-part-qty" className="text-[11px] font-normal text-muted-foreground">
-                  Кол-во
-                </Label>
-                <Input
-                  id="order-part-qty"
-                  type="number"
-                  min={0.001}
-                  step="0.001"
-                  className="h-8 w-20 tabular-nums"
-                  value={Number.isFinite(quantity) ? quantity : ''}
-                  onChange={(event) => setQuantity(Number(event.target.value))}
-                />
-              </div>
-              <div className="space-y-0.5">
-                <Label htmlFor="order-part-price" className="text-[11px] font-normal text-muted-foreground">
-                  Цена
-                </Label>
-                <Input
-                  id="order-part-price"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className="h-8 w-24 tabular-nums"
-                  value={Number.isFinite(unitPrice) ? unitPrice : ''}
-                  onChange={(event) => setUnitPrice(Number(event.target.value))}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={consume.isPending}
-                onClick={() => pickItem(null)}
-              >
-                Отменить
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                disabled={consume.isPending || quantity <= 0 || unitPrice < 0}
-                onClick={() => void handleAdd()}
-              >
-                {consume.isPending ? 'Добавление…' : 'Добавить'}
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-muted-foreground mb-4 text-sm">Нет права на списание со склада.</p>
-      )}
+      {addForm}
 
       {usageQuery.error ? (
         <ErrorState
@@ -210,24 +256,7 @@ export function OrderPartsTab({ orderId }: OrderPartsTabProps) {
         </ul>
       )}
 
-      <InventoryItemSheet
-        itemId={openedItemId}
-        open={Boolean(openedItemId)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setOpenedItemId(null)
-          }
-        }}
-      />
-      <CreateItemDialog
-        open={createItemOpen}
-        onOpenChange={setCreateItemOpen}
-        initialQuery={createQuery}
-        onCreated={(item) => {
-          pickItem(item)
-          setCreateItemOpen(false)
-        }}
-      />
+      {dialogs}
     </SectionCard>
   )
 }
@@ -262,13 +291,27 @@ function OrderPartCard({
 
   return (
     <article
-      className="group cursor-pointer rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50"
-      onClick={() => onOpenItem(line.itemId)}
+      className={
+        line.itemId
+          ? 'group cursor-pointer rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50'
+          : 'rounded-lg border bg-card px-2.5 py-2 shadow-xs'
+      }
+      onClick={() => {
+        if (line.itemId) {
+          onOpenItem(line.itemId)
+        }
+      }}
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-baseline gap-2">
-            <p className="min-w-0 truncate text-sm font-medium text-primary underline-offset-2 group-hover:underline">
+            <p
+              className={
+                line.itemId
+                  ? 'min-w-0 truncate text-sm font-medium text-primary underline-offset-2 group-hover:underline'
+                  : 'min-w-0 truncate text-sm font-medium'
+              }
+            >
               {line.itemName}
             </p>
             {meta ? <span className="hidden min-w-0 truncate text-xs text-muted-foreground sm:inline">{meta}</span> : null}

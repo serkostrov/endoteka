@@ -106,7 +106,7 @@ export function DiagnosticsWorkspace({ orderId }: DiagnosticsWorkspaceProps) {
   const record = diagnosticsQuery.data
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         {record ? `Протокол создан: ${formatDateTime(record.updatedAt)}` : 'Протокол ещё не создан'}
       </p>
@@ -155,8 +155,8 @@ function FieldGroupCard({
   onChange: (code: string, value: DynamicFieldValueData) => void
 }) {
   return (
-    <SectionCard title={title} description={description}>
-      <DynamicFieldsGrid>
+    <SectionCard title={title} description={description} flat>
+      <DynamicFieldsGrid className="gap-x-4 gap-y-3">
         {fields.map((field) =>
           canUpdate ? (
             <DynamicFieldRenderer
@@ -167,7 +167,7 @@ function FieldGroupCard({
               onChange={(value) => onChange(field.code, value)}
             />
           ) : (
-            <div key={field.id} className={cn('space-y-1', fieldLayoutWidthClass(field))}>
+            <div key={field.id} className={cn('space-y-1.5', fieldLayoutWidthClass(field))}>
               <p className="text-sm text-muted-foreground">
                 {field.name}
                 {field.isRequired ? <span className="text-destructive"> *</span> : null}

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
+import { useOpenEntitySheet, type EntitySheetKind } from '@/app/sheet-stack'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
@@ -13,7 +14,6 @@ import { useMarkNotificationRead } from '@/features/notifications/hooks/use-noti
 import { OrderDeadlineCell, OrderStatusBadge } from '@/features/orders/components/OrderBadges'
 import { formatTaskDueDate, isTaskOverdue } from '@/features/tasks/services/tasks-service'
 import { isDeadlineState } from '@/lib/constants/orders'
-import { routes } from '@/lib/constants/routes'
 import { isTaskPriority, taskPriorityLabels, taskPriorityTone } from '@/lib/constants/tasks'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
@@ -29,12 +29,15 @@ import type {
   DashboardTaskPreview,
 } from '../services/dashboard-service'
 
-function notificationPath(entityType: string | null, entityId: string | null) {
+function notificationEntity(
+  entityType: string | null,
+  entityId: string | null,
+): { kind: EntitySheetKind; id: string } | null {
   if (entityType === 'order' && entityId) {
-    return routes.order.replace(':id', entityId)
+    return { kind: 'order', id: entityId }
   }
   if (entityType === 'task' && entityId) {
-    return routes.task.replace(':id', entityId)
+    return { kind: 'task', id: entityId }
   }
   return null
 }
@@ -65,11 +68,14 @@ function CountRow({ row }: { row: DashboardCountRow }) {
 }
 
 function OrderPreviewRow({ order }: { order: DashboardOrderPreview }) {
+  const openSheet = useOpenEntitySheet()
+
   return (
     <li className="border-b last:border-b-0">
-      <Link
-        to={routes.order.replace(':id', order.id)}
-        className="flex items-center gap-2 py-1.5 text-sm hover:text-primary"
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 py-1.5 text-sm hover:text-primary"
+        onClick={() => openSheet('order', order.id)}
       >
         <span className="font-medium">{order.number}</span>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{order.customerName}</span>
@@ -77,40 +83,48 @@ function OrderPreviewRow({ order }: { order: DashboardOrderPreview }) {
         {isDeadlineState(order.deadlineState) ? (
           <OrderDeadlineCell order={{ deadline: order.deadline, deadlineState: order.deadlineState }} />
         ) : null}
-      </Link>
+      </button>
     </li>
   )
 }
 
 function TaskPreviewRow({ task }: { task: DashboardTaskPreview }) {
+  const openSheet = useOpenEntitySheet()
   const overdue = isTaskOverdue(task.dueDate, false)
   const priority = isTaskPriority(task.priority) ? task.priority : null
 
   return (
     <li className="border-b last:border-b-0">
-      <Link to={routes.task.replace(':id', task.id)} className="flex items-center gap-2 py-1.5 text-sm hover:text-primary">
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 py-1.5 text-sm hover:text-primary"
+        onClick={() => openSheet('task', task.id)}
+      >
         <span className="min-w-0 flex-1 truncate">{task.title}</span>
         {task.orderNumber ? <span className="text-muted-foreground">{task.orderNumber}</span> : null}
         {task.dueDate ? (
           <span className={cn(overdue && 'text-destructive')}>{formatTaskDueDate(task.dueDate)}</span>
         ) : null}
         {priority ? <StatusBadge tone={taskPriorityTone(priority)}>{taskPriorityLabels[priority]}</StatusBadge> : null}
-      </Link>
+      </button>
     </li>
   )
 }
 
 function StockPreviewRow({ item }: { item: DashboardStockPreview }) {
+  const openSheet = useOpenEntitySheet()
+
   return (
     <li className="border-b last:border-b-0">
-      <Link
-        to={routes.inventoryItem.replace(':id', item.id)}
-        className="flex items-center gap-2 py-1.5 text-sm hover:text-primary"
+      <button
+        type="button"
+        className="flex w-full items-center gap-2 py-1.5 text-sm hover:text-primary"
+        onClick={() => openSheet('item', item.id)}
       >
         <span className="min-w-0 flex-1 truncate">{item.name}</span>
         <span className="text-muted-foreground">{item.code}</span>
         <StatusBadge tone="warning">Нет остатка</StatusBadge>
-      </Link>
+      </button>
     </li>
   )
 }
@@ -122,7 +136,8 @@ function NotificationPreviewRow({
   item: DashboardNotificationPreview
   onRead: (id: string) => void
 }) {
-  const to = notificationPath(item.entityType, item.entityId)
+  const openSheet = useOpenEntitySheet()
+  const entity = notificationEntity(item.entityType, item.entityId)
   const content = (
     <>
       <span className="min-w-0 flex-1">
@@ -135,14 +150,17 @@ function NotificationPreviewRow({
 
   return (
     <li className="border-b last:border-b-0">
-      {to ? (
-        <Link
-          to={to}
-          className="flex items-start gap-2 py-1.5 text-sm hover:text-primary"
-          onClick={() => onRead(item.id)}
+      {entity ? (
+        <button
+          type="button"
+          className="flex w-full items-start gap-2 py-1.5 text-left text-sm hover:text-primary"
+          onClick={() => {
+            onRead(item.id)
+            openSheet(entity.kind, entity.id)
+          }}
         >
           {content}
-        </Link>
+        </button>
       ) : (
         <button
           type="button"

@@ -1,5 +1,6 @@
 export { DevicesScreen } from './components/DevicesScreen'
-export { DeviceDetailScreen } from './components/DeviceDetailScreen'
+export { DeviceDetailSheet } from './components/DeviceDetailScreen'
+export { DeviceTypesBrowser } from './components/DeviceTypesBrowser'
 export { DevicePicker } from './components/DevicePicker'
 export { CreateDeviceDialog } from './components/CreateDeviceDialog'
 export { SerialNumberLookup, DeviceLookupCard } from './components/SerialNumberLookup'

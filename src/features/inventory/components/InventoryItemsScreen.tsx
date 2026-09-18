@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { Pencil, Trash2 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
-import { toast } from 'sonner'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
-import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { DataTable } from '@/components/shared/DataTable'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { FilterBar } from '@/components/shared/FilterBar'
-import { IconActionButton } from '@/components/shared/IconActionButton'
+import { FolderTree, FolderTreeItemButton, groupByFolderKey } from '@/components/shared/FolderTree'
+import { ListPagination } from '@/components/shared/ListPagination'
+import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { Button } from '@/components/ui/button'
@@ -16,47 +16,49 @@ import {
   formatMoney,
 } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 
 import { CreateItemDialog } from './CreateItemDialog'
-import { EditItemDialog } from './EditItemDialog'
-import { useDeleteInventoryItem, useInventoryStock } from '../hooks/use-inventory'
+import { InventoryItemSheet } from './InventoryItemScreen'
+import { useInventoryStock } from '../hooks/use-inventory'
 import type { InventoryItem } from '../services/inventory-service'
 
 export function InventoryItemsScreen() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
-  const [editTarget, setEditTarget] = useState<InventoryItem | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null)
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const debouncedSearch = useDebouncedValue(search, INVENTORY_SEARCH_DEBOUNCE_MS)
   const itemsQuery = useInventoryStock(debouncedSearch, page, pageSize)
-  const remove = useDeleteInventoryItem()
-  const navigate = useNavigate()
+  const itemId = searchParams.get('item')
+  const items = itemsQuery.data?.items ?? []
+
+  const groups = useMemo(
+    () =>
+      groupByFolderKey(items, (item) => ({
+        id: `category:${item.categoryId || item.categoryName || 'none'}`,
+        name: item.categoryName.trim() || 'Без категории',
+      })),
+    [items],
+  )
+
+  function openItem(id: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('item', id)
+    next.delete('edit')
+    setSearchParams(next, { replace: true })
+  }
+
   const total = itemsQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
-  }
-
-  async function handleDelete() {
-    if (!deleteTarget) {
-      return
-    }
-    try {
-      await remove.mutateAsync(deleteTarget.id)
-      toast.success('Позиция удалена')
-      setDeleteTarget(null)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
   }
 
   return (
@@ -86,96 +88,60 @@ export function InventoryItemsScreen() {
         />
       </FilterBar>
 
-      <DataTable
-        caption="Номенклатура"
-        isLoading={itemsQuery.isLoading}
-        error={itemsQuery.error ? getErrorMessage(itemsQuery.error) : null}
-        data={itemsQuery.data?.items ?? []}
-        getRowId={(row) => row.id}
-        emptyTitle="Позиции не найдены"
-        emptyDescription="Добавьте позицию или измените запрос."
-        onRowClick={(row) => navigate(routes.inventoryItem.replace(':id', row.id))}
-        pagination={{
-          page,
-          pageCount,
-          onPageChange: setPage,
-          pageSize,
-          onPageSizeChange: handlePageSizeChange,
-        }}
-        columns={[
-          { id: 'name', header: 'Наименование', cell: (row) => row.name },
-          { id: 'code', header: 'Код', cell: (row) => row.code },
-          {
-            id: 'article',
-            header: 'Артикул',
-            className: 'hidden md:table-cell',
-            cell: (row) => row.article || '—',
-          },
-          {
-            id: 'category',
-            header: 'Категория',
-            className: 'hidden md:table-cell',
-            cell: (row) => row.categoryName,
-          },
-          { id: 'unit', header: 'Ед.', cell: (row) => row.unitName },
-          {
-            id: 'purchase',
-            header: 'Закупка',
-            className: 'hidden lg:table-cell',
-            cell: (row) => formatMoney(row.purchasePrice),
-          },
-          ...(canReceive
-            ? [
-                {
-                  id: 'actions',
-                  header: 'Действия',
-                  className: 'w-[1%] whitespace-nowrap',
-                  cell: (row: InventoryItem) => (
-                    <div className="flex gap-1" onClick={(event) => event.stopPropagation()}>
-                      <IconActionButton label="Изменить" onClick={() => setEditTarget(row)}>
-                        <Pencil />
-                      </IconActionButton>
-                      <IconActionButton
-                        label="Удалить"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(row)}
-                      >
-                        <Trash2 />
-                      </IconActionButton>
-                    </div>
-                  ),
-                },
-              ]
-            : []),
-        ]}
-      />
+      {itemsQuery.isLoading ? (
+        <LoadingState label="Загрузка номенклатуры" className="min-h-40" />
+      ) : itemsQuery.error ? (
+        <ErrorState description={getErrorMessage(itemsQuery.error)} />
+      ) : (
+        <FolderTree
+          groups={groups}
+          getItemId={(item) => item.id}
+          empty={
+            <EmptyState
+              title="Позиции не найдены"
+              description="Добавьте позицию или измените запрос."
+              className="rounded-md border py-12"
+            />
+          }
+          renderItem={(item: InventoryItem) => (
+            <FolderTreeItemButton depth={1} onClick={() => openItem(item.id)}>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{item.name}</span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {[item.code, item.article].filter(Boolean).join(' · ') || '—'}
+                </span>
+              </span>
+              <span className="hidden w-12 shrink-0 text-muted-foreground sm:block">{item.unitName}</span>
+              <span className="w-16 shrink-0 text-right tabular-nums text-muted-foreground">
+                {formatMoney(item.purchasePrice)}
+              </span>
+            </FolderTreeItemButton>
+          )}
+        />
+      )}
+
+      {pageCount > 1 || Boolean(pageSize) ? (
+        <ListPagination
+          page={page}
+          pageCount={pageCount}
+          onPageChange={setPage}
+          pageSize={pageSize}
+          onPageSizeChange={handlePageSizeChange}
+        />
+      ) : null}
 
       <CreateItemDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <EditItemDialog
-        item={editTarget}
-        open={Boolean(editTarget)}
+      <InventoryItemSheet
+        itemId={itemId}
+        open={Boolean(itemId)}
         onOpenChange={(open) => {
           if (!open) {
-            setEditTarget(null)
+            const next = new URLSearchParams(searchParams)
+            next.delete('item')
+            next.delete('edit')
+            setSearchParams(next, { replace: true })
           }
         }}
-      />
-      <ConfirmDialog
-        open={Boolean(deleteTarget)}
-        title="Удалить позицию"
-        description={
-          deleteTarget
-            ? `${deleteTarget.name} будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.`
-            : ''
-        }
-        confirmLabel="Удалить"
-        isPending={remove.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeleteTarget(null)
-          }
-        }}
-        onConfirm={() => void handleDelete()}
       />
     </div>
   )

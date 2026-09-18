@@ -32,6 +32,7 @@ export type OrderServiceLine = {
   description: string
   quantity: number
   unitPrice: number
+  actorName: string
   createdAt: string
 }
 
@@ -154,6 +155,25 @@ export async function addOrderServiceLine(
   return data
 }
 
+export async function addOrderCustomServiceLine(
+  orderId: string,
+  input: { name: string; description: string; quantity: number; unitPrice: number },
+): Promise<string> {
+  const { data, error } = await getSupabase().rpc('add_order_custom_service_line', {
+    target_order_id: orderId,
+    line_name: input.name,
+    line_description: input.description,
+    line_quantity: input.quantity,
+    line_unit_price: input.unitPrice,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось добавить услугу в заказ.')
+  }
+
+  return data
+}
+
 export async function setOrderServiceLine(lineId: string, quantity: number, unitPrice: number): Promise<void> {
   const { error } = await getSupabase().rpc('set_order_service_line', {
     target_line_id: lineId,
@@ -210,6 +230,7 @@ function mapLine(value: Json): OrderServiceLine | null {
     description: asString(row.description),
     quantity: asNumber(row.quantity),
     unitPrice: asNumber(row.unit_price),
+    actorName: asString(row.actor_name),
     createdAt: asString(row.created_at),
   }
 }

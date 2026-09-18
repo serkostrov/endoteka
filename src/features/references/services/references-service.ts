@@ -145,8 +145,8 @@ export async function getReferenceItemUsage(itemId: string): Promise<number> {
   return data ?? 0
 }
 
-export async function upsertReferenceItem(input: ReferenceItemInput): Promise<void> {
-  const { error } = await getSupabase().rpc('upsert_reference_item', {
+export async function upsertReferenceItem(input: ReferenceItemInput): Promise<string> {
+  const { data, error } = await getSupabase().rpc('upsert_reference_item', {
     target_id: input.id ?? null,
     target_set_id: input.setId,
     item_code: input.code,
@@ -158,6 +158,8 @@ export async function upsertReferenceItem(input: ReferenceItemInput): Promise<vo
   if (error) {
     throw toAppError(error, 'Не удалось сохранить запись справочника.')
   }
+
+  return data
 }
 
 export async function setReferenceItemActive(itemId: string, isActive: boolean): Promise<void> {

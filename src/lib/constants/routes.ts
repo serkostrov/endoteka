@@ -41,4 +41,24 @@ export const routes = {
   setPassword: '/set-password',
 } as const
 
+/** Карточки открываются sheet’ом на списке, не отдельной страницей. */
+export const sheets = {
+  order: (id: string) => `${routes.orders}?order=${encodeURIComponent(id)}`,
+  task: (id: string) => `${routes.tasks}?task=${encodeURIComponent(id)}`,
+  customer: (id: string, opts?: { edit?: boolean }) => sheetPath(routes.customers, 'customer', id, opts),
+  device: (id: string, opts?: { edit?: boolean }) => sheetPath(routes.devices, 'device', id, opts),
+  item: (id: string, opts?: { edit?: boolean }) => sheetPath(routes.inventoryItems, 'item', id, opts),
+  count: (id: string) => `${routes.inventoryCounts}?count=${encodeURIComponent(id)}`,
+  sale: (id: string) => `${routes.sales}?sale=${encodeURIComponent(id)}`,
+  receipt: (id: string) => `${routes.inventoryReceipts}?receipt=${encodeURIComponent(id)}`,
+} as const
+
+function sheetPath(base: string, key: string, id: string, opts?: { edit?: boolean }) {
+  const params = new URLSearchParams({ [key]: id })
+  if (opts?.edit) {
+    params.set('edit', '1')
+  }
+  return `${base}?${params.toString()}`
+}
+
 export type AppRoute = (typeof routes)[keyof typeof routes]

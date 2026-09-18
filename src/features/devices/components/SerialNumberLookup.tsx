@@ -1,16 +1,19 @@
-import { type KeyboardEvent, useState } from 'react'
+import { type KeyboardEvent, useMemo, useState } from 'react'
 import type { UseQueryResult } from '@tanstack/react-query'
 
+import { FolderTree, FolderTreeItemButton, nestByFolderKeys } from '@/components/shared/FolderTree'
 import { SearchInput } from '@/components/shared/SearchInput'
-import { SearchEmptyCreate, SearchSuggestOverlay } from '@/components/shared/SearchSuggestOverlay'
+import {
+  SearchCreateAction,
+  SearchEmptyCreate,
+  SearchSuggestOverlay,
+} from '@/components/shared/SearchSuggestOverlay'
 import { Button } from '@/components/ui/button'
 import { getErrorMessage } from '@/lib/errors'
-import { formatDate } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 
+import { DeviceDetailSheet } from './DeviceDetailScreen'
 import { deviceSerialLine, deviceTitle } from '../classification'
-import { EditDeviceDialog } from './EditDeviceDialog'
-import { WarrantyBadge } from './WarrantyBadge'
 import type { DeviceLookup, DeviceSearchItem, SerialSearchResult } from '../services/devices-service'
 
 type SerialNumberLookupProps = {
@@ -41,66 +44,103 @@ export function SerialNumberLookup({
   label,
 }: SerialNumberLookupProps) {
   const [open, setOpen] = useState(false)
-  const [editOpen, setEditOpen] = useState(false)
+  const [detailOpen, setDetailOpen] = useState(false)
   const matched = result.data?.kind === 'exact' ? result.data.device : null
   const items = result.data?.kind === 'list' ? result.data.items : []
   const searching = (result.isFetching || isDebouncing) && !matched
   const showPanel = open && !matched
 
+  const groups = useMemo(
+    () =>
+      nestByFolderKeys(items, [
+        (device) => ({
+          id: `group:${device.groupName || 'none'}`,
+          name: device.groupName.trim() || 'Без типа',
+        }),
+        (device) => ({
+          id: `brand:${device.brandName || 'none'}`,
+          name: device.brandName.trim() || 'Без бренда',
+        }),
+        (device) => ({
+          id: `model:${device.modelName || 'none'}`,
+          name: device.modelName.trim() || 'Без модели',
+        }),
+      ]),
+    [items],
+  )
+
+  function clearDevice() {
+    setOpen(false)
+    setDetailOpen(false)
+    onChange('')
+  }
+
+  function selectItem(item: DeviceSearchItem) {
+    if (onSelectItem) {
+      onSelectItem(item)
+    } else {
+      onChange(item.serialNumber)
+    }
+    setOpen(false)
+  }
+
+  function requestCreate() {
+    setOpen(false)
+    onCreateRequest?.(value.trim())
+  }
+
   const body = matched ? (
     <DeviceLookupCard
       device={matched}
       disabled={disabled}
-      onClear={() => {
-        setEditOpen(false)
-        setOpen(false)
-        onChange('')
-      }}
-      onOpen={() => setEditOpen(true)}
+      onOpen={() => setDetailOpen(true)}
+      onClear={framed ? undefined : clearDevice}
     />
   ) : (
     <SearchSuggestOverlay
       open={showPanel}
       onOpenChange={setOpen}
       panel={
-        <div className="max-h-64 overflow-auto">
-          {result.error ? (
-            <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(result.error)}</p>
-          ) : searching && items.length === 0 ? (
-            <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
-          ) : items.length === 0 ? (
-            <SearchEmptyCreate
-              message="Приборы не найдены"
-              actionLabel={createLabel}
+        <div className="flex min-h-0 flex-col overflow-hidden">
+          <div className="min-h-0 max-h-72 overflow-auto">
+            {result.error ? (
+              <p className="px-3 py-4 text-sm text-destructive">{getErrorMessage(result.error)}</p>
+            ) : searching && items.length === 0 ? (
+              <p className="px-3 py-4 text-sm text-muted-foreground">Поиск…</p>
+            ) : items.length === 0 ? (
+              <SearchEmptyCreate
+                message="Приборы не найдены"
+                actionLabel={createLabel}
+                disabled={disabled}
+                actionSize="comfortable"
+                onCreate={allowCreate ? requestCreate : undefined}
+              />
+            ) : (
+              <FolderTree
+                groups={groups}
+                getItemId={(device) => device.id}
+                className="rounded-none border-0"
+                renderItem={(device) => (
+                  <FolderTreeItemButton
+                    depth={3}
+                    disabled={disabled}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectItem(device)}
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium">{device.serialNumber}</span>
+                  </FolderTreeItemButton>
+                )}
+              />
+            )}
+          </div>
+          {allowCreate && items.length > 0 ? (
+            <SearchCreateAction
+              label={createLabel}
               disabled={disabled}
-              onCreate={
-                allowCreate
-                  ? () => {
-                      setOpen(false)
-                      onCreateRequest?.(value.trim())
-                    }
-                  : undefined
-              }
+              size="comfortable"
+              onCreate={requestCreate}
             />
-          ) : (
-            <ul>
-              {items.map((item) => (
-                <SerialResultItem
-                  key={item.id}
-                  item={item}
-                  disabled={disabled}
-                  onSelect={() => {
-                    if (onSelectItem) {
-                      onSelectItem(item)
-                    } else {
-                      onChange(item.serialNumber)
-                    }
-                    setOpen(false)
-                  }}
-                />
-              ))}
-            </ul>
-          )}
+          ) : null}
         </div>
       }
     >
@@ -127,19 +167,34 @@ export function SerialNumberLookup({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       {framed ? (
-        <section className="rounded-xl border bg-card p-4">
-          {label ? (
-            <p className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
-          ) : null}
+        <section className="flex h-full min-h-0 min-w-0 flex-col rounded-lg border bg-background p-2.5">
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            {label ? (
+              <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+            ) : (
+              <span />
+            )}
+            {matched && !disabled ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-auto shrink-0 px-1.5 py-0.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={clearDevice}
+              >
+                Сменить
+              </Button>
+            ) : null}
+          </div>
           {body}
         </section>
       ) : (
         body
       )}
-      <EditDeviceDialog
-        device={matched}
-        open={editOpen && Boolean(matched)}
-        onOpenChange={setEditOpen}
+      <DeviceDetailSheet
+        deviceId={matched?.id ?? null}
+        open={detailOpen && Boolean(matched)}
+        onOpenChange={setDetailOpen}
       />
     </div>
   )
@@ -150,129 +205,46 @@ export function DeviceLookupCard({
   onClear,
   onOpen,
   disabled,
-  showClear = true,
 }: {
   device: DeviceLookup
   onClear?: () => void
   onOpen?: () => void
   disabled?: boolean
-  showClear?: boolean
 }) {
-  const latest = device.latestOrder
-  const repairs = device.repairs.slice(0, 3)
-  const clickable = Boolean(onOpen) && !disabled
+  const action = onClear ?? onOpen
+  const clickable = Boolean(action) && !disabled
+  const ariaLabel = onClear
+    ? `Сменить прибор ${deviceTitle(device)}`
+    : `Открыть карточку ${deviceTitle(device)}`
 
   function onCardKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (!clickable) {
+    if (!clickable || !action) {
       return
     }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
-      onOpen?.()
+      action()
     }
   }
 
   return (
     <div
       className={cn(
-        'space-y-3 text-left',
-        clickable && 'cursor-pointer rounded-md transition-colors hover:bg-muted/40',
+        'text-left',
+        clickable && 'cursor-pointer rounded-md transition-colors hover:bg-muted/50',
       )}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
-      aria-label={clickable ? `Открыть прибор ${deviceTitle(device)}` : undefined}
-      onClick={clickable ? onOpen : undefined}
+      aria-label={clickable ? ariaLabel : undefined}
+      onClick={clickable ? action : undefined}
       onKeyDown={onCardKeyDown}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{deviceTitle(device)}</p>
-          {device.serialNumber ? (
-            <p className="truncate text-xs text-muted-foreground">{deviceSerialLine(device.serialNumber)}</p>
-          ) : null}
-        </div>
-        {showClear && onClear ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            disabled={disabled}
-            onClick={(event) => {
-              event.stopPropagation()
-              onClear()
-            }}
-          >
-            Сменить
-          </Button>
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium">{deviceTitle(device)}</p>
+        {device.serialNumber ? (
+          <p className="truncate text-xs text-muted-foreground">{deviceSerialLine(device.serialNumber)}</p>
         ) : null}
       </div>
-
-      <dl className="space-y-2 text-sm">
-        <div className="space-y-0.5">
-          <dt className="text-muted-foreground">Гарантия</dt>
-          <dd>
-            <WarrantyBadge warranty={device.warranty} />
-          </dd>
-        </div>
-        <div className="space-y-0.5">
-          <dt className="text-muted-foreground">Последний заказ</dt>
-          <dd>
-            {latest ? (
-              <p>
-                {latest.number} · {latest.statusName}
-                <span className="block text-xs text-muted-foreground">
-                  {latest.customerName} · {formatDate(latest.createdAt)}
-                </span>
-              </p>
-            ) : (
-              <p className="text-muted-foreground">Ремонтов ещё не было</p>
-            )}
-          </dd>
-        </div>
-      </dl>
-
-      {repairs.length > 0 ? (
-        <div>
-          <p className="mb-1 text-xs text-muted-foreground">Предыдущие ремонты</p>
-          <ul className="space-y-1 text-sm">
-            {repairs.map((repair) => (
-              <li key={repair.id} className="flex justify-between gap-2">
-                <span className="truncate">
-                  {repair.number} · {repair.customerName}
-                </span>
-                <span className="shrink-0 text-muted-foreground">{repair.statusName}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </div>
-  )
-}
-
-function SerialResultItem({
-  item,
-  disabled,
-  onSelect,
-}: {
-  item: DeviceSearchItem
-  disabled?: boolean
-  onSelect: () => void
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        disabled={disabled}
-        className={cn('flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-accent')}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={onSelect}
-      >
-        <span className="font-medium">{deviceTitle(item)}</span>
-        <span className="text-xs text-muted-foreground">
-          {deviceSerialLine(item.serialNumber) || item.groupName || 'Прибор'}
-        </span>
-      </button>
-    </li>
   )
 }

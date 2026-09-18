@@ -18,6 +18,7 @@ import {
   SheetHeader,
   SheetTitle,
   useSheetDirty,
+  useSheetExitPresence,
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useHasPermission } from '@/features/auth'
@@ -45,70 +46,69 @@ type TaskDetailSheetProps = {
 }
 
 export function TaskDetailSheet({ taskId, open, onOpenChange }: TaskDetailSheetProps) {
+  const presence = useSheetExitPresence(open, taskId)
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
-        {open && taskId ? <TaskSheetBody taskId={taskId} onClose={() => onOpenChange(false)} /> : null}
-      </SheetContent>
+    <Sheet open={presence.open} onOpenChange={onOpenChange}>
+      {presence.id ? (
+        <TaskDetailSheetContent key={presence.id} taskId={presence.id} onClose={() => onOpenChange(false)} />
+      ) : null}
     </Sheet>
   )
 }
 
-function TaskSheetBody({ taskId, onClose }: { taskId: string; onClose: () => void }) {
+function TaskDetailSheetContent({ taskId, onClose }: { taskId: string; onClose: () => void }) {
   const taskQuery = useTask(taskId)
-
-  if (taskQuery.isLoading) {
-    return (
-      <>
-        <SheetHeader className="border-b">
-          <SheetTitle>Задача</SheetTitle>
-          <SheetDescription>Загрузка карточки.</SheetDescription>
-        </SheetHeader>
-        <LoadingState label="Загрузка задачи" className="min-h-40" />
-      </>
-    )
-  }
-
-  if (taskQuery.error) {
-    return (
-      <>
-        <SheetHeader className="border-b">
-          <SheetTitle>Задача</SheetTitle>
-          <SheetDescription>Не удалось открыть карточку.</SheetDescription>
-        </SheetHeader>
-        <div className="px-4 py-4">
-          <ErrorState description={getErrorMessage(taskQuery.error)} />
-        </div>
-      </>
-    )
-  }
-
   const task = taskQuery.data
-  if (!task) {
-    return (
-      <>
-        <SheetHeader className="border-b">
-          <SheetTitle>Задача</SheetTitle>
-          <SheetDescription>Запись не найдена.</SheetDescription>
-        </SheetHeader>
-        <div className="px-4 py-4">
-          <ErrorState description="Задача не найдена." />
-        </div>
-      </>
-    )
-  }
 
-  return <TaskSheetCard key={`${task.id}-${task.completed}-${task.completedAt ?? ''}`} task={task} onClose={onClose} />
+  return (
+    <SheetContent
+      side="right"
+      className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,40rem)]"
+      actions={task ? <TaskDeleteControl task={task} onDeleted={onClose} /> : null}
+    >
+      {taskQuery.isLoading ? (
+        <>
+          <SheetHeader className="border-b pr-14">
+            <SheetTitle>Задача</SheetTitle>
+            <SheetDescription>Загрузка карточки.</SheetDescription>
+          </SheetHeader>
+          <LoadingState label="Загрузка задачи" className="min-h-40" />
+        </>
+      ) : taskQuery.error ? (
+        <>
+          <SheetHeader className="border-b pr-14">
+            <SheetTitle>Задача</SheetTitle>
+            <SheetDescription>Не удалось открыть карточку.</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 py-4">
+            <ErrorState description={getErrorMessage(taskQuery.error)} />
+          </div>
+        </>
+      ) : !task ? (
+        <>
+          <SheetHeader className="border-b pr-14">
+            <SheetTitle>Задача</SheetTitle>
+            <SheetDescription>Запись не найдена.</SheetDescription>
+          </SheetHeader>
+          <div className="px-4 py-4">
+            <ErrorState description="Задача не найдена." />
+          </div>
+        </>
+      ) : (
+        <TaskSheetCard key={`${task.id}-${task.completed}-${task.completedAt ?? ''}`} task={task} />
+      )}
+    </SheetContent>
+  )
 }
 
-function TaskSheetCard({ task, onClose }: { task: Task; onClose: () => void }) {
+function TaskSheetCard({ task }: { task: Task }) {
   const canUpdate = useHasPermission(Permission.TasksUpdate)
   const overdue = isTaskOverdue(task.dueDate, task.completed)
   const statusLabel = task.completed ? 'Выполнена' : overdue ? 'Просрочена' : 'Открыта'
 
   return (
     <>
-      <SheetHeader className="space-y-3 border-b pr-12">
+      <SheetHeader className="space-y-3 border-b pr-14">
         <div className="min-w-0">
           <SheetTitle className="text-lg leading-snug">{task.title}</SheetTitle>
           <SheetDescription className="mt-1">
@@ -129,7 +129,7 @@ function TaskSheetCard({ task, onClose }: { task: Task; onClose: () => void }) {
         </div>
       </SheetHeader>
       {canUpdate ? (
-        <TaskSheetForm task={task} onClose={onClose} />
+        <TaskSheetForm task={task} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="space-y-3 overflow-y-auto px-4 py-4">
@@ -138,7 +138,7 @@ function TaskSheetCard({ task, onClose }: { task: Task; onClose: () => void }) {
             </p>
           </div>
           <SheetFooter className="mt-0 flex-row flex-wrap items-center justify-between gap-2 border-t">
-            <TaskSheetActions task={task} onDeleted={onClose} />
+            <TaskCompleteControl task={task} variant="button" size="default" />
             <SheetClose asChild>
               <Button type="button" variant="outline">
                 Закрыть
@@ -151,7 +151,7 @@ function TaskSheetCard({ task, onClose }: { task: Task; onClose: () => void }) {
   )
 }
 
-function TaskSheetForm({ task, onClose }: { task: Task; onClose: () => void }) {
+function TaskSheetForm({ task }: { task: Task }) {
   const employees = useActiveEmployees()
   const update = useUpdateTask(task.id, task.orderId)
   const [title, setTitle] = useState(task.title)
@@ -255,7 +255,7 @@ function TaskSheetForm({ task, onClose }: { task: Task; onClose: () => void }) {
         </div>
       </div>
       <SheetFooter className="mt-0 flex-row flex-wrap items-center justify-between gap-2 border-t">
-        <TaskSheetActions task={task} onDeleted={onClose} />
+        <TaskCompleteControl task={task} variant="button" size="default" />
         <div className="flex items-center gap-2">
           <SheetClose asChild>
             <Button type="button" variant="outline">
@@ -268,14 +268,5 @@ function TaskSheetForm({ task, onClose }: { task: Task; onClose: () => void }) {
         </div>
       </SheetFooter>
     </form>
-  )
-}
-
-function TaskSheetActions({ task, onDeleted }: { task: Task; onDeleted: () => void }) {
-  return (
-    <div className="flex items-center gap-2">
-      <TaskDeleteControl task={task} onDeleted={onDeleted} size="icon" />
-      <TaskCompleteControl task={task} variant="button" size="default" />
-    </div>
   )
 }

@@ -1,15 +1,26 @@
-import { Link } from 'react-router-dom'
+import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import type { UseFormReturn } from 'react-hook-form'
 
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
+import { SearchCreateAction } from '@/components/shared/SearchSuggestOverlay'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useReferenceItemsBySetCode } from '@/features/references'
-import { INVENTORY_SEARCH_DEBOUNCE_MS, isAllowedInventoryUnitCode } from '@/lib/constants/inventory'
+import { useHasPermission } from '@/features/auth'
+import {
+  ReferenceItemDialog,
+  useReferenceItemsBySetCode,
+  useReferenceSets,
+  useUpsertReferenceItem,
+} from '@/features/references'
+import type { ReferenceItemFormValues } from '@/features/references/schemas'
+import { INVENTORY_SEARCH_DEBOUNCE_MS } from '@/lib/constants/inventory'
+import { Permission } from '@/lib/constants/permissions'
 import { ReferenceSetCode } from '@/lib/constants/references'
-import { routes } from '@/lib/constants/routes'
+import { uniqueCode } from '@/lib/utils/code'
+import { cn } from '@/lib/utils'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 
 import { useInventoryNameMatches } from '../hooks/use-inventory'
@@ -19,33 +30,67 @@ type ItemFieldsProps = {
   form: UseFormReturn<InventoryItemFormValues>
   disabled?: boolean
   excludeItemId?: string
+  /** Скрыть поле наименования — когда оно вынесено в шапку. */
+  hideName?: boolean
+  /** Скрыть код и артикул — когда они вынесены в шапку. */
+  hideCodeArticle?: boolean
+  /** Скрыть штрихкод — когда этикетка вынесена рядом с фото. */
+  hideBarcode?: boolean
+  /** Сетка как в карточке: 2 колонки. */
+  layout?: 'form' | 'card'
 }
 
-export function ItemFields({ form, disabled = false, excludeItemId }: ItemFieldsProps) {
+type CreateKind = 'category' | 'unit'
+
+export function ItemFields({
+  form,
+  disabled = false,
+  excludeItemId,
+  hideName = false,
+  hideCodeArticle = false,
+  hideBarcode = false,
+  layout = 'form',
+}: ItemFieldsProps) {
   const name = form.watch('name')
   const debouncedName = useDebouncedValue(name.trim(), INVENTORY_SEARCH_DEBOUNCE_MS)
-  const matchesQuery = useInventoryNameMatches(disabled ? '' : debouncedName, excludeItemId)
+  const matchesQuery = useInventoryNameMatches(disabled || hideName ? '' : debouncedName, excludeItemId)
   const matches = matchesQuery.data ?? []
   const categories = useReferenceItemsBySetCode(ReferenceSetCode.InventoryCategories)
   const units = useReferenceItemsBySetCode(ReferenceSetCode.UnitsOfMeasure)
-  const unitOptions = (units.data ?? []).filter((item) => item.isActive && isAllowedInventoryUnitCode(item.code))
+  const setsQuery = useReferenceSets()
+  const canCreate = useHasPermission(Permission.SettingsUpdate)
+  const [createKind, setCreateKind] = useState<CreateKind | null>(null)
+
   const categoryOptions = (categories.data ?? []).filter((item) => item.isActive)
+  const unitOptions = (units.data ?? []).filter((item) => item.isActive)
+  const card = layout === 'card'
+
+  const createSet = useMemo(() => {
+    if (!createKind) {
+      return null
+    }
+    const code =
+      createKind === 'category' ? ReferenceSetCode.InventoryCategories : ReferenceSetCode.UnitsOfMeasure
+    return setsQuery.data?.find((set) => set.code === code) ?? null
+  }, [createKind, setsQuery.data])
+
+  const createSiblings =
+    createKind === 'category' ? (categories.data ?? []) : createKind === 'unit' ? (units.data ?? []) : []
+  const save = useUpsertReferenceItem(createSet?.id ?? '')
 
   return (
-    <div className="space-y-4">
-      {matches.length > 0 ? (
+    <div className={cn(card ? 'space-y-3' : 'space-y-4')}>
+      {!hideName && matches.length > 0 ? (
         <Alert>
           <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
           <AlertDescription>
             <ul className="space-y-1">
               {matches.map((item) => (
                 <li key={item.id}>
-                  <Button asChild variant="link" className="h-auto px-0">
-                    <Link to={routes.inventoryItem.replace(':id', item.id)}>
-                      Открыть {item.name}
-                      {item.code ? ` (${item.code})` : ''}
-                    </Link>
-                  </Button>
+                  <EntitySheetLink kind="item" id={item.id}>
+                    Открыть {item.name}
+                    {item.code ? ` (${item.code})` : ''}
+                  </EntitySheetLink>
                 </li>
               ))}
             </ul>
@@ -53,40 +98,13 @@ export function ItemFields({ form, disabled = false, excludeItemId }: ItemFields
         </Alert>
       ) : null}
 
-      <FormField
-        control={form.control}
-        name="name"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Наименование</FormLabel>
-            <FormControl>
-              <Input {...field} autoComplete="off" disabled={disabled} />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <div className="grid gap-4 sm:grid-cols-3">
+      {!hideName ? (
         <FormField
           control={form.control}
-          name="code"
+          name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Код</FormLabel>
-              <FormControl>
-                <Input {...field} autoComplete="off" disabled={disabled} placeholder="Назначится сам" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="article"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Артикул</FormLabel>
+              <FormLabel>Наименование</FormLabel>
               <FormControl>
                 <Input {...field} autoComplete="off" disabled={disabled} />
               </FormControl>
@@ -94,78 +112,213 @@ export function ItemFields({ form, disabled = false, excludeItemId }: ItemFields
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="barcode"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Штрихкод</FormLabel>
-              <FormControl>
-                <Input {...field} autoComplete="off" inputMode="numeric" disabled={disabled} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+      ) : null}
+
+      <div className={cn('grid gap-4', card ? 'gap-3 sm:grid-cols-2' : 'sm:grid-cols-3')}>
+        {!hideCodeArticle ? (
+          <>
+            <FormField
+              control={form.control}
+              name="code"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Код</FormLabel>
+                  <FormControl>
+                    <Input {...field} autoComplete="off" disabled={disabled} placeholder="Назначится сам" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="article"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Артикул</FormLabel>
+                  <FormControl>
+                    <Input {...field} autoComplete="off" disabled={disabled} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </>
+        ) : null}
+        {!hideBarcode ? (
+          <FormField
+            control={form.control}
+            name="barcode"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Штрихкод</FormLabel>
+                <FormControl>
+                  <Input {...field} autoComplete="off" inputMode="numeric" disabled={disabled} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        ) : null}
+        {card ? (
+          <>
+            <RefSelectField
+              form={form}
+              name="categoryId"
+              label="Категория"
+              placeholder="Выберите категорию"
+              disabled={disabled}
+              options={categoryOptions}
+              allowCreate={canCreate}
+              onCreate={() => setCreateKind('category')}
+            />
+            <RefSelectField
+              form={form}
+              name="unitId"
+              label="Единица"
+              placeholder="шт или упак"
+              disabled={disabled}
+              options={unitOptions}
+              allowCreate={canCreate}
+              onCreate={() => setCreateKind('unit')}
+            />
+            <PriceField form={form} name="purchasePrice" label="Закупка" disabled={disabled} />
+            <PriceField form={form} name="repairPrice" label="Ремонт" disabled={disabled} />
+            <PriceField form={form} name="retailPrice" label="Розница" disabled={disabled} />
+          </>
+        ) : null}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField
-          control={form.control}
-          name="categoryId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Категория</FormLabel>
-              <Select value={field.value} disabled={disabled} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger className="w-full" aria-label="Категория">
-                    <SelectValue placeholder="Выберите категорию" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {categoryOptions.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="unitId"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Единица</FormLabel>
-              <Select value={field.value} disabled={disabled} onValueChange={field.onChange}>
-                <FormControl>
-                  <SelectTrigger className="w-full" aria-label="Единица измерения">
-                    <SelectValue placeholder="шт или упак" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {unitOptions.map((item) => (
-                    <SelectItem key={item.id} value={item.id}>
-                      {item.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-      </div>
+      {!card ? (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <RefSelectField
+              form={form}
+              name="categoryId"
+              label="Категория"
+              placeholder="Выберите категорию"
+              disabled={disabled}
+              options={categoryOptions}
+              allowCreate={canCreate}
+              onCreate={() => setCreateKind('category')}
+            />
+            <RefSelectField
+              form={form}
+              name="unitId"
+              label="Единица"
+              placeholder="шт или упак"
+              disabled={disabled}
+              options={unitOptions}
+              allowCreate={canCreate}
+              onCreate={() => setCreateKind('unit')}
+            />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <PriceField form={form} name="purchasePrice" label="Закупка" disabled={disabled} />
+            <PriceField form={form} name="repairPrice" label="Ремонт" disabled={disabled} />
+            <PriceField form={form} name="retailPrice" label="Розница" disabled={disabled} />
+          </div>
+        </>
+      ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <PriceField form={form} name="purchasePrice" label="Закупка" disabled={disabled} />
-        <PriceField form={form} name="repairPrice" label="Ремонт" disabled={disabled} />
-        <PriceField form={form} name="retailPrice" label="Розница" disabled={disabled} />
-      </div>
+      {createKind && createSet ? (
+        <ReferenceItemDialog
+          open
+          setName={createSet.name}
+          requiresParent={false}
+          parentOptions={[]}
+          item={null}
+          isPending={save.isPending}
+          onOpenChange={(open) => {
+            if (!open) {
+              setCreateKind(null)
+            }
+          }}
+          onSubmit={async (values: ReferenceItemFormValues) => {
+            const id = await save.mutateAsync({
+              setId: createSet.id,
+              code: uniqueCode(
+                values.name,
+                createSiblings.map((row) => row.code ?? ''),
+              ),
+              name: values.name,
+              description: values.description,
+              parentId: null,
+            })
+            form.setValue(createKind === 'category' ? 'categoryId' : 'unitId', id, {
+              shouldDirty: true,
+              shouldValidate: true,
+            })
+            toast.success(createKind === 'category' ? 'Категория добавлена' : 'Единица добавлена')
+            setCreateKind(null)
+          }}
+        />
+      ) : null}
     </div>
+  )
+}
+
+function RefSelectField({
+  form,
+  name,
+  label,
+  placeholder,
+  disabled,
+  options,
+  allowCreate,
+  onCreate,
+}: {
+  form: UseFormReturn<InventoryItemFormValues>
+  name: 'categoryId' | 'unitId'
+  label: string
+  placeholder: string
+  disabled: boolean
+  options: { id: string; name: string }[]
+  allowCreate: boolean
+  onCreate: () => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <FormField
+      control={form.control}
+      name={name}
+      render={({ field }) => (
+        <FormItem>
+          <FormLabel>{label}</FormLabel>
+          <Select
+            value={field.value}
+            disabled={disabled}
+            open={open}
+            onOpenChange={setOpen}
+            onValueChange={field.onChange}
+          >
+            <FormControl>
+              <SelectTrigger className="w-full" aria-label={label}>
+                <SelectValue placeholder={placeholder} />
+              </SelectTrigger>
+            </FormControl>
+            <SelectContent>
+              {options.map((item) => (
+                <SelectItem key={item.id} value={item.id}>
+                  {item.name}
+                </SelectItem>
+              ))}
+              {allowCreate ? (
+                <SearchCreateAction
+                  label="Новый"
+                  onCreate={() => {
+                    setOpen(false)
+                    window.setTimeout(() => onCreate(), 0)
+                  }}
+                />
+              ) : null}
+            </SelectContent>
+          </Select>
+          <FormMessage />
+        </FormItem>
+      )}
+    />
   )
 }
 

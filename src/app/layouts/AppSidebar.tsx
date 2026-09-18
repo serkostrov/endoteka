@@ -2,13 +2,12 @@ import { ChevronUp, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
@@ -16,6 +15,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { flattenNavItems, isNavItemActive, type NavGroup, type NavItem } from '@/config/navigation'
 import { AccountSwitcherItems } from '@/features/auth/components/AccountSwitcher'
+import { ProfileAvatarEditor } from '@/features/auth/components/ProfileAvatarEditor'
 import { useAuth, useHasPermission } from '@/features/auth'
 import { signOut } from '@/features/auth/services/auth-service'
 import { NotificationsButton } from '@/features/notifications'
@@ -89,7 +89,7 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
         {collapsed ? null : (
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{APP_NAME}</p>
-            <p className="truncate text-[11px] text-muted-foreground">Сервисный центр</p>
+            <p className="truncate text-[11px] text-sidebar-foreground/55">Сервисный центр</p>
           </div>
         )}
         {collapseButton}
@@ -102,7 +102,7 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
               {collapsed ? (
                 <span className="sr-only">{group.label}</span>
               ) : (
-                <p className="mb-1 px-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                <p className="mb-1 px-2 text-[11px] font-medium tracking-wide text-sidebar-foreground/45 uppercase">
                   {group.label}
                 </p>
               )}
@@ -138,6 +138,7 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
                 aria-label={displayName}
               >
                 <Avatar size="sm">
+                  {user?.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
               </button>
@@ -147,29 +148,29 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
                 className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-sidebar-accent"
               >
                 <Avatar size="sm">
+                  {user?.avatarUrl ? <AvatarImage src={user.avatarUrl} alt="" /> : null}
                   <AvatarFallback>{initials}</AvatarFallback>
                 </Avatar>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">{displayName}</span>
                   {user?.email ? (
-                    <span className="block truncate text-[11px] text-muted-foreground">{user.email}</span>
+                    <span className="block truncate text-[11px] text-sidebar-foreground/55">{user.email}</span>
                   ) : null}
                 </span>
-                <ChevronUp className="text-muted-foreground size-3.5 shrink-0" />
+                <ChevronUp className="size-3.5 shrink-0 text-sidebar-foreground/55" />
               </button>
             )}
           </DropdownMenuTrigger>
           <DropdownMenuContent side={collapsed ? 'right' : 'top'} align={collapsed ? 'end' : 'start'} className="w-80 p-1.5">
-            <DropdownMenuLabel className="flex items-center gap-3 p-2 font-normal">
-              <Avatar className="size-10">
-                <AvatarFallback>{initials}</AvatarFallback>
-              </Avatar>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold">{user?.fullName || 'Пользователь'}</span>
-                <span className="text-muted-foreground block truncate text-xs">{user?.email}</span>
-                <span className="text-primary mt-0.5 block text-[11px]">Сейчас в системе</span>
-              </span>
-            </DropdownMenuLabel>
+            <div className="flex items-center gap-3 p-2">
+              <ProfileAvatarEditor />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{user?.fullName || 'Пользователь'}</p>
+                <p className="text-muted-foreground truncate text-xs">{user?.email}</p>
+                <p className="text-primary mt-0.5 text-[11px]">Сейчас в системе</p>
+                <p className="text-muted-foreground mt-0.5 text-[11px]">Нажмите на фото, чтобы заменить</p>
+              </div>
+            </div>
             <DropdownMenuSeparator className="my-1.5" />
             <AccountSwitcherItems />
             <DropdownMenuSeparator className="my-1.5" />

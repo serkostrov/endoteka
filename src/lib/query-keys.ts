@@ -68,6 +68,7 @@ export const queryKeys = {
     items: (filters: { search: string; page: number; pageSize: number }) =>
       ['inventory', 'items', filters] as const,
     item: (id: string) => ['inventory', 'item', id] as const,
+    itemPhotos: (id: string) => ['inventory', 'item-photos', id] as const,
     name: (name: string) => ['inventory', 'name', name] as const,
     barcode: (code: string) => ['inventory', 'barcode', code] as const,
     receipts: (filters: { page: number; pageSize: number }) =>

@@ -1,19 +1,20 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
 
-import { PageNavControls } from '@/app/layouts/PageNavControls'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  useSheetExitPresence,
 } from '@/components/ui/sheet'
 import { useHasPermission } from '@/features/auth'
 import { OrderWorkScopeTab } from '@/features/services'
@@ -44,17 +45,6 @@ const tabs = [
 
 type TabId = (typeof tabs)[number]['id']
 
-export function OrderDetailScreen() {
-  const { id } = useParams()
-
-  return (
-    <div className="flex min-h-0 flex-col gap-3">
-      <PageNavControls />
-      <OrderDetailPanel orderId={id} layout="page" />
-    </div>
-  )
-}
-
 export function OrderDetailSheet({
   orderId,
   open,
@@ -64,62 +54,82 @@ export function OrderDetailSheet({
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  const presence = useSheetExitPresence(open, orderId)
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,72rem)]"
-      >
-        <SheetHeader className="sr-only">
-          <SheetTitle>Карточка заказа</SheetTitle>
-          <SheetDescription>Просмотр и редактирование заказа. Доска остаётся на фоне.</SheetDescription>
-        </SheetHeader>
-        {open && orderId ? (
-          <OrderDetailPanel
-            key={orderId}
-            orderId={orderId}
-            layout="sheet"
-            onDeleted={() => onOpenChange(false)}
-          />
-        ) : null}
-      </SheetContent>
+    <Sheet open={presence.open} onOpenChange={onOpenChange}>
+      {presence.id ? (
+        <OrderDetailSheetContent key={presence.id} orderId={presence.id} onClose={() => onOpenChange(false)} />
+      ) : null}
     </Sheet>
   )
 }
 
-function OrderDetailPanel({
-  orderId,
-  layout,
-  onDeleted,
-}: {
-  orderId: string | undefined
-  layout: 'page' | 'sheet'
-  onDeleted?: () => void
-}) {
+function OrderDetailSheetContent({ orderId, onClose }: { orderId: string; onClose: () => void }) {
   const [tab, setTab] = useState<TabId>('overview')
   const orderQuery = useOrder(orderId)
-
-  if (orderQuery.isLoading) {
-    return <LoadingState label="Загрузка заказа" className={layout === 'sheet' ? 'min-h-64' : undefined} />
-  }
-
-  if (orderQuery.error) {
-    return <ErrorState description={getErrorMessage(orderQuery.error)} />
-  }
-
+  const canDelete = useHasPermission(Permission.OrdersDelete)
+  const remove = useDeleteOrder()
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const order = orderQuery.data
-  if (!order) {
-    return <ErrorState description="Заказ не найден." />
+
+  async function handleDelete() {
+    if (!order) {
+      return
+    }
+    try {
+      await remove.mutateAsync(order.id)
+      toast.success(`Заказ ${order.number} удалён`)
+      setDeleteOpen(false)
+      onClose()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
   }
 
   return (
-    <OrderDetailCard
-      order={order}
-      layout={layout}
-      tab={tab}
-      onTabChange={setTab}
-      onDeleted={onDeleted}
-    />
+    <SheetContent
+      side="right"
+      className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,72rem)]"
+      actions={
+        order ? (
+          <SheetEntityToolbar onDelete={canDelete ? () => setDeleteOpen(true) : undefined} />
+        ) : null
+      }
+    >
+      <SheetHeader className="sr-only">
+        <SheetTitle>Карточка заказа</SheetTitle>
+        <SheetDescription>Просмотр и редактирование заказа. Доска остаётся на фоне.</SheetDescription>
+      </SheetHeader>
+      {orderQuery.isLoading ? (
+        <LoadingState label="Загрузка заказа" className="min-h-64" />
+      ) : orderQuery.error ? (
+        <ErrorState description={getErrorMessage(orderQuery.error)} />
+      ) : !order ? (
+        <ErrorState description="Заказ не найден." />
+      ) : (
+        <OrderDetailCard
+          order={order}
+          layout="sheet"
+          tab={tab}
+          onTabChange={setTab}
+          hideChromeDelete
+          onDeleted={onClose}
+        />
+      )}
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить заказ"
+        description={
+          order
+            ? `Заказ ${order.number} будет удалён безвозвратно. Списания со склада останутся в журнале.`
+            : ''
+        }
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+      />
+    </SheetContent>
   )
 }
 
@@ -129,18 +139,21 @@ function OrderDetailCard({
   tab,
   onTabChange,
   onDeleted,
+  hideChromeDelete = false,
 }: {
   order: OrderDetail
   layout: 'page' | 'sheet'
   tab: TabId
   onTabChange: (tab: TabId) => void
   onDeleted?: () => void
+  hideChromeDelete?: boolean
 }) {
   const navigate = useNavigate()
   const canDelete = useHasPermission(Permission.OrdersDelete)
   const remove = useDeleteOrder()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const inSheet = layout === 'sheet'
+  const showHeaderDelete = canDelete && !hideChromeDelete
 
   async function handleDelete() {
     try {
@@ -167,7 +180,7 @@ function OrderDetailCard({
     >
       <div className={cn('flex flex-col lg:flex-row', inSheet && 'h-full min-h-0')}>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className={cn('border-b px-4 py-2.5', inSheet && 'pr-12')}>
+          <header className={cn('border-b px-4 py-2.5', inSheet && 'pr-14')}>
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
               <h1 className="truncate text-lg font-semibold tracking-tight">Заказ {order.number}</h1>
               <OrderStatusMenu
@@ -179,7 +192,7 @@ function OrderDetailCard({
               <OrderDeadlineHint order={order} className="h-6" />
               <div className="ml-auto flex shrink-0 items-center gap-1.5">
                 <OrderPrintMenu orderId={order.id} />
-                {canDelete ? (
+                {showHeaderDelete ? (
                   <IconActionButton
                     label="Удалить заказ"
                     className="text-destructive hover:bg-destructive/10 hover:text-destructive"
@@ -210,7 +223,7 @@ function OrderDetailCard({
             ))}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
             {tab === 'overview' ? <OrderOverviewTab order={order} /> : null}
             {tab === 'diagnostics' ? <OrderDiagnosticsTab orderId={order.id} /> : null}
             {tab === 'work' ? <OrderWorkScopeTab orderId={order.id} /> : null}
@@ -232,15 +245,17 @@ function OrderDetailCard({
         </aside>
       </div>
 
-      <ConfirmDialog
-        open={deleteOpen}
-        title="Удалить заказ"
-        description={`Заказ ${order.number} будет удалён безвозвратно. Списания со склада останутся в журнале.`}
-        confirmLabel="Удалить"
-        isPending={remove.isPending}
-        onOpenChange={setDeleteOpen}
-        onConfirm={() => void handleDelete()}
-      />
+      {!hideChromeDelete ? (
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить заказ"
+          description={`Заказ ${order.number} будет удалён безвозвратно. Списания со склада останутся в журнале.`}
+          confirmLabel="Удалить"
+          isPending={remove.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => void handleDelete()}
+        />
+      ) : null}
     </div>
   )
 }

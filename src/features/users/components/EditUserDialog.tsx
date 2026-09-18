@@ -1,7 +1,9 @@
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -15,12 +17,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useAuth } from '@/features/auth'
+import { useAuth, useHasPermission } from '@/features/auth'
 import { useAssignableRoles } from '@/features/roles/hooks/use-roles'
+import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { toast } from 'sonner'
 
-import { useUpdateUserAccount } from '../hooks/use-user-mutations'
+import { useDeleteUserAccount, useUpdateUserAccount } from '../hooks/use-user-mutations'
 import { editUserSchema, type EditUserFormValues } from '../schemas'
 import type { UserAccount } from '../services/users-service'
 
@@ -32,8 +35,11 @@ type EditUserDialogProps = {
 
 export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps) {
   const { user: currentUser, refreshUser } = useAuth()
+  const canUpdate = useHasPermission(Permission.UsersUpdate)
   const rolesQuery = useAssignableRoles(open)
   const updateAccount = useUpdateUserAccount()
+  const deleteAccount = useDeleteUserAccount()
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const isSelf = Boolean(user && currentUser && user.id === currentUser.id)
   const form = useForm<EditUserFormValues>({
     resolver: zodResolver(editUserSchema),
@@ -88,6 +94,20 @@ export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps
     }
   }
 
+  async function handleDelete() {
+    if (!user || isSelf) {
+      return
+    }
+    try {
+      await deleteAccount.mutateAsync(user.id)
+      toast.success('Сотрудник удалён')
+      setDeleteOpen(false)
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   return (
     <Dialog
       open={open}
@@ -98,8 +118,17 @@ export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps
         onOpenChange(next)
       }}
     >
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent
+        actions={
+          user && canUpdate ? (
+            <SheetEntityToolbar
+              onDelete={isSelf ? undefined : () => setDeleteOpen(true)}
+              deleteDisabled={isSelf}
+            />
+          ) : null
+        }
+      >
+        <DialogHeader className="pr-14">
           <DialogTitle>Изменить сотрудника</DialogTitle>
           <DialogDescription>
             Email изменить нельзя. Пароль меняется только если поле заполнено.
@@ -200,6 +229,19 @@ export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps
             </DialogFooter>
           </form>
         </Form>
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить сотрудника"
+          description={
+            user
+              ? `Учётная запись ${user.fullName || user.email} будет удалена без возможности восстановления.`
+              : ''
+          }
+          confirmLabel="Удалить"
+          isPending={deleteAccount.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => void handleDelete()}
+        />
       </DialogContent>
     </Dialog>
   )

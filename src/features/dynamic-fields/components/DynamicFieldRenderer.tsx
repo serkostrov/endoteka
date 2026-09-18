@@ -64,7 +64,7 @@ export function DynamicFieldRenderer({
   return (
     <div
       className={cn(
-        'min-w-0 space-y-2',
+        'min-w-0 space-y-1.5',
         applyLayout && fieldLayoutWidthClass(field),
         fieldLayoutHeightClass(field),
         className,
@@ -79,8 +79,10 @@ export function DynamicFieldRenderer({
             aria-invalid={Boolean(error)}
             onCheckedChange={(checked) => onChange(checked === true)}
           />
-          {field.name}
-          {field.isRequired ? <span className="text-destructive"> *</span> : null}
+          <span>
+            {field.name}
+            {field.isRequired ? <span className="text-destructive"> *</span> : null}
+          </span>
         </label>
       ) : (
         <Label htmlFor={controlId}>

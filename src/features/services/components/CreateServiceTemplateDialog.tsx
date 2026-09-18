@@ -20,7 +20,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { getErrorMessage } from '@/lib/errors'
 
-import { useCreateServiceTemplate } from '../hooks/use-services'
+import { useAddOrderCustomServiceLine, useCreateServiceTemplate } from '../hooks/use-services'
 import {
   emptyServiceTemplateFormValues,
   serviceTemplateFormSchema,
@@ -32,6 +32,9 @@ type CreateServiceTemplateDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   onCreated?: (item: ServiceTemplate) => void
+  /** Если задан — можно создать строку только в этот заказ, без справочника. */
+  orderId?: string
+  onCreatedForOrder?: () => void
   initialQuery?: string
 }
 
@@ -39,14 +42,18 @@ export function CreateServiceTemplateDialog({
   open,
   onOpenChange,
   onCreated,
+  orderId,
+  onCreatedForOrder,
   initialQuery = '',
 }: CreateServiceTemplateDialogProps) {
   const create = useCreateServiceTemplate()
+  const addCustom = useAddOrderCustomServiceLine(orderId ?? '')
   const form = useForm<ServiceTemplateFormValues>({
     resolver: zodResolver(serviceTemplateFormSchema),
     defaultValues: emptyServiceTemplateFormValues,
   })
-  useSheetDirty(form.formState.isDirty, () => runSheetFormSave(form.handleSubmit, persist))
+  const canSaveCatalog = Boolean(onCreated) || !orderId
+  useSheetDirty(form.formState.isDirty, () => runSheetFormSave(form.handleSubmit, persistCatalog))
 
   useEffect(() => {
     if (!open) {
@@ -58,9 +65,9 @@ export function CreateServiceTemplateDialog({
     })
   }, [form, initialQuery, open])
 
-  async function persist(values: ServiceTemplateFormValues) {
+  async function persistCatalog(values: ServiceTemplateFormValues) {
     const id = await create.mutateAsync(values)
-    toast.success('Услуга создана')
+    toast.success('Услуга добавлена в справочник')
     form.reset(emptyServiceTemplateFormValues)
     onOpenChange(false)
     onCreated?.({
@@ -73,6 +80,24 @@ export function CreateServiceTemplateDialog({
       updatedAt: new Date().toISOString(),
     })
   }
+
+  async function persistForOrder(values: ServiceTemplateFormValues) {
+    if (!orderId) {
+      return
+    }
+    await addCustom.mutateAsync({
+      name: values.name,
+      description: values.description,
+      unitPrice: values.unitPrice,
+      quantity: 1,
+    })
+    toast.success('Услуга добавлена в заказ')
+    form.reset(emptyServiceTemplateFormValues)
+    onOpenChange(false)
+    onCreatedForOrder?.()
+  }
+
+  const pending = create.isPending || addCustom.isPending
 
   return (
     <Sheet
@@ -88,13 +113,17 @@ export function CreateServiceTemplateDialog({
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Новая услуга</SheetTitle>
-          <SheetDescription>Шаблон появится в поиске состава работы и в настройках.</SheetDescription>
+          <SheetDescription>
+            {orderId
+              ? 'Можно добавить только в этот заказ или сохранить шаблон в справочник.'
+              : 'Шаблон появится в поиске состава работы и в настройках.'}
+          </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
             className="flex flex-1 flex-col gap-4 px-4 pb-4"
             onSubmit={form.handleSubmit((values) => {
-              void persist(values).catch((error) => {
+              void (orderId ? persistForOrder(values) : persistCatalog(values)).catch((error) => {
                 const message = getErrorMessage(error)
                 form.setError('name', { message })
                 toast.error(message)
@@ -109,9 +138,37 @@ export function CreateServiceTemplateDialog({
                   Отмена
                 </Button>
               </SheetClose>
-              <Button type="submit" disabled={create.isPending}>
-                {create.isPending ? 'Сохранение…' : 'Создать'}
-              </Button>
+              {canSaveCatalog ? (
+                <Button
+                  type={orderId ? 'button' : 'submit'}
+                  variant={orderId ? 'outline' : 'default'}
+                  disabled={pending}
+                  onClick={
+                    orderId
+                      ? () => {
+                          void form.handleSubmit((values) => {
+                            void persistCatalog(values).catch((error) => {
+                              const message = getErrorMessage(error)
+                              form.setError('name', { message })
+                              toast.error(message)
+                            })
+                          })()
+                        }
+                      : undefined
+                  }
+                >
+                  {create.isPending
+                    ? 'Сохранение…'
+                    : orderId
+                      ? 'В справочник'
+                      : 'Создать'}
+                </Button>
+              ) : null}
+              {orderId ? (
+                <Button type="submit" disabled={pending}>
+                  {addCustom.isPending ? 'Добавление…' : 'Создать в заказ'}
+                </Button>
+              ) : null}
             </SheetFooter>
           </form>
         </Form>

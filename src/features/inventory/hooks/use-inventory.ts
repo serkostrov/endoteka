@@ -25,9 +25,11 @@ import {
 } from '../services/counts-service'
 import {
   adjustInventory,
+  addOrderCustomPartLine,
   consumeInventoryForOrder,
   createInventoryItem,
   deleteInventoryItem,
+  deleteInventoryItemPhoto,
   deleteInventoryReceipt,
   findInventoryItemByName,
   findInventoryItemsByBarcode,
@@ -35,12 +37,15 @@ import {
   getInventoryReceipt,
   getOrderInventoryUsage,
   listInventoryAdjustments,
+  listInventoryItemPhotos,
   listInventoryReceipts,
   receiveInventory,
   removeOrderPartLine,
   searchInventoryItems,
+  setInventoryItemLabel,
   setOrderPartLine,
   updateInventoryItem,
+  uploadInventoryItemPhoto,
   type InventoryItemInput,
   type InventoryReceiptDeleteMode,
   type ReceiptLineInput,
@@ -129,11 +134,11 @@ export function useInventoryAdjustments(page: number, pageSize: number) {
   })
 }
 
-export function useOrderInventoryUsage(orderId: string | undefined) {
+export function useOrderInventoryUsage(orderId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: orderId ? queryKeys.inventory.orderUsage(orderId) : queryKeys.inventory.all,
     queryFn: () => getOrderInventoryUsage(orderId ?? ''),
-    enabled: Boolean(orderId),
+    enabled: Boolean(orderId) && enabled,
   })
 }
 
@@ -178,6 +183,49 @@ export function useDeleteInventoryItem() {
   })
 }
 
+export function useInventoryItemPhotos(itemId: string | undefined) {
+  return useQuery({
+    queryKey: itemId ? queryKeys.inventory.itemPhotos(itemId) : queryKeys.inventory.all,
+    queryFn: () => listInventoryItemPhotos(itemId ?? ''),
+    enabled: Boolean(itemId),
+  })
+}
+
+export function useUploadInventoryItemPhoto(itemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (file: File) => uploadInventoryItemPhoto(itemId, file),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.itemPhotos(itemId) })
+    },
+  })
+}
+
+export function useDeleteInventoryItemPhoto(itemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { id: string; filePath: string | null }) =>
+      deleteInventoryItemPhoto(input.id, input.filePath),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.itemPhotos(itemId) })
+    },
+  })
+}
+
+export function useSetInventoryItemLabel(itemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { barcode: string; barcodeType: string }) =>
+      setInventoryItemLabel(itemId, input.barcode, input.barcodeType),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient, itemId)
+    },
+  })
+}
+
 export function useReceiveInventory() {
   const queryClient = useQueryClient()
 
@@ -205,6 +253,24 @@ export function useConsumeInventoryForOrder(orderId: string) {
     onSuccess: async () => {
       await invalidateInventory(queryClient)
       await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.orderUsage(orderId) })
+    },
+  })
+}
+
+export function useAddOrderCustomPartLine(orderId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { name: string; quantity?: number; unitPrice: number }) =>
+      addOrderCustomPartLine(orderId, {
+        name: input.name,
+        quantity: input.quantity ?? 1,
+        unitPrice: input.unitPrice,
+      }),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.orderUsage(orderId) })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) })
     },
   })
 }

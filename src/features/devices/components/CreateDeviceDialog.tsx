@@ -1,7 +1,7 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMemo, useState } from 'react'
 import { useForm, type UseFormReturn } from 'react-hook-form'
-import { Link } from 'react-router-dom'
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { toast } from 'sonner'
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -19,7 +19,6 @@ import {
   runSheetFormSave,
 } from '@/components/ui/sheet'
 import { SERIAL_LOOKUP_DEBOUNCE_MS, SERIAL_LOOKUP_MIN_LENGTH } from '@/lib/constants/devices'
-import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 
@@ -159,9 +158,7 @@ export function CreateDeviceDialog({
               <Alert>
                 <AlertTitle>Прибор с таким серийным номером уже существует</AlertTitle>
                 <AlertDescription>
-                  <Button asChild variant="link" className="h-auto px-0">
-                    <Link to={routes.device.replace(':id', blockingId)}>Открыть прибор</Link>
-                  </Button>
+                  <EntitySheetLink kind="device" id={blockingId}>Открыть прибор</EntitySheetLink>
                 </AlertDescription>
               </Alert>
             ) : null}

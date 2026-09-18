@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { queryKeys } from '@/lib/query-keys'
 
 import {
+  addOrderCustomServiceLine,
   addOrderServiceLine,
   createServiceTemplate,
   deleteServiceTemplate,
@@ -23,11 +24,11 @@ export function useServiceTemplates(search: string, page: number, pageSize: numb
   })
 }
 
-export function useOrderServiceLines(orderId: string | undefined) {
+export function useOrderServiceLines(orderId: string | undefined, enabled = true) {
   return useQuery({
     queryKey: queryKeys.services.orderLines(orderId ?? ''),
     queryFn: () => getOrderServiceLines(orderId ?? ''),
-    enabled: Boolean(orderId),
+    enabled: Boolean(orderId) && enabled,
   })
 }
 
@@ -85,6 +86,24 @@ export function useAddOrderServiceLine(orderId: string) {
   return useMutation({
     mutationFn: (input: { templateId: string; quantity: number; unitPrice: number }) =>
       addOrderServiceLine(orderId, input.templateId, input.quantity, input.unitPrice),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.services.orderLines(orderId) })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) })
+    },
+  })
+}
+
+export function useAddOrderCustomServiceLine(orderId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: { name: string; description: string; quantity?: number; unitPrice: number }) =>
+      addOrderCustomServiceLine(orderId, {
+        name: input.name,
+        description: input.description,
+        quantity: input.quantity ?? 1,
+        unitPrice: input.unitPrice,
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.services.orderLines(orderId) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) })

@@ -9,6 +9,13 @@ import { getErrorMessage } from '@/lib/errors'
 
 import { useReferenceSets } from '../hooks/use-references'
 
+const DEVICE_TYPE_CODES = new Set<string>([
+  ReferenceSetCode.DeviceGroups,
+  ReferenceSetCode.DeviceBrands,
+  ReferenceSetCode.DeviceModels,
+  ReferenceSetCode.DeviceModifications,
+])
+
 type ParameterRow = {
   id: string
   name: string
@@ -21,32 +28,30 @@ export function ReferencesScreen() {
   const setsQuery = useReferenceSets()
   const templatesQuery = useServiceTemplates('', 1, 1)
   const sets = setsQuery.data ?? []
-  const dictionaryRows: ParameterRow[] = sets.map((row) => ({
-    id: row.id,
-    name: row.name,
-    parent: row.parentSetName || '—',
-    count: `${row.activeItemCount} из ${row.itemCount}`,
-    to:
-      row.code === ReferenceSetCode.OrderStatuses
-        ? routes.settingsOrderStatuses
-        : `${routes.settingsReferences}/${row.id}`,
-  }))
-  const serviceTemplatesRow: ParameterRow = {
-    id: 'service-templates',
-    name: 'Шаблоны услуг',
-    parent: '—',
-    count: templatesQuery.data ? String(templatesQuery.data.total) : '—',
-    to: routes.settingsServiceTemplates,
-  }
-  const insertAfter = sets.findIndex((row) => row.code === ReferenceSetCode.DeviceModifications)
-  const rows =
-    insertAfter >= 0
-      ? [
-          ...dictionaryRows.slice(0, insertAfter + 1),
-          serviceTemplatesRow,
-          ...dictionaryRows.slice(insertAfter + 1),
-        ]
-      : [...dictionaryRows, serviceTemplatesRow]
+
+  const dictionaryRows: ParameterRow[] = sets
+    .filter((row) => !DEVICE_TYPE_CODES.has(row.code))
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      parent: row.parentSetName || '—',
+      count: `${row.activeItemCount} из ${row.itemCount}`,
+      to:
+        row.code === ReferenceSetCode.OrderStatuses
+          ? routes.settingsOrderStatuses
+          : `${routes.settingsReferences}/${row.id}`,
+    }))
+
+  const rows: ParameterRow[] = [
+    ...dictionaryRows,
+    {
+      id: 'service-templates',
+      name: 'Шаблоны услуг',
+      parent: '—',
+      count: templatesQuery.data ? String(templatesQuery.data.total) : '—',
+      to: routes.settingsServiceTemplates,
+    },
+  ]
 
   return (
     <div className="space-y-4">

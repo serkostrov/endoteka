@@ -6,6 +6,7 @@ type Row = {
     full_name: string
     email: string
     is_active: boolean
+    avatar_path: string | null
     created_at: string
     updated_at: string
   }
@@ -448,6 +449,7 @@ type Row = {
     code: string
     article: string
     barcode: string
+    barcode_type: string
     name: string
     category_id: string
     unit_id: string
@@ -456,6 +458,17 @@ type Row = {
     retail_price: number
     created_at: string
     updated_at: string
+  }
+  inventory_item_photos: {
+    id: string
+    item_id: string
+    file_path: string
+    file_name: string
+    mime_type: string
+    file_size: number
+    sort_order: number
+    created_by: string | null
+    created_at: string
   }
   inventory_receipts: {
     id: string
@@ -505,7 +518,8 @@ type Row = {
   order_part_lines: {
     id: string
     order_id: string
-    item_id: string
+    item_id: string | null
+    name: string
     quantity: number
     unit_price: number
     created_by: string | null
@@ -527,6 +541,7 @@ type Row = {
     order_id: string
     template_id: string | null
     name: string
+    description: string
     quantity: number
     unit_price: number
     created_by: string | null
@@ -671,6 +686,7 @@ export type Database = {
           full_name?: string
           email?: string
           is_active?: boolean
+          avatar_path?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -678,6 +694,7 @@ export type Database = {
           full_name?: string
           email?: string
           is_active?: boolean
+          avatar_path?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -1087,6 +1104,12 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      inventory_item_photos: {
+        Row: Row['inventory_item_photos']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       inventory_receipts: {
         Row: Row['inventory_receipts']
         Insert: never
@@ -1289,6 +1312,14 @@ export type Database = {
       get_my_permissions: {
         Args: Record<PropertyKey, never>
         Returns: { code: string }[]
+      }
+      set_my_avatar: {
+        Args: { file_path: string }
+        Returns: string
+      }
+      clear_my_avatar: {
+        Args: Record<PropertyKey, never>
+        Returns: string
       }
       get_assignable_roles: {
         Args: Record<PropertyKey, never>
@@ -1501,6 +1532,7 @@ export type Database = {
           device_model_id?: string | null
           device_modification_id?: string | null
           device_metadata?: Json
+          device_serial?: string | null
         }
         Returns: undefined
       }
@@ -1794,6 +1826,40 @@ export type Database = {
         Args: { target_item_id: string }
         Returns: undefined
       }
+      set_inventory_item_label: {
+        Args: {
+          target_item_id: string
+          item_barcode?: string
+          item_barcode_type?: string
+        }
+        Returns: undefined
+      }
+      list_inventory_item_photos: {
+        Args: { target_item_id: string }
+        Returns: {
+          id: string
+          file_path: string
+          file_name: string
+          mime_type: string
+          file_size: number
+          sort_order: number
+          created_at: string
+        }[]
+      }
+      register_inventory_item_photo: {
+        Args: {
+          target_item_id: string
+          file_path: string
+          file_name: string
+          mime_type: string
+          file_size: number
+        }
+        Returns: string
+      }
+      delete_inventory_item_photo: {
+        Args: { target_photo_id: string }
+        Returns: string
+      }
       search_inventory_items: {
         Args: { search_query?: string; page_number?: number; page_size?: number; stock_filter?: string }
         Returns: {
@@ -1914,6 +1980,15 @@ export type Database = {
       get_order_inventory_usage: {
         Args: { target_order_id: string }
         Returns: Json
+      }
+      add_order_custom_part_line: {
+        Args: {
+          target_order_id: string
+          line_name: string
+          line_quantity?: number
+          line_unit_price?: number
+        }
+        Returns: string
       }
       set_order_part_line: {
         Args: { target_line_id: string; line_quantity: number; line_unit_price: number }
@@ -2270,6 +2345,7 @@ export type Database = {
           target_movement_type: string
           target_reference_type: string
           target_reference_id: string
+          allow_shortage?: boolean
         }
         Returns: Json
       }
@@ -2319,6 +2395,16 @@ export type Database = {
           target_template_id: string
           line_quantity: number
           line_unit_price: number
+        }
+        Returns: string
+      }
+      add_order_custom_service_line: {
+        Args: {
+          target_order_id: string
+          line_name: string
+          line_description?: string
+          line_quantity?: number
+          line_unit_price?: number
         }
         Returns: string
       }

@@ -1,21 +1,31 @@
-import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Printer, Trash2 } from 'lucide-react'
 
+import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-
 import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { DatePicker } from '@/components/shared/DatePicker'
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  useSheetExitPresence,
+} from '@/components/ui/sheet'
 import { CustomerPicker } from '@/features/customers'
 import { SaleDocumentsTab } from '@/features/documents'
 import { ItemSearchField } from '@/features/inventory/components/ItemSearchField'
@@ -29,6 +39,7 @@ import { formatDate } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 import type { InventoryItem } from '@/features/inventory/services/inventory-service'
 
+import { SaleLinesBulkActions } from './SaleLinesBulkActions'
 import { SalePrintDocument } from './SalePrintDocument'
 import {
   useAddSaleLine,
@@ -42,38 +53,119 @@ import {
 } from '../hooks/use-sales'
 import type { SaleAllocation, SaleDocument, SaleFifoPreviewLine, SaleLine } from '../services/sales-service'
 
-export function SaleDetailScreen() {
-  const { id } = useParams()
-  const saleQuery = useSale(id)
-
-  if (saleQuery.isLoading) {
-    return <LoadingState label="Загрузка продажи" />
-  }
-
-  if (saleQuery.error) {
-    return <ErrorState description={getErrorMessage(saleQuery.error)} />
-  }
-
-  const document = saleQuery.data
-  if (!document) {
-    return <ErrorState description="Продажа не найдена." />
-  }
-
-  return <SaleDocumentBody document={document} />
+export function SaleDetailSheet({
+  saleId,
+  open,
+  onOpenChange,
+}: {
+  saleId: string | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const presence = useSheetExitPresence(open, saleId)
+  return (
+    <Sheet open={presence.open} onOpenChange={onOpenChange}>
+      {presence.id ? (
+        <SaleDetailSheetContent key={presence.id} saleId={presence.id} onClose={() => onOpenChange(false)} />
+      ) : null}
+    </Sheet>
+  )
 }
 
-function SaleDocumentBody({ document }: { document: SaleDocument }) {
+function SaleDetailSheetContent({ saleId, onClose }: { saleId: string; onClose: () => void }) {
+  const saleQuery = useSale(saleId)
+  const canDelete = useHasPermission(Permission.SalesDelete)
+  const remove = useDeleteSale()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const document = saleQuery.data
+  const canRemove = Boolean(document && canDelete && document.status !== SaleStatus.Confirmed)
+
+  async function handleDelete() {
+    if (!document) {
+      return
+    }
+    try {
+      await remove.mutateAsync(document.id)
+      toast.success('Счёт удалён')
+      setDeleteOpen(false)
+      onClose()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  return (
+    <SheetContent
+      side="right"
+      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,40rem)]"
+      actions={
+        document ? (
+          <SheetEntityToolbar onDelete={canRemove ? () => setDeleteOpen(true) : undefined} />
+        ) : null
+      }
+    >
+      <SheetHeader className="sr-only">
+        <SheetTitle>Продажа</SheetTitle>
+        <SheetDescription>Карточка счёта. Список остаётся на фоне.</SheetDescription>
+      </SheetHeader>
+      <div className="p-4 pr-14">
+        {saleQuery.isLoading ? (
+          <LoadingState label="Загрузка продажи" className="min-h-40" />
+        ) : saleQuery.error ? (
+          <ErrorState description={getErrorMessage(saleQuery.error)} />
+        ) : !document ? (
+          <ErrorState description="Продажа не найдена." />
+        ) : (
+          <SaleDocumentBody document={document} layout="sheet" hideChromeDelete onDeleted={onClose} />
+        )}
+      </div>
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить счёт"
+        description={document ? `${document.invoiceNumber} будет удалён без возможности восстановления.` : ''}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+      />
+    </SheetContent>
+  )
+}
+
+function SaleDocumentBody({
+  document,
+  layout,
+  onDeleted,
+  hideChromeDelete = false,
+}: {
+  document: SaleDocument
+  layout: 'page' | 'sheet'
+  onDeleted?: () => void
+  hideChromeDelete?: boolean
+}) {
   const navigate = useNavigate()
+  const openSheet = useOpenEntitySheet()
   const canCreate = useHasPermission(Permission.SalesCreate)
   const canUpdate = useHasPermission(Permission.SalesUpdate)
   const canDelete = useHasPermission(Permission.SalesDelete)
   const editable = document.status === SaleStatus.Draft && (canCreate || canUpdate)
-  const canRemove = canDelete && document.status !== SaleStatus.Confirmed
+  const canRemove = canDelete && document.status !== SaleStatus.Confirmed && !hideChromeDelete
   const confirm = useConfirmSale(document.id)
   const cancel = useCancelSale(document.id)
   const remove = useDeleteSale()
   const update = useUpdateSale(document.id)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const lineIdsKey = document.lines.map((line) => line.id).join('|')
+
+  useEffect(() => {
+    const visible = new Set(lineIdsKey ? lineIdsKey.split('|') : [])
+    setSelectedIds((current) => {
+      const next = current.filter((id) => visible.has(id))
+      return next.length === current.length ? current : next
+    })
+  }, [lineIdsKey])
+
   const insufficient = document.lines.filter((line) => line.quantity > line.stockQuantity || !line.fifoPreview.enough)
   const canConfirm =
     canCreate &&
@@ -105,7 +197,11 @@ function SaleDocumentBody({ document }: { document: SaleDocument }) {
       await remove.mutateAsync(document.id)
       toast.success('Счёт удалён')
       setDeleteOpen(false)
-      navigate(routes.sales)
+      if (onDeleted) {
+        onDeleted()
+      } else {
+        navigate(routes.sales)
+      }
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
@@ -122,7 +218,6 @@ function SaleDocumentBody({ document }: { document: SaleDocument }) {
       <div className="space-y-4 print:hidden">
         <PageHeader
           title={document.invoiceNumber}
-          description="Счёт внешнему клиенту. Списание со склада — только после подтверждения."
           actions={
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
@@ -231,8 +326,6 @@ function SaleDocumentBody({ document }: { document: SaleDocument }) {
           </div>
         </SectionCard>
 
-        {editable ? <AddSaleLineCard saleId={document.id} /> : null}
-
         {insufficient.length > 0 ? (
           <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
             Недостаточно остатка:{' '}
@@ -243,37 +336,56 @@ function SaleDocumentBody({ document }: { document: SaleDocument }) {
           </p>
         ) : null}
 
-        {!document.customerId && editable ? (
-          <p className="text-sm text-muted-foreground">Укажите покупателя, чтобы подтвердить продажу.</p>
-        ) : null}
-
         <SectionCard
           title="Позиции"
-          description={editable ? 'Остаток проверяется до подтверждения. Списание: сначала самые ранние поступления.' : undefined}
           actions={<p className="text-sm font-medium">Итого {formatMoney(document.total)}</p>}
         >
-          <DataTable
-            caption="Строки счёта"
-            data={document.lines}
-            getRowId={(row) => row.id}
-            emptyTitle="Позиций нет"
-            emptyDescription="Добавьте товар и укажите количество."
-            columns={saleLineColumns(document, editable)}
-          />
+          <div className="space-y-3">
+            {editable ? <AddSaleLineForm saleId={document.id} /> : null}
+            {!document.customerId && editable ? (
+              <p className="text-sm text-muted-foreground">Укажите покупателя, чтобы подтвердить продажу.</p>
+            ) : null}
+            {selectedIds.length > 0 ? (
+              <SaleLinesBulkActions
+                saleId={document.id}
+                selectedIds={selectedIds}
+                lines={document.lines}
+                editable={editable}
+                onClear={() => setSelectedIds([])}
+              />
+            ) : null}
+            <DataTable
+              caption="Строки счёта"
+              data={document.lines}
+              getRowId={(row) => row.id}
+              emptyTitle="Позиций нет"
+              emptyDescription="Найдите товар выше и добавьте в счёт."
+              dense
+              framed
+              selection={{
+                selectedIds,
+                onSelectedIdsChange: setSelectedIds,
+              }}
+              onRowClick={(row) => openSheet('item', row.itemId)}
+              columns={saleLineColumns(document, editable)}
+            />
+          </div>
         </SectionCard>
 
         <SaleDocumentsTab saleId={document.id} invoiceNumber={document.invoiceNumber} />
       </div>
 
-      <ConfirmDialog
-        open={deleteOpen}
-        title="Удалить счёт"
-        description={`${document.invoiceNumber} будет удалён без возможности восстановления.`}
-        confirmLabel="Удалить"
-        isPending={remove.isPending}
-        onOpenChange={setDeleteOpen}
-        onConfirm={() => void handleDelete()}
-      />
+      {!hideChromeDelete ? (
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить счёт"
+          description={`${document.invoiceNumber} будет удалён без возможности восстановления.`}
+          confirmLabel="Удалить"
+          isPending={remove.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => void handleDelete()}
+        />
+      ) : null}
 
       <div className="hidden print:block">
         <SalePrintDocument document={document} />
@@ -287,10 +399,13 @@ function saleLineColumns(document: SaleDocument, editable: boolean): DataTableCo
     {
       id: 'item',
       header: 'Позиция',
+      className: 'min-w-[12rem]',
       cell: (row) => (
-        <div>
-          <p>{row.itemName}</p>
-          <p className="text-xs text-muted-foreground">
+        <div className="min-w-0" onClick={(event) => event.stopPropagation()}>
+          <EntitySheetLink kind="item" id={row.itemId} className="font-medium">
+            {row.itemName}
+          </EntitySheetLink>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {row.itemCode}
             {row.itemArticle ? ` · ${row.itemArticle}` : ''}
           </p>
@@ -300,32 +415,56 @@ function saleLineColumns(document: SaleDocument, editable: boolean): DataTableCo
     {
       id: 'qty',
       header: 'Кол-во',
+      className: 'w-[1%]',
       cell: (row) =>
         editable ? (
-          <LineNumberInput line={row} field="quantity" saleId={document.id} />
+          <div onClick={(event) => event.stopPropagation()}>
+            <LineNumberInput line={row} field="quantity" saleId={document.id} />
+          </div>
         ) : (
-          `${formatQuantity(row.quantity)} ${row.unitName}`
+          <span className="tabular-nums">
+            {formatQuantity(row.quantity)} {row.unitName}
+          </span>
         ),
     },
     {
       id: 'price',
       header: 'Цена',
+      className: 'w-[1%]',
       cell: (row) =>
-        editable ? <LineNumberInput line={row} field="unitPrice" saleId={document.id} /> : formatMoney(row.unitPrice),
+        editable ? (
+          <div onClick={(event) => event.stopPropagation()}>
+            <LineNumberInput line={row} field="unitPrice" saleId={document.id} />
+          </div>
+        ) : (
+          <span className="tabular-nums">{formatMoney(row.unitPrice)}</span>
+        ),
     },
-    { id: 'amount', header: 'Сумма', cell: (row) => formatMoney(row.amount) },
+    {
+      id: 'amount',
+      header: 'Сумма',
+      className: 'w-[1%] tabular-nums',
+      cell: (row) => formatMoney(row.amount),
+    },
     {
       id: 'stock',
-      header: 'Остаток',
+      header: 'Ост',
+      className: 'w-[1%]',
       cell: (row) => (
-        <span className={cn(row.quantity > row.stockQuantity ? 'font-medium text-destructive' : undefined)}>
-          {formatQuantity(row.stockQuantity)} {row.unitName}
+        <span
+          className={cn(
+            'tabular-nums',
+            row.quantity > row.stockQuantity ? 'font-medium text-destructive' : undefined,
+          )}
+        >
+          {formatQuantity(row.stockQuantity)}
         </span>
       ),
     },
     {
       id: 'fifo',
       header: 'Партии',
+      className: 'hidden min-w-[8rem] lg:table-cell',
       cell: (row) => <FifoCell line={row} confirmed={document.status === SaleStatus.Confirmed} />,
     },
   ]
@@ -334,14 +473,23 @@ function saleLineColumns(document: SaleDocument, editable: boolean): DataTableCo
     columns.push({
       id: 'remove',
       header: '',
-      cell: (row) => <RemoveLineButton saleId={document.id} lineId={row.id} />,
+      className: 'w-[1%]',
+      cell: (row) => (
+        <div
+          className="flex justify-end"
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <RemoveLineButton saleId={document.id} lineId={row.id} />
+        </div>
+      ),
     })
   }
 
   return columns
 }
 
-function AddSaleLineCard({ saleId }: { saleId: string }) {
+function AddSaleLineForm({ saleId }: { saleId: string }) {
   const add = useAddSaleLine(saleId)
   const [picked, setPicked] = useState<InventoryItem | null>(null)
   const [quantity, setQuantity] = useState(1)
@@ -373,22 +521,22 @@ function AddSaleLineCard({ saleId }: { saleId: string }) {
   }
 
   return (
-    <SectionCard title="Добавить позицию" description="Перед подтверждением видно, хватит ли остатка.">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem_auto] md:items-end">
-        <ItemSearchField
-          selected={picked}
-          onSelect={(item) => {
-            setPicked(item)
-            setQuantity(1)
-            setUnitPrice(item.retailPrice)
-          }}
-          onClear={() => {
-            setPicked(null)
-            setUnitPrice(0)
-          }}
-        />
-        <div className="space-y-2">
-          <Label htmlFor="sale-add-qty">Количество</Label>
+    <div className="space-y-2">
+      <ItemSearchField
+        selected={picked}
+        onSelect={(item) => {
+          setPicked(item)
+          setQuantity(1)
+          setUnitPrice(item.retailPrice)
+        }}
+        onClear={() => {
+          setPicked(null)
+          setUnitPrice(0)
+        }}
+      />
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="sale-add-qty">Кол-во</Label>
           <Input
             id="sale-add-qty"
             type="number"
@@ -398,7 +546,7 @@ function AddSaleLineCard({ saleId }: { saleId: string }) {
             onChange={(event) => setQuantity(Number(event.target.value))}
           />
         </div>
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <Label htmlFor="sale-add-price">Цена</Label>
           <Input
             id="sale-add-price"
@@ -410,16 +558,16 @@ function AddSaleLineCard({ saleId }: { saleId: string }) {
           />
         </div>
         <Button type="button" disabled={add.isPending || !picked} onClick={() => void submit()}>
-          {add.isPending ? 'Добавление…' : 'Добавить'}
+          {add.isPending ? '…' : 'Добавить'}
         </Button>
       </div>
       {picked ? (
-        <p className={cn('mt-3 text-sm', exceedsStock ? 'text-destructive' : 'text-muted-foreground')}>
+        <p className={cn('text-sm', exceedsStock ? 'text-destructive' : 'text-muted-foreground')}>
           Остаток {formatQuantity(picked.stockQuantity)} {picked.unitName}
           {exceedsStock ? '. Такого количества нет на складе.' : ''}
         </p>
       ) : null}
-    </SectionCard>
+    </div>
   )
 }
 

@@ -14,6 +14,7 @@ import { routes } from '@/lib/constants/routes'
 
 import { AppChromeProvider } from './app-chrome-context'
 import { AppSidebar } from './AppSidebar'
+import { SheetStackHost, SheetStackProvider } from '@/app/sheet-stack'
 
 const SIDEBAR_STORAGE_KEY = 'endoteka.sidebar-collapsed'
 
@@ -87,9 +88,12 @@ export function AppLayout() {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <main id="main-content" className="flex-1 p-3 md:p-4 print:p-0">
-            <Suspense fallback={<LoadingState />}>
-              <Outlet />
-            </Suspense>
+            <SheetStackProvider>
+              <Suspense fallback={<LoadingState />}>
+                <Outlet />
+              </Suspense>
+              <SheetStackHost />
+            </SheetStackProvider>
           </main>
         </div>
       </div>

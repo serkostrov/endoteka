@@ -1,32 +1,45 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/DataTable'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { SectionCard } from '@/components/shared/SectionCard'
 import { SupplierLink } from '@/components/shared/SupplierLink'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate, formatDateTime } from '@/lib/utils/date'
 
+import { InventoryReceiptSheet } from './InventoryReceiptSheet'
 import { ReceiveStockSheet } from './ReceiveStockSheet'
 import { ReceiptDeleteControl } from './ReceiptDeleteControl'
-import { useInventoryReceipt, useInventoryReceipts } from '../hooks/use-inventory'
+import { useInventoryReceipts } from '../hooks/use-inventory'
 import type { InventoryReceiptListItem } from '../services/inventory-service'
 
 export function InventoryReceiptsScreen() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
-  const [selectedId, setSelectedId] = useState<string | undefined>()
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const receiptsQuery = useInventoryReceipts(page, pageSize)
-  const receiptQuery = useInventoryReceipt(selectedId)
+  const receiptId = searchParams.get('receipt')
   const total = receiptsQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function openReceipt(id: string) {
+    const next = new URLSearchParams(searchParams)
+    next.set('receipt', id)
+    setSearchParams(next, { replace: true })
+  }
+
+  function closeReceipt() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('receipt')
+    setSearchParams(next, { replace: true })
+  }
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
@@ -47,47 +60,6 @@ export function InventoryReceiptsScreen() {
         }
       />
 
-      {selectedId && receiptQuery.data ? (
-        <SectionCard
-          title={
-            <>
-              Приход ·{' '}
-              <SupplierLink
-                name={receiptQuery.data.supplier}
-                customerId={receiptQuery.data.supplierId}
-              />
-            </>
-          }
-          description={`${formatDate(receiptQuery.data.receiptDate)}${receiptQuery.data.notes ? ` · ${receiptQuery.data.notes}` : ''}`}
-          actions={
-            <div className="flex items-center gap-2">
-              <ReceiptDeleteControl
-                receipt={{ id: receiptQuery.data.id, supplier: receiptQuery.data.supplier }}
-                variant="button"
-                onDeleted={() => setSelectedId(undefined)}
-              />
-              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedId(undefined)}>
-                Скрыть
-              </Button>
-            </div>
-          }
-        >
-          <DataTable
-            caption="Строки прихода"
-            data={receiptQuery.data.lines}
-            getRowId={(row) => row.id}
-            emptyTitle="Строк нет"
-            columns={[
-              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-              { id: 'code', header: 'Код', cell: (row) => row.itemCode },
-              { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.quantity) },
-              { id: 'price', header: 'Цена', cell: (row) => formatMoney(row.unitPrice) },
-              { id: 'left', header: 'Остаток партии', cell: (row) => formatQuantity(row.remainingQuantity) },
-            ]}
-          />
-        </SectionCard>
-      ) : null}
-
       <DataTable
         caption="Приходы"
         isLoading={receiptsQuery.isLoading}
@@ -96,7 +68,7 @@ export function InventoryReceiptsScreen() {
         getRowId={(row) => row.id}
         emptyTitle="Приходов нет"
         emptyDescription="Оформите поступление, чтобы появились партии."
-        onRowClick={(row) => setSelectedId(row.id)}
+        onRowClick={(row) => openReceipt(row.id)}
         pagination={{
           page,
           pageCount,
@@ -106,9 +78,11 @@ export function InventoryReceiptsScreen() {
         }}
         columns={[
           { id: 'date', header: 'Дата', cell: (row) => formatDate(row.receiptDate) },
-          { id: 'supplier', header: 'Поставщик', cell: (row) => (
-            <SupplierLink name={row.supplier} customerId={row.supplierId} />
-          ) },
+          {
+            id: 'supplier',
+            header: 'Поставщик',
+            cell: (row) => <SupplierLink name={row.supplier} customerId={row.supplierId} />,
+          },
           { id: 'lines', header: 'Строк', cell: (row) => String(row.lineCount) },
           { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.totalQuantity) },
           {
@@ -134,8 +108,8 @@ export function InventoryReceiptsScreen() {
                       <ReceiptDeleteControl
                         receipt={{ id: row.id, supplier: row.supplier }}
                         onDeleted={() => {
-                          if (selectedId === row.id) {
-                            setSelectedId(undefined)
+                          if (receiptId === row.id) {
+                            closeReceipt()
                           }
                         }}
                       />
@@ -148,6 +122,15 @@ export function InventoryReceiptsScreen() {
       />
 
       <ReceiveStockSheet open={createOpen} onOpenChange={setCreateOpen} />
+      <InventoryReceiptSheet
+        receiptId={receiptId}
+        open={Boolean(receiptId)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeReceipt()
+          }
+        }}
+      />
     </div>
   )
 }

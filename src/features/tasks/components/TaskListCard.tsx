@@ -1,12 +1,13 @@
 import { Calendar, Link2, Pencil, User } from 'lucide-react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { useHasPermission } from '@/features/auth'
 import { Permission } from '@/lib/constants/permissions'
 import { taskPriorityLabels, taskPriorityTone } from '@/lib/constants/tasks'
-import { routes } from '@/lib/constants/routes'
+import { sheets } from '@/lib/constants/routes'
 import { cn } from '@/lib/utils'
 
 import { TaskCompleteControl } from './TaskCompleteControl'
@@ -15,13 +16,22 @@ import { taskDueHint, type TaskListItem } from '../services/tasks-service'
 
 type TaskListCardProps = {
   task: TaskListItem
+  onOpen?: (taskId: string) => void
 }
 
-export function TaskListCard({ task }: TaskListCardProps) {
+export function TaskListCard({ task, onOpen }: TaskListCardProps) {
   const navigate = useNavigate()
   const canUpdate = useHasPermission(Permission.TasksUpdate)
   const due = taskDueHint(task.dueDate, task.completed)
-  const to = routes.task.replace(':id', task.id)
+  const to = sheets.task(task.id)
+
+  function open() {
+    if (onOpen) {
+      onOpen(task.id)
+      return
+    }
+    navigate(to)
+  }
 
   return (
     <article
@@ -29,11 +39,11 @@ export function TaskListCard({ task }: TaskListCardProps) {
         'flex cursor-pointer gap-3 rounded-lg border bg-card px-3 py-3 shadow-xs transition-colors hover:bg-accent/40',
         task.completed && 'opacity-80',
       )}
-      onClick={() => navigate(to)}
+      onClick={open}
       onKeyDown={(event) => {
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
-          navigate(to)
+          open()
         }
       }}
       role="link"
@@ -65,7 +75,7 @@ export function TaskListCard({ task }: TaskListCardProps) {
                 onKeyDown={(event) => event.stopPropagation()}
                 onPointerDown={(event) => event.stopPropagation()}
               >
-                <IconActionButton label="Изменить" onClick={() => navigate(to)}>
+                <IconActionButton label="Изменить" onClick={open}>
                   <Pencil />
                 </IconActionButton>
               </div>
@@ -76,15 +86,15 @@ export function TaskListCard({ task }: TaskListCardProps) {
         {task.body ? <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{task.body}</p> : null}
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {task.orderId && task.orderNumber ? (
-            <Link
-              to={routes.order.replace(':id', task.orderId)}
+            <EntitySheetLink
+              kind="order"
+              id={task.orderId}
               className="inline-flex items-center gap-1 text-primary hover:underline"
-              onClick={(event) => event.stopPropagation()}
             >
               <Link2 className="size-3.5" aria-hidden="true" />
               {task.orderNumber}
               {task.customerName ? ` · ${task.customerName}` : ''}
-            </Link>
+            </EntitySheetLink>
           ) : null}
           <span className="inline-flex items-center gap-1">
             <User className="size-3.5" aria-hidden="true" />

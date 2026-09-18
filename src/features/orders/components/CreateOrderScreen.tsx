@@ -25,7 +25,7 @@ import { useHasPermission } from '@/features/auth'
 import { SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
 import { FieldEntity, isOrderBuiltinField } from '@/lib/constants/fields'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
+import { routes, sheets } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
@@ -109,7 +109,7 @@ export function CreateOrderScreen() {
       }
 
       toast.success('Заказ создан')
-      navigate(routes.order.replace(':id', orderId))
+      navigate(sheets.order(orderId))
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -147,21 +147,6 @@ export function CreateOrderScreen() {
               <div className="grid gap-4">
                 <FormField
                   control={form.control}
-                  name="customerId"
-                  render={({ field }) => (
-                    <FormItem className="min-w-0">
-                      <FormLabel>Клиент</FormLabel>
-                      <CustomerPicker
-                        value={field.value}
-                        onChange={(customer) => field.onChange(customer?.id ?? '')}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
                   name="deviceId"
                   render={() => (
                     <FormItem className="min-w-0">
@@ -184,6 +169,21 @@ export function CreateOrderScreen() {
                           setCreatedDeviceId(device.id)
                           form.setValue('deviceId', device.id, { shouldValidate: true })
                         }}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="customerId"
+                  render={({ field }) => (
+                    <FormItem className="min-w-0">
+                      <FormLabel>Клиент</FormLabel>
+                      <CustomerPicker
+                        value={field.value}
+                        onChange={(customer) => field.onChange(customer?.id ?? '')}
                       />
                       <FormMessage />
                     </FormItem>

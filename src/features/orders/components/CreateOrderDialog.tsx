@@ -40,7 +40,7 @@ import { SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
 import { FieldEntity, isOrderBuiltinField } from '@/lib/constants/fields'
 import { OrderJournalEventType } from '@/lib/constants/orders'
 import { Permission } from '@/lib/constants/permissions'
-import { routes } from '@/lib/constants/routes'
+import { routes, sheets } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { toDate } from '@/lib/utils/date'
@@ -216,7 +216,7 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
 
       if (afterCreateRef.current === 'open') {
         onOpenChange(false)
-        navigate(routes.order.replace(':id', orderId))
+        navigate(sheets.order(orderId))
         return
       }
 
@@ -263,30 +263,6 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
             <div className="mt-5 flex flex-col gap-4">
               <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4">
                 <div className="flex items-center gap-2">
-                  <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">
-                    Клиент <span className="text-destructive">*</span>
-                  </h3>
-                </div>
-                <p className="text-xs text-muted-foreground">Кто сдаёт прибор. Найдите или создайте карточку.</p>
-                <FormField
-                  control={form.control}
-                  name="customerId"
-                  render={({ field }) => (
-                    <FormItem className="flex min-h-0 min-w-0 flex-1 flex-col">
-                      <FormLabel className="sr-only">Клиент</FormLabel>
-                      <CustomerPicker
-                        value={field.value}
-                        onChange={(customer) => field.onChange(customer?.id ?? '')}
-                      />
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </section>
-
-              <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4">
-                <div className="flex items-center gap-2">
                   <Cpu className="size-4 text-muted-foreground" aria-hidden="true" />
                   <h3 className="text-sm font-semibold">
                     Прибор <span className="text-destructive">*</span>
@@ -318,6 +294,30 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
                           setCreatedDeviceId(device.id)
                           form.setValue('deviceId', device.id, { shouldValidate: true })
                         }}
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </section>
+
+              <section className="flex min-w-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border bg-card p-4">
+                <div className="flex items-center gap-2">
+                  <User className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  <h3 className="text-sm font-semibold">
+                    Клиент <span className="text-destructive">*</span>
+                  </h3>
+                </div>
+                <p className="text-xs text-muted-foreground">Кто сдаёт прибор. Найдите или создайте карточку.</p>
+                <FormField
+                  control={form.control}
+                  name="customerId"
+                  render={({ field }) => (
+                    <FormItem className="flex min-h-0 min-w-0 flex-1 flex-col">
+                      <FormLabel className="sr-only">Клиент</FormLabel>
+                      <CustomerPicker
+                        value={field.value}
+                        onChange={(customer) => field.onChange(customer?.id ?? '')}
                       />
                       <FormMessage />
                     </FormItem>
