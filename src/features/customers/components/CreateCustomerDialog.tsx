@@ -79,7 +79,6 @@ export function CreateCustomerDialog({
             successMessage={
               hideKind ? (isPerson ? 'Человек добавлен' : 'Организация добавлена') : 'Клиент создан'
             }
-            onCreated={onCreated}
             onDone={(customer) => {
               markNestedDialogClosing()
               onOpenChange(false)

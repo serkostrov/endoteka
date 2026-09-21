@@ -132,6 +132,9 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                   {group.entries.map((entry) => {
                     if (entry.kind === 'attachments') {
                       const head = entry.events[0]
+                      if (!head) {
+                        return null
+                      }
                       const batchAttachments = entry.events
                         .map((event) =>
                           attachmentsById.get(payloadString(event.payload, 'attachment_id') ?? ''),
@@ -580,7 +583,7 @@ function collapseAttachmentBatches(events: OrderJournalEvent[]): FeedEntry[] {
     if (last?.kind === 'attachments') {
       const head = last.events[0]
       const prev = last.events[last.events.length - 1]
-      if (sameActor(head, event) && withinBatchWindow(prev, event)) {
+      if (head && prev && sameActor(head, event) && withinBatchWindow(prev, event)) {
         last.events.push(event)
         continue
       }
@@ -596,8 +599,9 @@ function groupFeedByDay(entries: FeedEntry[]) {
   const groups: { label: string; entries: FeedEntry[] }[] = []
 
   for (const entry of entries) {
-    const createdAt = entry.kind === 'attachments' ? entry.events[0].createdAt : entry.event.createdAt
-    const date = toDate(createdAt)
+    const createdAt =
+      entry.kind === 'attachments' ? entry.events[0]?.createdAt : entry.event.createdAt
+    const date = createdAt ? toDate(createdAt) : null
     const label = date ? format(date, 'd MMMM', { locale: ru }) : 'Дата неизвестна'
     const current = groups[groups.length - 1]
     if (current?.label === label) {
