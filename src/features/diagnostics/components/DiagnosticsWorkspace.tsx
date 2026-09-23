@@ -115,7 +115,7 @@ export function DiagnosticsWorkspace({ orderId }: DiagnosticsWorkspaceProps) {
         <FieldGroupCard
           key={group.name}
           title={group.name}
-          description="Необязательные сведения. Не заполняйте всё подряд — только то, что нужно для этого прибора."
+          description=""
           fields={group.fields}
           extraValues={extraValues}
           errors={fieldErrors}

@@ -99,7 +99,7 @@ export function InviteUserDialog({ open, onOpenChange }: InviteUserDialogProps) 
                         <SelectValue placeholder="Выберите роль" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent searchable>
                       {(rolesQuery.data ?? []).map((role) => (
                         <SelectItem key={role.id} value={role.id}>
                           {role.name}

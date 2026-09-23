@@ -30,6 +30,7 @@ export function isFieldType(value: string): value is FieldType {
 
 export const FieldEntity = {
   Orders: 'orders',
+  OrderWork: 'order_work',
   Customers: 'customers',
   Devices: 'devices',
   Diagnostics: 'diagnostics',

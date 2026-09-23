@@ -223,7 +223,7 @@ function SettingsDialog({
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable>
                 {Object.values(DocumentKind).map((code) => (
                   <SelectItem key={code} value={code}>
                     {documentKindLabels[code]}
@@ -239,7 +239,7 @@ function SettingsDialog({
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent searchable>
                   {Object.values(DocumentPageSize).map((code) => (
                     <SelectItem key={code} value={code}>
                       {documentPageSizeLabels[code]}

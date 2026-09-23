@@ -99,7 +99,7 @@ export function InventoryCountsScreen() {
           <SelectTrigger aria-label="Фильтр по статусу">
             <SelectValue placeholder="Статус" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все статусы</SelectItem>
             {Object.values(InventoryCountStatus).map((code) => (
               <SelectItem key={code} value={code}>

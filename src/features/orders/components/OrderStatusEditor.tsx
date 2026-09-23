@@ -104,7 +104,7 @@ export function OrderStatusEditor({
                         <SelectValue placeholder="Выберите группу" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent searchable>
                       {groups.map((group) => (
                         <SelectItem key={group.id} value={group.id}>
                           {group.name}

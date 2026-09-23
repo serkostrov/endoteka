@@ -5,7 +5,15 @@ import { Calendar } from '@/components/ui/calendar'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { formatDate, parseDateInput, toDate, toIsoDate, toLocalDateTimeValue } from '@/lib/utils/date'
+import {
+  DATE_DISPLAY_PLACEHOLDER,
+  formatDate,
+  maskDateInput,
+  parseDateInput,
+  toDate,
+  toIsoDate,
+  toLocalDateTimeValue,
+} from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 
 import { TimePicker } from './TimePicker'
@@ -34,7 +42,7 @@ export function DatePicker({
   onChange,
   onBlur,
   disabled = false,
-  placeholder = 'дд/мм/гггг',
+  placeholder = DATE_DISPLAY_PLACEHOLDER,
   allowClear = true,
   withTime = false,
   className,
@@ -148,7 +156,7 @@ export function DatePicker({
               <CalendarDays />
             </Button>
           </PopoverTrigger>
-          <PopoverContent align="start" className="z-[80] w-auto p-3">
+          <PopoverContent align="start" className="w-auto p-3">
             <Calendar month={month} selected={selected} onMonthChange={setMonth} onSelect={selectDate} />
             <div className="mt-3 flex items-center justify-between gap-2 border-t pt-3">
               {allowClear ? (
@@ -199,15 +207,4 @@ export function DatePicker({
       ) : null}
     </div>
   )
-}
-
-function maskDateInput(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 8)
-  if (digits.length <= 2) {
-    return digits
-  }
-  if (digits.length <= 4) {
-    return `${digits.slice(0, 2)}/${digits.slice(2)}`
-  }
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`
 }

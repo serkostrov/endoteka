@@ -122,7 +122,7 @@ export function DynamicFieldEditor({
                     <SelectValue />
                   </SelectTrigger>
                 </FormControl>
-                <SelectContent>
+                <SelectContent searchable>
                   {typeOptions.map((item) => (
                     <SelectItem key={item.code} value={item.code}>
                       {item.name}

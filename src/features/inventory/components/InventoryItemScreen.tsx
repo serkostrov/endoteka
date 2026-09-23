@@ -22,7 +22,8 @@ import { StatusBadge } from '@/components/shared/StatusBadge'
 import { SupplierLink } from '@/components/shared/SupplierLink'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Form, FormControl, FormField, FormItem, FormMessage } from '@/components/ui/form'
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Sheet,
   SheetContent,
@@ -206,11 +207,11 @@ function ItemCardBody({
   const sortedBatches = useMemo(
     () =>
       [...batches].sort((a, b) => {
-        const byDate = b.receiptDate.localeCompare(a.receiptDate)
+        const byDate = a.receiptDate.localeCompare(b.receiptDate)
         if (byDate !== 0) {
           return byDate
         }
-        return b.createdAt.localeCompare(a.createdAt)
+        return a.createdAt.localeCompare(b.createdAt)
       }),
     [batches],
   )
@@ -236,9 +237,11 @@ function ItemCardBody({
   ]
     .filter(Boolean)
     .join(' · ')
-  const stockQty = Math.max(0, item.stockQuantity)
-  const stockLine = `остаток ${formatQuantity(stockQty)} ${item.unitName}`
   const stockEmpty = item.stockQuantity <= 0
+  const stockShortage = item.stockQuantity < 0
+  const stockLine = stockShortage
+    ? `недостача ${formatQuantity(-item.stockQuantity)} ${item.unitName}`
+    : `остаток ${formatQuantity(item.stockQuantity)} ${item.unitName}`
 
   const actionButtons = (
     <>
@@ -286,7 +289,7 @@ function ItemCardBody({
       <span
         aria-label={stockLine}
         className={
-          stockEmpty
+          stockEmpty || stockShortage
             ? 'inline-flex h-9 items-center rounded-md border border-destructive/30 bg-destructive/10 px-3 text-sm font-medium tabular-nums text-destructive'
             : 'inline-flex h-9 items-center rounded-md border border-border bg-secondary px-3 text-sm font-medium tabular-nums text-secondary-foreground'
         }
@@ -347,7 +350,9 @@ function ItemCardBody({
           getRowId={(row) => row.id}
           emptyTitle="Партий нет"
           emptyDescription="Появятся после прихода или положительной инвентаризации."
-          rowClassName={(row) => (row.remainingQuantity <= 0 ? 'text-muted-foreground' : undefined)}
+          rowClassName={(row) =>
+            row.remainingQuantity <= 0 || row.supplier === 'Недостача' ? 'text-muted-foreground' : undefined
+          }
           columns={[
             {
               id: 'date',
@@ -358,7 +363,12 @@ function ItemCardBody({
             {
               id: 'supplier',
               header: 'Поставщик',
-              cell: (row) => <SupplierLink name={row.supplier} customerId={row.supplierId} />,
+              cell: (row) =>
+                row.supplier === 'Недостача' ? (
+                  <span>Недостача</span>
+                ) : (
+                  <SupplierLink name={row.supplier} customerId={row.supplierId} />
+                ),
             },
             {
               id: 'qty',
@@ -371,7 +381,15 @@ function ItemCardBody({
               header: 'Остаток',
               className: 'w-[4.5rem] text-right tabular-nums',
               cell: (row) => (
-                <span className={row.remainingQuantity <= 0 ? undefined : 'font-medium'}>
+                <span
+                  className={
+                    row.remainingQuantity < 0
+                      ? 'font-medium text-destructive'
+                      : row.remainingQuantity <= 0
+                        ? undefined
+                        : 'font-medium'
+                  }
+                >
                   {formatQuantity(row.remainingQuantity)}
                 </span>
               ),
@@ -466,6 +484,7 @@ function ItemCardEditor({
       code: item.code,
       article: item.article,
       barcode: item.barcode,
+      description: item.description,
       categoryId: item.categoryId,
       unitId: item.unitId,
       purchasePrice: item.purchasePrice,
@@ -609,7 +628,25 @@ function ItemCardEditor({
         <SectionCard>
           <div className="space-y-4">
             <ItemMediaLabel item={item} form={form} canEdit />
-            <ItemFields form={form} excludeItemId={item.id} hideName hideCodeArticle hideBarcode layout="card" />
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem className="min-w-0">
+                  <FormLabel>Описание</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      {...field}
+                      rows={5}
+                      placeholder="Описание позиции"
+                      className="min-h-28 resize-y"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <ItemFields form={form} excludeItemId={item.id} hideName hideCodeArticle hideBarcode hideDescription layout="card" />
           </div>
         </SectionCard>
       </form>
@@ -622,6 +659,12 @@ function ItemDataSection({ item }: { item: InventoryItem }) {
     <SectionCard>
       <div className="space-y-4">
         <ItemMediaLabelReadonly item={item} />
+        {item.description ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">Описание</p>
+            <p className="whitespace-pre-wrap text-sm">{item.description}</p>
+          </div>
+        ) : null}
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <Info label="Категория" value={item.categoryName} />
           <Info label="Единица" value={item.unitName} />

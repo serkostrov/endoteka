@@ -85,7 +85,7 @@ export function AuditLogScreen() {
           <SelectTrigger aria-label="Пользователь">
             <SelectValue placeholder="Пользователь" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все пользователи</SelectItem>
             {(employees.data ?? []).map((employee) => (
               <SelectItem key={employee.id} value={employee.id}>
@@ -98,7 +98,7 @@ export function AuditLogScreen() {
           <SelectTrigger aria-label="Объект">
             <SelectValue placeholder="Объект" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             {auditEntityTypeFilterOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
@@ -110,7 +110,7 @@ export function AuditLogScreen() {
           <SelectTrigger aria-label="Действие">
             <SelectValue placeholder="Действие" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все действия</SelectItem>
             {auditActionFilterGroups.map((group) => (
               <SelectGroup key={group.label}>

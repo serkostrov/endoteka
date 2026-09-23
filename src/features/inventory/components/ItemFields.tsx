@@ -7,6 +7,7 @@ import { SearchCreateAction } from '@/components/shared/SearchSuggestOverlay'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { markNestedDialogClosing } from '@/components/ui/sheet'
 import { useHasPermission } from '@/features/auth'
@@ -37,6 +38,8 @@ type ItemFieldsProps = {
   hideCodeArticle?: boolean
   /** Скрыть штрихкод — когда этикетка вынесена рядом с фото. */
   hideBarcode?: boolean
+  /** Скрыть описание — когда оно вынесено в начало карточки. */
+  hideDescription?: boolean
   /** Сетка как в карточке: 2 колонки. */
   layout?: 'form' | 'card'
 }
@@ -50,6 +53,7 @@ export function ItemFields({
   hideName = false,
   hideCodeArticle = false,
   hideBarcode = false,
+  hideDescription = false,
   layout = 'form',
 }: ItemFieldsProps) {
   const name = form.watch('name')
@@ -108,6 +112,28 @@ export function ItemFields({
               <FormLabel>Наименование</FormLabel>
               <FormControl>
                 <Input {...field} autoComplete="off" disabled={disabled} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      ) : null}
+
+      {!hideDescription ? (
+        <FormField
+          control={form.control}
+          name="description"
+          render={({ field }) => (
+            <FormItem className="min-w-0">
+              <FormLabel>Описание</FormLabel>
+              <FormControl>
+                <Textarea
+                  {...field}
+                  disabled={disabled}
+                  rows={5}
+                  placeholder="Описание позиции"
+                  className="min-h-28 resize-y"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -299,7 +325,7 @@ function RefSelectField({
                 <SelectValue placeholder={placeholder} />
               </SelectTrigger>
             </FormControl>
-            <SelectContent>
+            <SelectContent searchable>
               {options.map((item) => (
                 <SelectItem key={item.id} value={item.id}>
                   {item.name}

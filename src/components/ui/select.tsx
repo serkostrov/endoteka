@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
+import { CheckIcon, ChevronDownIcon, ChevronUpIcon, SearchIcon } from "lucide-react"
 import { Select as SelectPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
@@ -50,19 +50,103 @@ function SelectTrigger({
   )
 }
 
+function getNodeText(node: React.ReactNode): string {
+  if (node == null || typeof node === "boolean") {
+    return ""
+  }
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node)
+  }
+  if (Array.isArray(node)) {
+    return node.map(getNodeText).join("")
+  }
+  if (React.isValidElement<{ children?: React.ReactNode }>(node)) {
+    return getNodeText(node.props.children)
+  }
+  return ""
+}
+
+/**
+ * Не удаляем пункты из DOM — только скрываем.
+ * Иначе Radix Select теряет фокус / закрывается при первой букве в поиске.
+ */
+function filterSelectChildren(children: React.ReactNode, query: string): {
+  nodes: React.ReactNode[]
+  matchCount: number
+} {
+  const normalized = query.trim().toLocaleLowerCase("ru")
+  let matchCount = 0
+
+  const nodes = React.Children.toArray(children).flatMap((child) => {
+    if (!React.isValidElement<{ children?: React.ReactNode; value?: string; className?: string }>(child)) {
+      return [child]
+    }
+
+    if (child.props.value != null) {
+      const text = getNodeText(child.props.children)
+      const matches = !normalized || text.toLocaleLowerCase("ru").includes(normalized)
+      if (matches) {
+        matchCount += 1
+      }
+      return [
+        React.cloneElement(child, {
+          className: cn(child.props.className, !matches && "hidden"),
+        }),
+      ]
+    }
+
+    const nested = filterSelectChildren(child.props.children, query)
+    matchCount += nested.matchCount
+    if (!normalized) {
+      return [child]
+    }
+    return [
+      React.cloneElement(child, undefined, nested.nodes),
+    ]
+  })
+
+  return { nodes, matchCount }
+}
+
 function SelectContent({
   className,
   children,
   position = "popper",
   align = "center",
+  searchable = false,
+  searchPlaceholder = "Поиск…",
+  onCloseAutoFocus,
+  onKeyDown,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+}: React.ComponentProps<typeof SelectPrimitive.Content> & {
+  searchable?: boolean
+  searchPlaceholder?: string
+}) {
+  const [query, setQuery] = React.useState("")
+  const inputRef = React.useRef<HTMLInputElement>(null)
+
+  React.useEffect(() => {
+    if (!searchable) {
+      return
+    }
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus())
+    return () => window.cancelAnimationFrame(frame)
+  }, [searchable])
+
+  const { nodes: displayed, matchCount } = React.useMemo(() => {
+    if (!searchable) {
+      return { nodes: React.Children.toArray(children), matchCount: -1 }
+    }
+    return filterSelectChildren(children, query)
+  }, [children, query, searchable])
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
-          "relative z-[110] max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          "relative z-[110] max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+          searchable ? "overflow-hidden" : "overflow-y-auto",
           position === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className
@@ -70,16 +154,71 @@ function SelectContent({
         position={position}
         align={align}
         {...props}
+        onKeyDown={(event) => {
+          // Typeahead Select не должен перехватывать ввод в поле поиска.
+          if (searchable && event.target === inputRef.current) {
+            event.stopPropagation()
+          }
+          onKeyDown?.(event)
+        }}
+        onCloseAutoFocus={(event) => {
+          setQuery("")
+          onCloseAutoFocus?.(event)
+        }}
       >
+        {searchable ? (
+          <div
+            className="sticky top-0 z-10 border-b bg-popover p-1.5"
+            onPointerDown={(event) => {
+              // Не отдаём фокус пунктам списка / не закрываем Content.
+              event.preventDefault()
+              event.stopPropagation()
+              inputRef.current?.focus()
+            }}
+          >
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                ref={inputRef}
+                type="text"
+                value={query}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                autoComplete="off"
+                className="h-8 w-full rounded-md border border-input bg-muted pr-2 pl-7 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                onChange={(event) => {
+                  setQuery(event.target.value)
+                  window.requestAnimationFrame(() => inputRef.current?.focus())
+                }}
+                onKeyDown={(event) => {
+                  event.stopPropagation()
+                  if (event.key === "Escape" && query) {
+                    event.preventDefault()
+                    setQuery("")
+                  }
+                }}
+                onClick={(event) => event.stopPropagation()}
+              />
+            </div>
+          </div>
+        ) : null}
         <SelectScrollUpButton />
         <SelectPrimitive.Viewport
           className={cn(
             "p-1",
             position === "popper" &&
-              "w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1"
+              "w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1",
+            searchable && "max-h-60 overflow-y-auto overscroll-contain"
           )}
+          onWheel={searchable ? (event) => event.stopPropagation() : undefined}
+          onTouchMove={searchable ? (event) => event.stopPropagation() : undefined}
         >
-          {children}
+          {searchable && matchCount === 0 ? (
+            <div className="px-2 py-3 text-center text-sm text-muted-foreground" role="status">
+              Ничего не найдено
+            </div>
+          ) : null}
+          {displayed}
         </SelectPrimitive.Viewport>
         <SelectScrollDownButton />
       </SelectPrimitive.Content>

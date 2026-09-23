@@ -4,9 +4,13 @@ import { useRef, type ReactNode } from 'react'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 
-/** Высота попапа подсказки. */
-const PANEL_MAX_H =
-  'max-h-[min(32rem,var(--radix-popover-content-available-height,100dvh))]'
+/**
+ * Лимит высоты списка. Max-height на самом скролл-контейнере
+ * (не через flex-1 + max-h родителя) — иначе в части браузеров
+ * потомок не сжимается и overflow-y-auto не включается.
+ */
+const LIST_MAX_H =
+  'max-h-[min(28rem,calc(var(--radix-popover-content-available-height,100dvh)-5rem))]'
 
 type SearchSuggestOverlayProps = {
   open: boolean
@@ -51,7 +55,7 @@ export function SearchSuggestOverlay({
         onPointerDownOutside={ignoreIfInsideAnchor}
         onInteractOutside={ignoreIfInsideAnchor}
         className={cn(
-          'z-[80] w-[var(--radix-popper-anchor-width)] max-w-none overflow-hidden p-0',
+          'w-[var(--radix-popper-anchor-width)] max-w-none overflow-hidden p-0',
           contentClassName,
         )}
       >
@@ -62,8 +66,7 @@ export function SearchSuggestOverlay({
 }
 
 /**
- * Панель со скроллом: max-height на flex-контейнере (не на предке),
- * иначе overflow-y-auto у flex-1 ребёнка не срабатывает.
+ * Панель: скролл на списке с явным max-height, футер всегда снизу.
  */
 export function SearchSuggestPanel({
   children,
@@ -75,14 +78,22 @@ export function SearchSuggestPanel({
   className?: string
 }) {
   return (
-    <div className={cn('flex flex-col overflow-hidden', PANEL_MAX_H, className)}>
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
+    <div className={cn('flex flex-col', className)}>
+      <div
+        className={cn('overflow-y-auto overscroll-contain', LIST_MAX_H)}
+        // Sheet/Dialog (react-remove-scroll) глотает wheel снаружи lock —
+        // stopPropagation даёт доскроллить portaled-попап.
+        onWheel={(event) => event.stopPropagation()}
+        onTouchMove={(event) => event.stopPropagation()}
+      >
+        {children}
+      </div>
       {footer ? <div className="shrink-0">{footer}</div> : null}
     </div>
   )
 }
 
-/** Скролл-область внутри попапа с шапкой/футером (max-height на себе). */
+/** Скролл-область внутри попапа с шапкой/футером. */
 export function SearchSuggestScroll({
   children,
   className,
@@ -91,7 +102,11 @@ export function SearchSuggestScroll({
   className?: string
 }) {
   return (
-    <div className={cn('min-h-0 flex-1 overflow-y-auto overscroll-contain', className)}>
+    <div
+      className={cn('overflow-y-auto overscroll-contain', LIST_MAX_H, className)}
+      onWheel={(event) => event.stopPropagation()}
+      onTouchMove={(event) => event.stopPropagation()}
+    >
       {children}
     </div>
   )

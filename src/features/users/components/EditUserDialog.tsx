@@ -179,7 +179,7 @@ export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps
                         <SelectValue placeholder="Выберите роль" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent searchable>
                       {roleOptions.map((role) => (
                         <SelectItem key={role.id} value={role.id}>
                           {role.name}
@@ -207,7 +207,7 @@ export function EditUserDialog({ user, open, onOpenChange }: EditUserDialogProps
                         <SelectValue placeholder="Статус" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent searchable>
                       <SelectItem value="active">Активен</SelectItem>
                       <SelectItem value="inactive">Отключён</SelectItem>
                     </SelectContent>

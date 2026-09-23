@@ -13,6 +13,7 @@ export const InventoryMovementType = {
   RepairReturn: 'repair_return',
   Sale: 'sale',
   InventoryAdjustment: 'inventory_adjustment',
+  ShortageCover: 'shortage_cover',
 } as const
 
 export type InventoryMovementType = (typeof InventoryMovementType)[keyof typeof InventoryMovementType]
@@ -23,6 +24,7 @@ export const inventoryMovementTypeLabels: Record<InventoryMovementType, string> 
   repair_return: 'Возврат из ремонта',
   sale: 'Продан',
   inventory_adjustment: 'Инвентаризация',
+  shortage_cover: 'Покрытие недостачи',
 }
 
 export function isInventoryMovementType(value: string): value is InventoryMovementType {
@@ -46,7 +48,7 @@ export function isScanBarcode(value: string) {
   return new RegExp(`^\\d{${BARCODE_MIN_LENGTH},${BARCODE_MAX_LENGTH}}$`).test(value.trim())
 }
 
-export { formatInteger, formatMoney, formatQuantity } from '@/lib/utils/number'
+export { formatInteger, formatMoney, formatQuantity, parseMoney } from '@/lib/utils/number'
 
 export const InventoryCountStatus = {
   Draft: 'draft',

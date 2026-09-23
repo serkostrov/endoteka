@@ -113,7 +113,7 @@ export function TimePicker({
             <Clock />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="z-[80] w-auto p-3">
+        <PopoverContent align="end" className="w-auto p-3">
           <div className="flex gap-2">
             <TimeColumn
               label="Часы"

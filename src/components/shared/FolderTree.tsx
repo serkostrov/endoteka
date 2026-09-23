@@ -145,10 +145,10 @@ export function FolderBlock({
       <button
         type="button"
         className={cn(
-          'flex h-10 w-full items-center gap-2 bg-muted/40 text-left text-sm font-medium hover:bg-muted/70',
-          depth === 0 ? 'px-3' : 'pr-3',
+          'flex h-10 w-full items-center gap-2 text-left text-sm font-semibold tracking-tight hover:bg-muted/60',
+          depth === 0 ? 'bg-muted/35 px-3' : 'bg-muted/20 pr-3',
         )}
-        style={depth > 0 ? { paddingLeft: `${0.75 + depth * 1.25}rem` } : undefined}
+        style={depth > 0 ? { paddingLeft: `${0.75 + depth * 1.1}rem` } : undefined}
         onClick={onToggle}
       >
         {open ? (
@@ -158,9 +158,11 @@ export function FolderBlock({
         )}
         <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="min-w-0 truncate">{title}</span>
-        <span className="ml-auto text-[11px] font-normal tabular-nums text-muted-foreground">{count}</span>
+        <span className="ml-auto rounded-md bg-background/80 px-1.5 py-0.5 text-[11px] font-normal tabular-nums text-muted-foreground">
+          {count}
+        </span>
       </button>
-      {open ? <div className={cn('bg-background', depth === 0 && 'pb-3')}>{children}</div> : null}
+      {open ? <div className={cn('bg-background', depth === 0 && 'pb-1')}>{children}</div> : null}
     </div>
   )
 }
@@ -188,10 +190,10 @@ export function FolderTreeItemButton({
       onClick={onClick}
       onMouseDown={onMouseDown}
       className={cn(
-        'flex h-12 w-full items-center gap-3 border-b border-border/70 pr-3 text-left text-sm last:border-b-0 hover:bg-accent/60 disabled:pointer-events-none disabled:opacity-50',
+        'flex min-h-11 w-full items-center gap-3 border-b border-border/60 py-2 pr-3 text-left text-sm last:border-b-0 hover:bg-accent/50 disabled:pointer-events-none disabled:opacity-50',
         className,
       )}
-      style={{ paddingLeft: `${0.75 + depth * 1.25}rem` }}
+      style={{ paddingLeft: `${0.75 + depth * 1.1}rem` }}
     >
       {children}
     </button>

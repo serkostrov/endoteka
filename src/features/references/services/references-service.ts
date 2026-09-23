@@ -39,6 +39,61 @@ export type ReferenceItemInput = {
   parentId: string | null
 }
 
+/** Уникальные записи по имени (для фильтров: Olympus в разных группах → один пункт). */
+export function uniqueReferenceItemsByName(items: ReferenceItem[]): ReferenceItem[] {
+  const seen = new Map<string, ReferenceItem>()
+  for (const item of items) {
+    const key = item.name.trim().toLocaleLowerCase('ru')
+    if (!key || seen.has(key)) {
+      continue
+    }
+    seen.set(key, item)
+  }
+  return [...seen.values()].sort((left, right) => left.name.localeCompare(right.name, 'ru'))
+}
+
+/** Все id записей с тем же именем, что у selectedId (опционально с доп. фильтром). */
+export function referenceIdsWithSameName(
+  items: ReferenceItem[],
+  selectedId: string,
+  predicate?: (item: ReferenceItem) => boolean,
+): string[] {
+  const selected = items.find((item) => item.id === selectedId)
+  if (!selected) {
+    return [selectedId]
+  }
+  const key = selected.name.trim().toLocaleLowerCase('ru')
+  const ids = items
+    .filter((item) => {
+      if (predicate && !predicate(item)) {
+        return false
+      }
+      return item.name.trim().toLocaleLowerCase('ru') === key
+    })
+    .map((item) => item.id)
+  return ids.length > 0 ? ids : [selectedId]
+}
+
+/** Представитель группы с тем же именем — value для Select без дублей. */
+export function resolveReferenceOptionId(
+  options: ReferenceItem[],
+  selectedId: string,
+  allItems: ReferenceItem[],
+): string {
+  if (selectedId === 'all') {
+    return 'all'
+  }
+  if (options.some((item) => item.id === selectedId)) {
+    return selectedId
+  }
+  const selected = allItems.find((item) => item.id === selectedId)
+  if (!selected) {
+    return selectedId
+  }
+  const key = selected.name.trim().toLocaleLowerCase('ru')
+  return options.find((item) => item.name.trim().toLocaleLowerCase('ru') === key)?.id ?? selectedId
+}
+
 function mapSet(row: ReferenceSetSummaryRow): ReferenceSetSummary {
   return {
     id: row.id,

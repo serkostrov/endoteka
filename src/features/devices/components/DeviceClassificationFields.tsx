@@ -488,10 +488,10 @@ function RefSelect({
                 align="start"
                 sideOffset={4}
                 collisionPadding={12}
-                className="z-[80] w-[var(--radix-popover-trigger-width)] min-w-[12rem] max-w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden p-0"
+                className="w-[var(--radix-popover-trigger-width)] min-w-[12rem] max-w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden p-0"
                 onOpenAutoFocus={(event) => event.preventDefault()}
               >
-                <div className="flex max-h-[min(32rem,var(--radix-popover-content-available-height,100dvh))] flex-col overflow-hidden">
+                <div className="flex flex-col">
                   <div className="shrink-0 border-b p-2">
                     <div className="relative">
                       <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -514,7 +514,9 @@ function RefSelect({
                     id={listId}
                     role="listbox"
                     aria-label={label}
-                    className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1"
+                    className="max-h-[min(28rem,calc(var(--radix-popover-content-available-height,100dvh)-5rem))] overflow-y-auto overscroll-contain p-1"
+                    onWheel={(event) => event.stopPropagation()}
+                    onTouchMove={(event) => event.stopPropagation()}
                   >
                     {showNone ? (
                       <OptionButton

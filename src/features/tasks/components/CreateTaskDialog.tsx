@@ -156,7 +156,7 @@ function CreateTaskForm({
             <SelectTrigger className="w-full" aria-label="Исполнитель">
               <SelectValue placeholder="Исполнитель" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value={TASK_ASSIGNEE_NONE}>Не назначен</SelectItem>
               {user && !(employees.data ?? []).some((employee) => employee.id === user.id) ? (
                 <SelectItem value={user.id}>{user.fullName || user.email}</SelectItem>
@@ -175,7 +175,7 @@ function CreateTaskForm({
             <SelectTrigger className="w-full" aria-label="Приоритет">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               {Object.values(TaskPriority).map((code) => (
                 <SelectItem key={code} value={code}>
                   {taskPriorityLabels[code]}

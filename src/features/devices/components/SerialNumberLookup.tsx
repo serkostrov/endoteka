@@ -112,10 +112,6 @@ export function SerialNumberLookup({
           id: `brand:${device.brandName || 'none'}`,
           name: device.brandName.trim() || 'Без бренда',
         }),
-        (device) => ({
-          id: `model:${device.modelName || 'none'}`,
-          name: device.modelName.trim() || 'Без модели',
-        }),
       ]),
     [panelItems],
   )
@@ -193,19 +189,34 @@ export function SerialNumberLookup({
           ) : (
             <FolderTree
               groups={groups}
+              expandAll={Boolean(value.trim())}
               getItemId={(device) => device.id}
               className="rounded-none border-0"
-              renderItem={(device) => (
-                <FolderTreeItemButton
-                  depth={3}
-                  disabled={disabled}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => selectItem(device)}
-                >
-                  <span className="min-w-0 flex-1 truncate font-medium">{device.serialNumber}</span>
-                  <span className="text-muted-foreground truncate text-xs">{device.label}</span>
-                </FolderTreeItemButton>
-              )}
+              renderItem={(device) => {
+                const serial = device.serialNumber.trim().toLocaleLowerCase('ru')
+                const model = device.modelName.trim()
+                const subtitle =
+                  model && !serial.includes(model.toLocaleLowerCase('ru')) ? model : ''
+                return (
+                  <FolderTreeItemButton
+                    depth={2}
+                    disabled={disabled}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectItem(device)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-foreground">
+                        {device.serialNumber.trim() || 'Без серийного номера'}
+                      </span>
+                      {subtitle ? (
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                          {subtitle}
+                        </span>
+                      ) : null}
+                    </span>
+                  </FolderTreeItemButton>
+                )
+              }}
             />
           )}
         </SearchSuggestPanel>

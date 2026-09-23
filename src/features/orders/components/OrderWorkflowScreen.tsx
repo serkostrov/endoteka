@@ -323,7 +323,7 @@ function TransitionDialog({
                         <SelectValue placeholder="Выберите статус" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent searchable>
                       {statuses.map((item) => (
                         <SelectItem key={item.id} value={item.id}>
                           {item.name}
@@ -347,7 +347,7 @@ function TransitionDialog({
                         <SelectValue placeholder="Выберите статус" />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent searchable>
                       {statuses.map((item) => (
                         <SelectItem key={item.id} value={item.id}>
                           {item.name}
@@ -371,7 +371,7 @@ function TransitionDialog({
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
-                    <SelectContent>
+                    <SelectContent searchable>
                       {TRANSITION_PERMISSIONS.map((item) => (
                         <SelectItem key={item.code} value={item.code}>
                           {item.label}

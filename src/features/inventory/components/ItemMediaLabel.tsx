@@ -4,7 +4,7 @@ import QRCode from 'qrcode'
 import { toast } from 'sonner'
 import type { UseFormReturn } from 'react-hook-form'
 
-import { ImageLightbox, ImageHoverPreview, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
+import { ImageLightbox, ImageGalleryGrid, ImageHoverPreview, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -26,6 +26,7 @@ import {
   useDeleteInventoryItemPhoto,
   useInventoryItemPhotos,
   useSetInventoryItemLabel,
+  useSetInventoryItemPhotoCover,
   useUploadInventoryItemPhoto,
 } from '../hooks/use-inventory'
 import type { InventoryItemFormValues } from '../schemas'
@@ -43,10 +44,12 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
     isBarcodeType(item.barcodeType) ? item.barcodeType : 'code128',
   )
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [galleryOpen, setGalleryOpen] = useState(false)
 
   const photosQuery = useInventoryItemPhotos(item.id)
   const upload = useUploadInventoryItemPhoto(item.id)
   const removePhoto = useDeleteInventoryItemPhoto(item.id)
+  const setCover = useSetInventoryItemPhotoCover(item.id)
   const setLabel = useSetInventoryItemLabel(item.id)
 
   useEffect(() => {
@@ -104,15 +107,35 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
     }
   }
 
+  async function handleSetCover(photoId: string) {
+    try {
+      await setCover.mutateAsync(photoId)
+      toast.success('Обложка обновлена')
+      setViewerIndex(0)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   return (
     <div className="space-y-3">
       <div className="grid items-stretch gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(12rem,15rem)]">
         <PhotoStrip
           canEdit={canEdit}
           photos={lightboxItems}
-          uploading={upload.isPending}
+          uploading={upload.isPending || setCover.isPending}
           onAdd={() => void handleAddPhotos()}
           onOpen={(index) => setViewerIndex(index)}
+          onOpenGallery={() => setGalleryOpen(true)}
+          onSetCover={
+            canEdit
+              ? (photo) => {
+                  if (photo.id) {
+                    void handleSetCover(photo.id)
+                  }
+                }
+              : undefined
+          }
         />
         <LabelPreviewCard
           canEdit={canEdit}
@@ -134,6 +157,13 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
         />
       </div>
 
+      <ImageGalleryGrid
+        open={galleryOpen}
+        onOpenChange={setGalleryOpen}
+        items={lightboxItems}
+        onSelect={(index) => setViewerIndex(index)}
+      />
+
       <ImageLightbox
         open={viewerIndex !== null}
         onOpenChange={(open) => {
@@ -144,6 +174,16 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
         items={lightboxItems}
         index={viewerIndex ?? 0}
         onIndexChange={setViewerIndex}
+        onSetCover={
+          canEdit
+            ? async (entry) => {
+                if (!entry.id) {
+                  return
+                }
+                await setCover.mutateAsync(entry.id)
+              }
+            : undefined
+        }
         onDelete={
           canEdit
             ? async (entry) => {
@@ -167,12 +207,16 @@ function PhotoStrip({
   uploading,
   onAdd,
   onOpen,
+  onOpenGallery,
+  onSetCover,
 }: {
   canEdit: boolean
   photos: ImageLightboxItem[]
   uploading: boolean
   onAdd: () => void
   onOpen: (index: number) => void
+  onOpenGallery?: () => void
+  onSetCover?: (photo: ImageLightboxItem) => void
 }) {
   const SIDE_SLOTS = 3
   const main = photos[0]
@@ -213,79 +257,38 @@ function PhotoStrip({
 
   return (
     <div className="grid h-full min-h-[14rem] grid-cols-[minmax(0,1fr)_3.25rem] gap-1.5 rounded-lg border border-dashed bg-muted/20 p-1.5">
-      <div className="group relative min-h-0 overflow-hidden rounded-md border bg-background">
-        <ImageHoverPreview
-          src={main.src}
-          alt={main.alt ?? 'Фото'}
-          className="absolute inset-0 block size-full"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 size-full"
-            onClick={() => onOpen(0)}
-            aria-label="Открыть фото"
-          >
-            <img src={main.src} alt={main.alt ?? ''} className="size-full object-cover" draggable={false} />
-            <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-          </button>
-        </ImageHoverPreview>
-        {canEdit ? (
-          <button
-            type="button"
-            disabled={uploading}
-            className="absolute bottom-1.5 left-1.5 z-[1] inline-flex items-center gap-1 rounded-md border bg-background/95 px-1.5 py-1 text-[11px] font-medium shadow-sm"
-            onClick={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              onAdd()
-            }}
-          >
-            <ImagePlus className="size-3.5" />
-            {uploading ? '…' : 'Ещё'}
-          </button>
-        ) : null}
-      </div>
+      <PhotoTile
+        photo={main}
+        isCover
+        canEdit={canEdit}
+        uploading={uploading}
+        onOpen={() => onOpen(0)}
+        onAdd={onAdd}
+        showAdd
+      />
 
       <div className="flex min-h-0 flex-col gap-1.5">
         {sidePhotos.map((photo, index) => (
-          <ImageHoverPreview
+          <PhotoTile
             key={photo.id ?? photo.src}
-            src={photo.src}
-            alt={photo.alt ?? 'Фото'}
-            className="flex min-h-0 flex-1"
-          >
-            <button
-              type="button"
-              className="group relative size-full min-h-0 overflow-hidden rounded-md border bg-background"
-              onClick={() => onOpen(index + 1)}
-            >
-              <img src={photo.src} alt={photo.alt ?? ''} className="size-full object-cover" draggable={false} />
-              <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
-            </button>
-          </ImageHoverPreview>
+            photo={photo}
+            canEdit={canEdit}
+            uploading={uploading}
+            onOpen={() => onOpen(index + 1)}
+            onSetCover={onSetCover}
+            compact
+          />
         ))}
         {overflowPhoto ? (
-          <ImageHoverPreview
-            src={overflowPhoto.src}
-            alt={overflowPhoto.alt ?? 'Фото'}
-            className="flex min-h-0 flex-1"
-          >
-            <button
-              type="button"
-              className="relative size-full min-h-0 overflow-hidden rounded-md border bg-background"
-              onClick={() => onOpen(1 + sidePhotos.length)}
-            >
-              <img
-                src={overflowPhoto.src}
-                alt={overflowPhoto.alt ?? ''}
-                className="size-full object-cover"
-                draggable={false}
-              />
-              <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-sm font-semibold text-white">
-                +{hiddenCount}
-              </span>
-            </button>
-          </ImageHoverPreview>
+          <PhotoTile
+            photo={overflowPhoto}
+            canEdit={canEdit}
+            uploading={uploading}
+            onOpen={() => (onOpenGallery ? onOpenGallery() : onOpen(1 + sidePhotos.length))}
+            compact
+            overflowLabel={`+${hiddenCount}`}
+            disableHoverPreview
+          />
         ) : null}
         {canEdit && rest.length < SIDE_SLOTS ? (
           <button
@@ -314,6 +317,116 @@ function PhotoStrip({
           <div key={`pad-${index}`} className="min-h-0 flex-1" aria-hidden />
         ))}
       </div>
+    </div>
+  )
+}
+
+function PhotoTile({
+  photo,
+  isCover = false,
+  canEdit,
+  uploading,
+  onOpen,
+  onAdd,
+  onSetCover,
+  showAdd = false,
+  compact = false,
+  overflowLabel,
+  disableHoverPreview = false,
+}: {
+  photo: ImageLightboxItem
+  isCover?: boolean
+  canEdit: boolean
+  uploading: boolean
+  onOpen: () => void
+  onAdd?: () => void
+  onSetCover?: (photo: ImageLightboxItem) => void
+  showAdd?: boolean
+  compact?: boolean
+  overflowLabel?: string
+  disableHoverPreview?: boolean
+}) {
+  const imageButton = (
+    <button
+      type="button"
+      className={cn('relative size-full min-h-0', !compact && 'absolute inset-0')}
+      onClick={onOpen}
+      aria-label={overflowLabel ? `Показать все фото (${overflowLabel})` : 'Открыть фото'}
+    >
+      <img
+        src={photo.src}
+        alt={photo.alt ?? ''}
+        className="size-full object-cover"
+        draggable={false}
+      />
+      <span className="absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
+      {overflowLabel ? (
+        <span className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 bg-black/60 text-white transition group-hover:bg-black/70">
+          <span className="text-sm font-semibold tabular-nums">{overflowLabel}</span>
+          <span className="text-[9px] font-medium tracking-wide uppercase opacity-90">все</span>
+        </span>
+      ) : null}
+    </button>
+  )
+
+  return (
+    <div
+      className={cn(
+        'group relative min-h-0 overflow-hidden rounded-md border bg-background',
+        compact ? 'flex flex-1' : 'min-h-0',
+      )}
+    >
+      {disableHoverPreview ? (
+        <div className={cn(compact ? 'flex min-h-0 flex-1' : 'absolute inset-0 block size-full')}>
+          {imageButton}
+        </div>
+      ) : (
+        <ImageHoverPreview
+          src={photo.src}
+          alt={photo.alt ?? 'Фото'}
+          className={cn(compact ? 'flex min-h-0 flex-1' : 'absolute inset-0 block size-full')}
+        >
+          {imageButton}
+        </ImageHoverPreview>
+      )}
+      {isCover ? (
+        <span className="pointer-events-none absolute top-1.5 left-1.5 z-[1] rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+          Обложка
+        </span>
+      ) : null}
+      {showAdd && canEdit ? (
+        <button
+          type="button"
+          disabled={uploading}
+          className="absolute bottom-1.5 left-1.5 z-[1] inline-flex items-center gap-1 rounded-md border bg-background/95 px-1.5 py-1 text-[11px] font-medium shadow-sm"
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onAdd?.()
+          }}
+        >
+          <ImagePlus className="size-3.5" />
+          {uploading ? '…' : 'Ещё'}
+        </button>
+      ) : null}
+      {canEdit && !isCover && onSetCover && !overflowLabel ? (
+        <button
+          type="button"
+          disabled={uploading}
+          className={cn(
+            'absolute z-[1] rounded-md border bg-background/95 text-[10px] font-medium shadow-sm transition-opacity',
+            'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
+            compact ? 'inset-x-0.5 bottom-0.5 px-0.5 py-0.5 leading-tight' : 'right-1.5 bottom-1.5 px-1.5 py-1',
+          )}
+          onClick={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            onSetCover(photo)
+          }}
+        >
+          {compact ? 'Обложка' : 'Сделать обложкой'}
+        </button>
+      ) : null}
     </div>
   )
 }
@@ -355,7 +468,7 @@ function LabelPreviewCard({
           <SelectTrigger className="h-8 min-w-0 flex-1 text-xs" aria-label="Тип штрихкода">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             {BARCODE_TYPES.map((type) => (
               <SelectItem key={type} value={type}>
                 {barcodeTypeLabels[type]}
@@ -474,6 +587,7 @@ function BarcodeGlyph({ type, payload }: { type: BarcodeType; payload: string })
 export function ItemMediaLabelReadonly({ item }: { item: InventoryItem }) {
   const photosQuery = useInventoryItemPhotos(item.id)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
+  const [galleryOpen, setGalleryOpen] = useState(false)
   const barcodeType = isBarcodeType(item.barcodeType) ? item.barcodeType : 'code128'
   const payload = labelPayload(item.barcode, item.code)
   const photos = (photosQuery.data ?? [])
@@ -493,6 +607,7 @@ export function ItemMediaLabelReadonly({ item }: { item: InventoryItem }) {
         uploading={false}
         onAdd={() => undefined}
         onOpen={(index) => setViewerIndex(index)}
+        onOpenGallery={() => setGalleryOpen(true)}
       />
       <div className="flex h-full min-h-[14rem] flex-col gap-2 rounded-lg border bg-card p-2.5 shadow-sm">
         <p className="shrink-0 text-xs text-muted-foreground">{barcodeTypeLabels[barcodeType]}</p>
@@ -506,6 +621,12 @@ export function ItemMediaLabelReadonly({ item }: { item: InventoryItem }) {
         </div>
         <p className="truncate font-mono text-xs text-muted-foreground">{item.barcode || '—'}</p>
       </div>
+      <ImageGalleryGrid
+        open={galleryOpen}
+        onOpenChange={setGalleryOpen}
+        items={photos}
+        onSelect={(index) => setViewerIndex(index)}
+      />
       <ImageLightbox
         open={viewerIndex !== null}
         onOpenChange={(open) => {

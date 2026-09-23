@@ -58,13 +58,17 @@ export function DevicesScreen() {
           id: `brand:${device.brandId || device.brandName || 'none'}`,
           name: device.brandName.trim() || 'Без бренда',
         }),
-        (device) => ({
-          id: `model:${device.modelId || device.modelName || 'none'}`,
-          name: device.modelName.trim() || 'Без модели',
-        }),
       ]),
     [devices],
   )
+
+  function deviceSubtitle(device: Device) {
+    const serial = device.serialNumber.trim().toLocaleLowerCase('ru')
+    return [device.modelName, device.modificationName]
+      .map((value) => value.trim())
+      .filter((value) => value && !serial.includes(value.toLocaleLowerCase('ru')))
+      .join(' · ')
+  }
 
   function setTab(next: DevicesTab) {
     const params = new URLSearchParams(searchParams)
@@ -144,6 +148,7 @@ export function DevicesScreen() {
           ) : (
             <FolderTree
               groups={groups}
+              expandAll={Boolean(debouncedSearch.trim())}
               getItemId={(device) => device.id}
               empty={
                 <EmptyState
@@ -152,19 +157,29 @@ export function DevicesScreen() {
                   className="rounded-md border py-12"
                 />
               }
-              renderItem={(device: Device) => (
-                <FolderTreeItemButton depth={3} onClick={() => openDevice(device.id)}>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{device.serialNumber}</span>
-                  </span>
-                  <span className="hidden shrink-0 sm:block">
-                    <WarrantyBadge warranty={device.warranty} />
-                  </span>
-                  <span className="hidden w-[5.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground lg:block">
-                    {formatDate(device.updatedAt)}
-                  </span>
-                </FolderTreeItemButton>
-              )}
+              renderItem={(device: Device) => {
+                const subtitle = deviceSubtitle(device)
+                return (
+                  <FolderTreeItemButton depth={2} onClick={() => openDevice(device.id)}>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium text-foreground">
+                        {device.serialNumber.trim() || 'Без серийного номера'}
+                      </span>
+                      {subtitle ? (
+                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                          {subtitle}
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="hidden shrink-0 sm:block">
+                      <WarrantyBadge warranty={device.warranty} />
+                    </span>
+                    <span className="hidden w-[5.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground lg:block">
+                      {formatDate(device.updatedAt)}
+                    </span>
+                  </FolderTreeItemButton>
+                )
+              }}
             />
           )}
 

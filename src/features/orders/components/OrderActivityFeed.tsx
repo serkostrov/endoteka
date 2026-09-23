@@ -270,6 +270,7 @@ function JournalAttachmentBatch({
 }) {
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<OrderAttachment | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   if (attachments.length === 0) {
     return null
@@ -283,8 +284,10 @@ function JournalAttachmentBatch({
     title: item.fileName || item.caption || 'Фото',
   }))
 
-  const visible = attachments.slice(0, ATTACHMENT_PREVIEW_LIMIT)
   const overflow = Math.max(0, attachments.length - ATTACHMENT_PREVIEW_LIMIT)
+  const canCollapse = overflow > 0
+  const visible = expanded || !canCollapse ? attachments : attachments.slice(0, ATTACHMENT_PREVIEW_LIMIT)
+  const overflowCount = expanded ? 0 : overflow
 
   function openAttachment(item: OrderAttachment) {
     if (item.kind === 'photo' && item.signedUrl) {
@@ -313,21 +316,40 @@ function JournalAttachmentBatch({
 
   return (
     <>
-      <div className="mt-2 flex flex-wrap gap-1.5">
-        {visible.map((item, index) => {
-          const showOverflow = overflow > 0 && index === visible.length - 1
-          return (
-            <AttachmentFeedTile
-              key={item.id}
-              item={item}
-              overflow={showOverflow ? overflow : 0}
-              canDelete={canDelete && !showOverflow}
-              deleting={deleting}
-              onOpen={() => openAttachment(item)}
-              onDelete={() => setDeleteTarget(item)}
-            />
-          )
-        })}
+      <div className="mt-2 space-y-1.5">
+        <div className="flex flex-wrap gap-1.5">
+          {visible.map((item, index) => {
+            const showOverflow = overflowCount > 0 && index === visible.length - 1
+            const isRevealed = expanded && index >= ATTACHMENT_PREVIEW_LIMIT
+            return (
+              <AttachmentFeedTile
+                key={item.id}
+                item={item}
+                overflow={showOverflow ? overflowCount : 0}
+                canDelete={canDelete && !showOverflow}
+                deleting={deleting}
+                revealed={isRevealed}
+                onOpen={() => {
+                  if (showOverflow) {
+                    setExpanded(true)
+                    return
+                  }
+                  openAttachment(item)
+                }}
+                onDelete={() => setDeleteTarget(item)}
+              />
+            )
+          })}
+        </div>
+        {expanded && canCollapse ? (
+          <button
+            type="button"
+            className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => setExpanded(false)}
+          >
+            Свернуть
+          </button>
+        ) : null}
       </div>
       <ImageLightbox
         open={viewerIndex !== null}
@@ -373,6 +395,7 @@ function AttachmentFeedTile({
   overflow,
   canDelete,
   deleting,
+  revealed = false,
   onOpen,
   onDelete,
 }: {
@@ -380,6 +403,7 @@ function AttachmentFeedTile({
   overflow: number
   canDelete: boolean
   deleting: boolean
+  revealed?: boolean
   onOpen: () => void
   onDelete: () => void
 }) {
@@ -387,11 +411,16 @@ function AttachmentFeedTile({
   const thumb = <AttachmentFeedThumb item={item} />
 
   return (
-    <div className="group relative size-16 shrink-0">
+    <div
+      className={cn(
+        'group relative size-16 shrink-0',
+        revealed && 'animate-in fade-in-0 zoom-in-95 duration-200',
+      )}
+    >
       <button
         type="button"
         className="size-full overflow-hidden rounded-md border bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-        aria-label={overflow > 0 ? `${label}, ещё ${overflow}` : `Открыть «${label}»`}
+        aria-label={overflow > 0 ? `Показать ещё ${overflow}` : `Открыть «${label}»`}
         onClick={onOpen}
       >
         {item.kind === 'photo' && item.signedUrl && overflow === 0 ? (
@@ -402,7 +431,7 @@ function AttachmentFeedTile({
           thumb
         )}
         {overflow > 0 ? (
-          <span className="absolute inset-0 flex items-center justify-center bg-black/55 text-sm font-semibold text-white">
+          <span className="absolute inset-0 flex items-center justify-center rounded-md bg-black/55 text-sm font-semibold text-white transition-colors hover:bg-black/65">
             +{overflow}
           </span>
         ) : null}

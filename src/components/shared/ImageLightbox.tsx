@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, Link, RotateCcw, SquareArrowOutUpRight, Trash2, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download, ImageIcon, Link, RotateCcw, SquareArrowOutUpRight, Trash2, X } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
@@ -27,6 +27,7 @@ type ImageLightboxProps = {
   index?: number
   onIndexChange?: (index: number) => void
   onDelete?: (item: ImageLightboxItem) => Promise<void> | void
+  onSetCover?: (item: ImageLightboxItem) => Promise<void> | void
 }
 
 export function ImageLightbox({
@@ -36,11 +37,13 @@ export function ImageLightbox({
   index = 0,
   onIndexChange,
   onDelete,
+  onSetCover,
 }: ImageLightboxProps) {
   const [rotation, setRotation] = useState(0)
   const [copied, setCopied] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [settingCover, setSettingCover] = useState(false)
   const activeItem = items[Math.min(index, Math.max(items.length - 1, 0))]
 
   useEffect(() => {
@@ -147,6 +150,24 @@ export function ImageLightbox({
     }
   }
 
+  async function handleSetCover() {
+    if (!onSetCover) {
+      return
+    }
+    setSettingCover(true)
+    try {
+      await onSetCover(item)
+      onIndexChange?.(0)
+      toast.success('Обложка обновлена')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setSettingCover(false)
+    }
+  }
+
+  const canSetCover = Boolean(onSetCover && item.id && index > 0)
+
   return (
     <>
       <Dialog
@@ -161,9 +182,14 @@ export function ImageLightbox({
         <DialogContent
           showCloseButton={false}
           overlayClassName="bg-black/80"
-          className="max-h-[96vh] w-auto max-w-[min(96vw,80rem)] border-0 bg-transparent p-0 shadow-none sm:max-w-[min(96vw,80rem)]"
+          className="fixed inset-0 top-0 left-0 flex h-dvh w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center border-0 bg-transparent p-0 shadow-none sm:max-w-none"
           onOpenAutoFocus={(event) => event.preventDefault()}
           onInteractOutside={(event) => {
+            if (confirmDelete) {
+              event.preventDefault()
+            }
+          }}
+          onPointerDownOutside={(event) => {
             if (confirmDelete) {
               event.preventDefault()
             }
@@ -171,9 +197,21 @@ export function ImageLightbox({
         >
           <DialogTitle className="sr-only">{title}</DialogTitle>
           <DialogDescription className="sr-only">
-            Просмотр фотографии. Escape — закрыть, стрелки — следующее и предыдущее.
+            Просмотр фотографии. Escape — закрыть, стрелки — следующее и предыдущее. Клик по пустому месту — закрыть.
           </DialogDescription>
-          <div className="relative flex max-h-[96vh] flex-col items-center">
+          <div
+            className="absolute inset-0 cursor-default"
+            aria-hidden
+            onClick={() => {
+              if (!confirmDelete) {
+                onOpenChange(false)
+              }
+            }}
+          />
+          <div
+            className="relative z-10 flex max-h-[96vh] max-w-[min(96vw,80rem)] flex-col items-center"
+            onClick={(event) => event.stopPropagation()}
+          >
             <button
               type="button"
               className="absolute top-0 right-0 z-10 rounded-full bg-black/50 p-2 text-white hover:bg-black/70"
@@ -209,13 +247,41 @@ export function ImageLightbox({
               style={{ transform: `rotate(${rotation}deg)` }}
               className={cn(
                 'rounded-md object-contain transition-transform duration-200',
-                sideways ? 'max-h-[min(90vw,70vh)] max-w-[min(88vh,92vw)]' : 'max-h-[min(88vh,calc(96vh-9rem))] max-w-full',
+                sideways
+                  ? 'max-h-[min(90vw,62vh)] max-w-[min(88vh,92vw)]'
+                  : 'max-h-[min(72vh,calc(96vh-12rem))] max-w-full',
               )}
             />
             <p className="mt-3 max-w-full truncate px-8 text-center text-sm text-white">
               {title}
               {canNavigate ? ` · ${index + 1} / ${items.length}` : ''}
             </p>
+            {canNavigate ? (
+              <div className="mt-3 flex max-w-[min(92vw,40rem)] gap-1.5 overflow-x-auto px-2 pb-1">
+                {items.map((entry, thumbIndex) => (
+                  <button
+                    key={entry.id ?? `${entry.src}-${thumbIndex}`}
+                    type="button"
+                    aria-label={`Фото ${thumbIndex + 1}`}
+                    aria-current={thumbIndex === index}
+                    className={cn(
+                      'size-14 shrink-0 overflow-hidden rounded-md border-2 transition',
+                      thumbIndex === index
+                        ? 'border-white shadow-md'
+                        : 'border-transparent opacity-70 hover:opacity-100',
+                    )}
+                    onClick={() => onIndexChange(thumbIndex)}
+                  >
+                    <img
+                      src={entry.src}
+                      alt=""
+                      draggable={false}
+                      className="size-full object-cover"
+                    />
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-1 rounded-lg bg-black/55 px-1.5 py-1 text-white">
               <ViewerAction
                 label="Открыть"
@@ -238,6 +304,13 @@ export function ImageLightbox({
                 icon={<Download className="size-4" />}
                 onClick={() => void downloadFile()}
               />
+              {canSetCover ? (
+                <ViewerAction
+                  label={settingCover ? 'Сохранение…' : 'Сделать обложкой'}
+                  icon={<ImageIcon className="size-4" />}
+                  onClick={() => void handleSetCover()}
+                />
+              ) : null}
               {onDelete ? (
                 <ViewerAction
                   label="Удалить"
@@ -413,5 +486,86 @@ export function OpenableImage({ src, alt, title, className }: OpenableImageProps
         items={[{ src, alt, title: title || alt }]}
       />
     </>
+  )
+}
+
+type ImageGalleryGridProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  items: ImageLightboxItem[]
+  onSelect: (index: number) => void
+  title?: string
+}
+
+/** Сетка всех фото — удобно открывать по «+N» в превью галереи. */
+export function ImageGalleryGrid({
+  open,
+  onOpenChange,
+  items,
+  onSelect,
+  title = 'Все фото',
+}: ImageGalleryGridProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[min(90vh,44rem)] w-[min(96vw,40rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[40rem]"
+      >
+        <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+          <div className="min-w-0">
+            <DialogTitle className="truncate text-base font-semibold">
+              {title}
+              {items.length > 0 ? ` · ${items.length}` : ''}
+            </DialogTitle>
+            <DialogDescription className="sr-only">
+              Выберите фото, чтобы открыть крупно.
+            </DialogDescription>
+          </div>
+          <button
+            type="button"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Закрыть"
+            onClick={() => onOpenChange(false)}
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {items.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">Фото пока нет</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {items.map((item, index) => (
+                <button
+                  key={item.id ?? `${item.src}-${index}`}
+                  type="button"
+                  className="group relative aspect-square overflow-hidden rounded-lg border bg-muted outline-none transition hover:ring-2 hover:ring-ring focus-visible:ring-2 focus-visible:ring-ring"
+                  onClick={() => {
+                    onSelect(index)
+                    onOpenChange(false)
+                  }}
+                  aria-label={item.alt || item.title || `Фото ${index + 1}`}
+                >
+                  <img
+                    src={item.src}
+                    alt=""
+                    draggable={false}
+                    className="size-full object-cover transition duration-200 group-hover:scale-[1.03]"
+                  />
+                  {index === 0 ? (
+                    <span className="absolute top-1.5 left-1.5 rounded-md bg-black/60 px-1.5 py-0.5 text-[10px] font-medium text-white">
+                      Обложка
+                    </span>
+                  ) : null}
+                  <span className="absolute right-1.5 bottom-1.5 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] tabular-nums text-white">
+                    {index + 1}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

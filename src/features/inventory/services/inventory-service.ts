@@ -26,6 +26,7 @@ export type InventoryItem = {
   barcode: string
   barcodeType: string
   name: string
+  description: string
   categoryId: string
   categoryName: string
   unitId: string
@@ -34,6 +35,7 @@ export type InventoryItem = {
   repairPrice: number
   retailPrice: number
   stockQuantity: number
+  coverUrl: string | null
   createdAt: string
   updatedAt: string
 }
@@ -43,6 +45,7 @@ export type InventoryItemInput = {
   code: string
   article: string
   barcode: string
+  description: string
   categoryId: string
   unitId: string
   purchasePrice: number
@@ -223,6 +226,8 @@ function mapItem(row: {
   repair_price: number | string
   retail_price: number | string
   stock_quantity: number | string
+  cover_file_path?: string | null
+  cover_url?: string | null
   created_at: string
   updated_at: string
 }): InventoryItem {
@@ -233,6 +238,7 @@ function mapItem(row: {
     barcode: row.barcode,
     barcodeType: row.barcode_type || 'code128',
     name: row.name,
+    description: '',
     categoryId: row.category_id,
     categoryName: row.category_name,
     unitId: row.unit_id,
@@ -241,6 +247,7 @@ function mapItem(row: {
     repairPrice: asNumber(row.repair_price),
     retailPrice: asNumber(row.retail_price),
     stockQuantity: asNumber(row.stock_quantity),
+    coverUrl: row.cover_url ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -259,6 +266,7 @@ function mapItemFromCard(value: Json | undefined): InventoryItem | null {
     barcode: asString(row.barcode),
     barcodeType: asString(row.barcode_type) || 'code128',
     name: asString(row.name),
+    description: asString(row.description),
     categoryId: asString(row.category_id),
     categoryName: asString(row.category_name),
     unitId: asString(row.unit_id),
@@ -267,6 +275,7 @@ function mapItemFromCard(value: Json | undefined): InventoryItem | null {
     repairPrice: asNumber(row.repair_price),
     retailPrice: asNumber(row.retail_price),
     stockQuantity: asNumber(row.stock_quantity),
+    coverUrl: null,
     createdAt: asString(row.created_at),
     updatedAt: asString(row.updated_at),
   }
@@ -336,8 +345,33 @@ export async function searchInventoryItems(
   }
 
   const rows = data ?? []
+  const coverPaths = [
+    ...new Set(
+      rows
+        .map((row) => ('cover_file_path' in row ? row.cover_file_path : null))
+        .filter((path): path is string => Boolean(path)),
+    ),
+  ]
+  const signedByPath = new Map<string, string>()
+  if (coverPaths.length > 0) {
+    const { data: signed } = await getSupabase()
+      .storage.from(ITEM_PHOTOS_BUCKET)
+      .createSignedUrls(coverPaths, 3600)
+    for (const entry of signed ?? []) {
+      if (entry.path && entry.signedUrl && !entry.error) {
+        signedByPath.set(entry.path, entry.signedUrl)
+      }
+    }
+  }
+
   return {
-    items: rows.map(mapItem),
+    items: rows.map((row) => {
+      const path = 'cover_file_path' in row ? row.cover_file_path : null
+      return mapItem({
+        ...row,
+        cover_url: path ? (signedByPath.get(path) ?? null) : null,
+      })
+    }),
     total: Number(rows[0]?.total_count ?? 0),
   }
 }
@@ -416,6 +450,7 @@ export async function createInventoryItem(input: InventoryItemInput): Promise<st
     item_purchase_price: input.purchasePrice,
     item_repair_price: input.repairPrice,
     item_retail_price: input.retailPrice,
+    item_description: input.description,
   })
 
   if (error) {
@@ -437,6 +472,7 @@ export async function updateInventoryItem(itemId: string, input: InventoryItemIn
     item_purchase_price: input.purchasePrice,
     item_repair_price: input.repairPrice,
     item_retail_price: input.retailPrice,
+    item_description: input.description,
   })
 
   if (error) {
@@ -876,6 +912,15 @@ export async function deleteInventoryItemPhoto(photoId: string, filePath: string
   const path = filePath || data
   if (path) {
     await supabase.storage.from(ITEM_PHOTOS_BUCKET).remove([path])
+  }
+}
+
+export async function setInventoryItemPhotoCover(photoId: string): Promise<void> {
+  const { error } = await getSupabase().rpc('set_inventory_item_photo_cover', {
+    target_photo_id: photoId,
+  })
+  if (error) {
+    throw toAppError(error, 'Не удалось сделать фото обложкой.')
   }
 }
 

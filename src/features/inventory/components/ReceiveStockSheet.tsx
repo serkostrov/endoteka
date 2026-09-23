@@ -30,7 +30,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { CustomerPicker } from '@/features/customers/components/CustomerPicker'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity, parseMoney } from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { toIsoDate } from '@/lib/utils/date'
@@ -276,7 +276,7 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                         <colgroup>
                           <col style={{ width: '2rem' }} />
                           <col />
-                          <col style={{ width: '5.5rem' }} />
+                          <col style={{ width: '7rem' }} />
                           <col style={{ width: '5.75rem' }} />
                           <col style={{ width: '5.5rem' }} />
                           <col style={{ width: '2rem' }} />
@@ -378,6 +378,7 @@ function ReceiptDraftRow({
   const amount = line.quantity * line.purchasePrice
   const meta = [line.item.code, line.item.article].filter(Boolean).join(' · ')
   const unit = line.item.unitName || 'шт'
+  const [priceEditKey, setPriceEditKey] = useState(0)
 
   function commitQuantity(raw: string) {
     const parsed = Number(raw)
@@ -392,12 +393,19 @@ function ReceiptDraftRow({
   }
 
   function commitPrice(raw: string) {
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed) || parsed === line.purchasePrice) {
+    const parsed = parseMoney(raw)
+    if (parsed == null) {
+      toast.error('Некорректная цена')
+      setPriceEditKey((key) => key + 1)
       return
     }
     if (parsed < 0) {
       toast.error('Цена не может быть отрицательной')
+      setPriceEditKey((key) => key + 1)
+      return
+    }
+    if (parsed === line.purchasePrice) {
+      setPriceEditKey((key) => key + 1)
       return
     }
     onChange({ purchasePrice: parsed })
@@ -427,19 +435,21 @@ function ReceiptDraftRow({
       </TableCell>
       <TableCell className={cn(cellPad, 'text-right')}>
         <Input
-          key={`${line.key}-price-${line.purchasePrice}`}
-          type="number"
-          min={0}
-          step="0.01"
+          key={`${line.key}-price-${line.purchasePrice}-${priceEditKey}`}
+          type="text"
+          inputMode="decimal"
           aria-label="Цена"
           className={cn(
             spinless,
-            'ml-auto h-7 w-[4.75rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
+            'ml-auto h-7 w-[6.25rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
             'hover:border-border hover:bg-background',
             'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
           )}
-          defaultValue={line.purchasePrice}
-          onFocus={(event) => event.target.select()}
+          defaultValue={formatMoney(line.purchasePrice)}
+          onFocus={(event) => {
+            event.target.value = String(line.purchasePrice)
+            event.target.select()
+          }}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
               event.currentTarget.blur()

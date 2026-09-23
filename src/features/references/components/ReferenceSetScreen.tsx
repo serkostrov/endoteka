@@ -198,7 +198,7 @@ export function ReferenceSetScreen() {
           <SelectTrigger aria-label="Фильтр по статусу">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все</SelectItem>
             <SelectItem value="active">Активные</SelectItem>
             <SelectItem value="inactive">Скрытые</SelectItem>

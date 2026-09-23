@@ -305,7 +305,7 @@ function AddRuleForm({
           <SelectTrigger className="w-56" size="sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             {admin.events.map((event) => (
               <SelectItem key={event.code} value={event.code}>
                 {event.name}
@@ -323,7 +323,7 @@ function AddRuleForm({
           <SelectTrigger className="w-52" size="sm">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             {Object.values(NotificationTarget).map((code) => (
               <SelectItem key={code} value={code}>
                 {notificationTargetLabels[code]}
@@ -339,7 +339,7 @@ function AddRuleForm({
             <SelectTrigger className="w-44" size="sm">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               {admin.roles.map((role) => (
                 <SelectItem key={role.id} value={role.id}>
                   {role.name}

@@ -106,7 +106,7 @@ export function UsersScreen() {
           <SelectTrigger aria-label="Фильтр по роли">
             <SelectValue placeholder="Роль" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все роли</SelectItem>
             {(rolesQuery.data ?? []).map((role) => (
               <SelectItem key={role.id} value={role.id}>
@@ -125,7 +125,7 @@ export function UsersScreen() {
           <SelectTrigger aria-label="Фильтр по статусу">
             <SelectValue placeholder="Статус" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все статусы</SelectItem>
             <SelectItem value="active">Активные</SelectItem>
             <SelectItem value="inactive">Отключённые</SelectItem>

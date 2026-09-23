@@ -12,6 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth, useHasPermission } from '@/features/auth'
 import { useCustomers } from '@/features/customers/hooks/use-customers'
 import { useReferenceItemsBySetCode } from '@/features/references/hooks/use-references'
+import {
+  referenceIdsWithSameName,
+  resolveReferenceOptionId,
+  uniqueReferenceItemsByName,
+} from '@/features/references/services/references-service'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import {
   ORDER_BOARD_PAGE_SIZE,
@@ -38,8 +43,8 @@ const LIST_SORT_COLUMNS = [
   'status',
   'responsible',
   'device',
-  'malfunction',
   'client',
+  'total',
 ] as const satisfies readonly OrderSortColumn[]
 
 const DEFAULT_LIST_SORT: OrderSortColumn = 'deadline'
@@ -106,38 +111,80 @@ export function OrdersScreen() {
 
   const brandOptions = useMemo(() => {
     const items = (brandsQuery.data ?? []).filter((item) => item.isActive)
-    if (groupId === 'all') {
-      return items
-    }
-    return items.filter((item) => item.parentId === groupId)
+    const scoped = groupId === 'all' ? items : items.filter((item) => item.parentId === groupId)
+    return uniqueReferenceItemsByName(scoped)
   }, [brandsQuery.data, groupId])
+
+  const matchedBrandIds = useMemo(() => {
+    if (brandId === 'all') {
+      return [] as string[]
+    }
+    const items = (brandsQuery.data ?? []).filter((item) => item.isActive)
+    return referenceIdsWithSameName(items, brandId, (item) =>
+      groupId === 'all' ? true : item.parentId === groupId,
+    )
+  }, [brandId, brandsQuery.data, groupId])
 
   const modelOptions = useMemo(() => {
     const items = (modelsQuery.data ?? []).filter((item) => item.isActive)
-    if (brandId === 'all') {
-      if (groupId === 'all') {
-        return items
-      }
-      const brandIds = new Set(brandOptions.map((item) => item.id))
-      return items.filter((item) => item.parentId && brandIds.has(item.parentId))
+    if (brandId !== 'all') {
+      const brandIdSet = new Set(matchedBrandIds)
+      return uniqueReferenceItemsByName(
+        items.filter((item) => item.parentId && brandIdSet.has(item.parentId)),
+      )
     }
-    return items.filter((item) => item.parentId === brandId)
-  }, [modelsQuery.data, brandId, brandOptions, groupId])
+    if (groupId !== 'all') {
+      const brandsInGroup = new Set(
+        (brandsQuery.data ?? [])
+          .filter((item) => item.isActive && item.parentId === groupId)
+          .map((item) => item.id),
+      )
+      return uniqueReferenceItemsByName(
+        items.filter((item) => item.parentId && brandsInGroup.has(item.parentId)),
+      )
+    }
+    return uniqueReferenceItemsByName(items)
+  }, [modelsQuery.data, brandId, matchedBrandIds, groupId, brandsQuery.data])
 
+  const matchedModelIds = useMemo(() => {
+    if (modelId === 'all') {
+      return [] as string[]
+    }
+    const items = (modelsQuery.data ?? []).filter((item) => item.isActive)
+    return referenceIdsWithSameName(items, modelId, (item) => {
+      if (brandId !== 'all') {
+        return Boolean(item.parentId && matchedBrandIds.includes(item.parentId))
+      }
+      if (groupId !== 'all') {
+        const parentBrand = (brandsQuery.data ?? []).find((brand) => brand.id === item.parentId)
+        return parentBrand?.parentId === groupId
+      }
+      return true
+    })
+  }, [modelId, modelsQuery.data, brandId, matchedBrandIds, groupId, brandsQuery.data])
+
+  const brandSelectValue = resolveReferenceOptionId(brandOptions, brandId, brandsQuery.data ?? [])
+  const modelSelectValue = resolveReferenceOptionId(modelOptions, modelId, modelsQuery.data ?? [])
+
+  const hasSearch = debouncedSearch.trim().length > 0
   const ordersQuery = useOrders(
     {
       search: debouncedSearch,
-      statusId,
-      responsibleId: responsibleId || 'all',
+      statusId: hasSearch ? 'all' : statusId,
+      responsibleId: hasSearch ? 'all' : responsibleId || 'all',
       deadlineState: 'all',
-      customerId,
-      groupId,
-      brandId,
-      modelId,
-      activeOnly: isList
-        ? !attentionOnly && statusCode === 'all'
-        : activeOnly && statusCode === 'all',
-      attentionOnly,
+      customerId: hasSearch ? 'all' : customerId,
+      groupId: hasSearch ? 'all' : groupId,
+      brandId: hasSearch ? 'all' : brandId,
+      brandIds: hasSearch || brandId === 'all' ? undefined : matchedBrandIds,
+      modelId: hasSearch ? 'all' : modelId,
+      modelIds: hasSearch || modelId === 'all' ? undefined : matchedModelIds,
+      activeOnly: hasSearch
+        ? false
+        : isList
+          ? !attentionOnly && statusCode === 'all'
+          : activeOnly && statusCode === 'all',
+      attentionOnly: hasSearch ? false : attentionOnly,
       sort: isList ? listSort : 'updated',
       direction: isList ? listDir : 'desc',
       page: isList ? page : 1,
@@ -225,11 +272,18 @@ export function OrdersScreen() {
   }
 
   function setGroupFilter(next: string) {
+    const activeBrands = (brandsQuery.data ?? []).filter((item) => item.isActive)
     const brandStillValid =
-      next === 'all' ||
       brandId === 'all' ||
-      (brandsQuery.data ?? []).some((item) => item.id === brandId && item.parentId === next)
+      next === 'all' ||
+      referenceIdsWithSameName(activeBrands, brandId, (item) => item.parentId === next).length > 0
     const nextBrand = brandStillValid ? brandId : 'all'
+    const nextBrandIds =
+      nextBrand === 'all'
+        ? []
+        : referenceIdsWithSameName(activeBrands, nextBrand, (item) =>
+            next === 'all' ? true : item.parentId === next,
+          )
     const modelStillValid =
       nextBrand === 'all'
         ? modelId === 'all' ||
@@ -244,7 +298,9 @@ export function OrdersScreen() {
             return parentBrand?.parentId === next
           })
         : modelId === 'all' ||
-          (modelsQuery.data ?? []).some((item) => item.id === modelId && item.parentId === nextBrand)
+          (modelsQuery.data ?? []).some(
+            (item) => item.id === modelId && item.parentId && nextBrandIds.includes(item.parentId),
+          )
     patchFilters({
       group: next,
       brand: nextBrand === 'all' ? null : nextBrand,
@@ -255,10 +311,20 @@ export function OrdersScreen() {
   }
 
   function setBrandFilter(next: string) {
+    const nextBrandIds =
+      next === 'all'
+        ? []
+        : referenceIdsWithSameName(
+            (brandsQuery.data ?? []).filter((item) => item.isActive),
+            next,
+            (item) => (groupId === 'all' ? true : item.parentId === groupId),
+          )
     const modelStillValid =
       next === 'all' ||
       modelId === 'all' ||
-      (modelsQuery.data ?? []).some((item) => item.id === modelId && item.parentId === next)
+      (modelsQuery.data ?? []).some(
+        (item) => item.id === modelId && item.parentId && nextBrandIds.includes(item.parentId),
+      )
     patchFilters({
       brand: next,
       model: modelStillValid ? (modelId === 'all' ? null : modelId) : null,
@@ -332,7 +398,7 @@ export function OrdersScreen() {
             <SelectTrigger aria-label="Фильтр по ответственному" className="w-auto min-w-0 flex-1">
               <SelectValue placeholder="Ответственный" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value="all">Все ответственные</SelectItem>
               <SelectItem value="unassigned">Без ответственного</SelectItem>
               {(employees.data ?? []).map((employee) => (
@@ -350,7 +416,7 @@ export function OrdersScreen() {
             <SelectTrigger aria-label="Фильтр по статусу" className="w-auto min-w-0 flex-1">
               <SelectValue placeholder="Статус" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value="all">Все статусы</SelectItem>
               {statusOptions.map((status) => (
                 <SelectItem key={status.id} value={status.code}>
@@ -367,7 +433,7 @@ export function OrdersScreen() {
             <SelectTrigger aria-label="Фильтр по клиенту" className="w-auto min-w-0 flex-1">
               <SelectValue placeholder="Клиент" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value="all">Все клиенты</SelectItem>
               {(customersQuery.data?.items ?? []).map((customer) => (
                 <SelectItem key={customer.id} value={customer.id}>
@@ -381,7 +447,7 @@ export function OrdersScreen() {
             <SelectTrigger aria-label="Фильтр по группе прибора" className="w-auto min-w-0 flex-1">
               <SelectValue placeholder="Группа" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value="all">Все группы</SelectItem>
               {(groupsQuery.data ?? [])
                 .filter((item) => item.isActive)
@@ -393,11 +459,15 @@ export function OrdersScreen() {
             </SelectContent>
           </Select>
 
-          <Select value={brandId} onValueChange={setBrandFilter} disabled={groupId !== 'all' && brandOptions.length === 0}>
+          <Select
+            value={brandSelectValue}
+            onValueChange={setBrandFilter}
+            disabled={groupId !== 'all' && brandOptions.length === 0}
+          >
             <SelectTrigger aria-label="Фильтр по бренду" className="w-auto min-w-0 flex-1">
               <SelectValue placeholder="Бренд" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value="all">Все бренды</SelectItem>
               {brandOptions.map((item) => (
                 <SelectItem key={item.id} value={item.id}>
@@ -408,14 +478,14 @@ export function OrdersScreen() {
           </Select>
 
           <Select
-            value={modelId}
+            value={modelSelectValue}
             onValueChange={(value) => patchFilters({ model: value, attention: null, active: null })}
             disabled={brandId !== 'all' && modelOptions.length === 0}
           >
             <SelectTrigger aria-label="Фильтр по модели" className="w-auto min-w-0 flex-1">
               <SelectValue placeholder="Модель" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value="all">Все модели</SelectItem>
               {modelOptions.map((item) => (
                 <SelectItem key={item.id} value={item.id}>

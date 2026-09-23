@@ -43,6 +43,7 @@ import {
   removeOrderPartLine,
   searchInventoryItems,
   setInventoryItemLabel,
+  setInventoryItemPhotoCover,
   setOrderPartLine,
   updateInventoryItem,
   updateOrderCustomPartLine,
@@ -199,6 +200,7 @@ export function useUploadInventoryItemPhoto(itemId: string) {
     mutationFn: (file: File) => uploadInventoryItemPhoto(itemId, file),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.itemPhotos(itemId) })
+      await invalidateInventory(queryClient, itemId)
     },
   })
 }
@@ -211,6 +213,19 @@ export function useDeleteInventoryItemPhoto(itemId: string) {
       deleteInventoryItemPhoto(input.id, input.filePath),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.itemPhotos(itemId) })
+      await invalidateInventory(queryClient, itemId)
+    },
+  })
+}
+
+export function useSetInventoryItemPhotoCover(itemId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (photoId: string) => setInventoryItemPhotoCover(photoId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.itemPhotos(itemId) })
+      await invalidateInventory(queryClient, itemId)
     },
   })
 }

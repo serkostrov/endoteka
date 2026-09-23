@@ -27,6 +27,8 @@ type DynamicFieldRendererProps = {
   disabled?: boolean
   error?: string
   applyLayout?: boolean
+  /** Скрыть подпись — например, когда название уже в соседней ячейке таблицы. */
+  hideLabel?: boolean
   className?: string
 }
 
@@ -53,6 +55,7 @@ export function DynamicFieldRenderer({
   disabled = false,
   error,
   applyLayout = true,
+  hideLabel = false,
   className,
 }: DynamicFieldRendererProps) {
   const controlId = `dynamic-field-${field.code}`
@@ -64,27 +67,39 @@ export function DynamicFieldRenderer({
   return (
     <div
       className={cn(
-        'min-w-0 space-y-1.5',
+        'min-w-0',
+        hideLabel ? 'space-y-0' : 'space-y-1.5',
         applyLayout && fieldLayoutWidthClass(field),
         fieldLayoutHeightClass(field),
         className,
       )}
     >
       {fieldType === FieldType.Checkbox ? (
-        <label htmlFor={controlId} className="flex items-center gap-2 text-sm font-medium">
+        hideLabel ? (
           <Checkbox
             id={controlId}
             checked={value === true}
             disabled={disabled}
+            aria-label={field.name}
             aria-invalid={Boolean(error)}
             onCheckedChange={(checked) => onChange(checked === true)}
           />
-          <span>
-            {field.name}
-            {field.isRequired ? <span className="text-destructive"> *</span> : null}
-          </span>
-        </label>
-      ) : (
+        ) : (
+          <label htmlFor={controlId} className="flex items-center gap-2 text-sm font-medium">
+            <Checkbox
+              id={controlId}
+              checked={value === true}
+              disabled={disabled}
+              aria-invalid={Boolean(error)}
+              onCheckedChange={(checked) => onChange(checked === true)}
+            />
+            <span>
+              {field.name}
+              {field.isRequired ? <span className="text-destructive"> *</span> : null}
+            </span>
+          </label>
+        )
+      ) : hideLabel ? null : (
         <Label htmlFor={controlId}>
           {field.name}
           {field.isRequired ? <span className="text-destructive"> *</span> : null}
@@ -118,7 +133,7 @@ export function DynamicFieldRenderer({
           <SelectTrigger id={controlId} className="w-full" aria-invalid={Boolean(error)}>
             <SelectValue placeholder="Не назначен" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value={EMPLOYEE_NONE}>Не назначен</SelectItem>
             {(employees.data ?? []).map((employee) => (
               <SelectItem key={employee.id} value={employee.id}>
@@ -157,7 +172,7 @@ export function DynamicFieldRenderer({
           <SelectTrigger id={controlId} className="w-full" aria-invalid={Boolean(error)}>
             <SelectValue placeholder="Выберите значение" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             {options.map((option) => (
               <SelectItem key={option.code} value={option.code}>
                 {option.label}

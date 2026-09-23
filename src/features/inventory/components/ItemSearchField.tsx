@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils'
 
 import { useInventoryBarcodeLookup, useInventoryStock } from '../hooks/use-inventory'
 import { findInventoryItemsByBarcode, type InventoryItem } from '../services/inventory-service'
+import { InventoryItemCoverThumb } from './InventoryItemCoverThumb'
 
 type ItemSearchFieldProps = {
   onSelect: (item: InventoryItem) => void
@@ -217,7 +218,7 @@ export function ItemSearchField({
                               type="button"
                               disabled={disabled}
                               className={cn(
-                                'flex w-full items-start justify-between gap-3 py-1.5 pr-3 pl-9 text-left text-sm',
+                                'flex w-full items-center gap-2 py-1.5 pr-3 pl-9 text-left text-sm',
                                 index === activeIndex ? 'bg-accent' : 'hover:bg-accent/70',
                               )}
                               onMouseEnter={() => {
@@ -228,7 +229,12 @@ export function ItemSearchField({
                               onMouseDown={(event) => event.preventDefault()}
                               onClick={() => choose(item)}
                             >
-                              <span className="min-w-0">
+                              <InventoryItemCoverThumb
+                                src={item.coverUrl}
+                                alt={item.name}
+                                className="size-8"
+                              />
+                              <span className="min-w-0 flex-1">
                                 <span className="block truncate font-medium leading-5">{item.name}</span>
                                 {meta ? (
                                   <span className="block truncate text-[11px] leading-4 text-muted-foreground">

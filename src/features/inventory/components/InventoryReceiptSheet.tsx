@@ -1,4 +1,5 @@
 import { DataTable } from '@/components/shared/DataTable'
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { SupplierLink } from '@/components/shared/SupplierLink'
@@ -78,11 +79,27 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
               getRowId={(row) => row.id}
               emptyTitle="Строк нет"
               columns={[
-                { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
+                {
+                  id: 'name',
+                  header: 'Позиция',
+                  cell: (row) => (
+                    <EntitySheetLink kind="item" id={row.itemId} className="font-medium">
+                      {row.itemName}
+                    </EntitySheetLink>
+                  ),
+                },
                 { id: 'code', header: 'Код', cell: (row) => row.itemCode },
                 { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.quantity) },
                 { id: 'price', header: 'Цена', cell: (row) => formatMoney(row.unitPrice) },
-                { id: 'left', header: 'Остаток партии', cell: (row) => formatQuantity(row.remainingQuantity) },
+                {
+                  id: 'left',
+                  header: 'Сейчас на партии',
+                  cell: (row) => (
+                    <span className={row.remainingQuantity < row.quantity ? 'text-muted-foreground' : undefined}>
+                      {formatQuantity(row.remainingQuantity)}
+                    </span>
+                  ),
+                },
               ]}
             />
           </div>

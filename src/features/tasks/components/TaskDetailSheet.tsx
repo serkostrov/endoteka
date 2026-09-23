@@ -220,7 +220,7 @@ function TaskSheetForm({ task }: { task: Task }) {
               <SelectTrigger className="w-full" aria-label="Исполнитель">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable>
                 <SelectItem value={TASK_ASSIGNEE_NONE}>Не назначен</SelectItem>
                 {task.assigneeId && !(employees.data ?? []).some((employee) => employee.id === task.assigneeId) ? (
                   <SelectItem value={task.assigneeId}>{task.assigneeName || 'Исполнитель'}</SelectItem>
@@ -239,7 +239,7 @@ function TaskSheetForm({ task }: { task: Task }) {
               <SelectTrigger className="w-full" aria-label="Приоритет">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable>
                 {Object.values(TaskPriority).map((code) => (
                   <SelectItem key={code} value={code}>
                     {taskPriorityLabels[code]}

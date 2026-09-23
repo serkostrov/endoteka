@@ -50,3 +50,13 @@ export function formatMoney(value: number) {
   const kopecks = Math.round((rounded - whole) * 100)
   return `${sign}${groupThousands(String(whole))},${String(kopecks).padStart(2, '0')}`
 }
+
+/** Разбор ввода цены: «6 666,00», «6666.5», «6666». */
+export function parseMoney(raw: string): number | null {
+  const normalized = raw.trim().replace(/\s/g, '').replace(',', '.')
+  if (!normalized) {
+    return null
+  }
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}

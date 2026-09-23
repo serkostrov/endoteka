@@ -22,6 +22,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 
 import { InventoryBulkActions } from './InventoryBulkActions'
+import { InventoryItemCoverThumb } from './InventoryItemCoverThumb'
 import { InventoryItemSheet } from './InventoryItemScreen'
 import { useDeleteInventoryItem, useInventoryStock } from '../hooks/use-inventory'
 import type { InventoryItem } from '../services/inventory-service'
@@ -122,7 +123,7 @@ export function InventoryStockScreen() {
             <SelectTrigger aria-label="Фильтр по остатку" className="h-9 w-44">
               <SelectValue placeholder="Остаток" />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value="all">Все позиции</SelectItem>
               <SelectItem value="zero">Нет остатка</SelectItem>
             </SelectContent>
@@ -157,6 +158,14 @@ export function InventoryStockScreen() {
           onPageSizeChange: handlePageSizeChange,
         }}
         columns={[
+          {
+            id: 'photo',
+            header: '',
+            className: 'w-14',
+            cell: (row) => (
+              <InventoryItemCoverThumb src={row.coverUrl} alt={row.name} />
+            ),
+          },
           { id: 'name', header: 'Наименование', className: 'min-w-[12rem]', cell: (row) => row.name },
           {
             id: 'article',
@@ -181,7 +190,7 @@ export function InventoryStockScreen() {
             header: 'Остаток',
             className: 'w-[1%]',
             cell: (row) => (
-              <span className="font-medium">
+              <span className={row.stockQuantity < 0 ? 'font-medium text-destructive' : 'font-medium'}>
                 {formatQuantity(row.stockQuantity)} {row.unitName}
               </span>
             ),
@@ -191,7 +200,9 @@ export function InventoryStockScreen() {
             header: '',
             className: 'hidden w-[1%] sm:table-cell',
             cell: (row) =>
-              row.stockQuantity <= 0 ? (
+              row.stockQuantity < 0 ? (
+                <StatusBadge tone="warning">Недостача</StatusBadge>
+              ) : row.stockQuantity <= 0 ? (
                 <StatusBadge tone="warning">Нет остатка</StatusBadge>
               ) : (
                 <StatusBadge tone="success">В наличии</StatusBadge>

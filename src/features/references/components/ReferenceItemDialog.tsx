@@ -110,7 +110,7 @@ export function ReferenceItemDialog({
                   <SelectValue placeholder="Выберите значение" />
                 </SelectTrigger>
               </FormControl>
-              <SelectContent>
+              <SelectContent searchable>
                 {parentOptions.map((option) => (
                   <SelectItem key={option.id} value={option.id}>
                     {option.name}

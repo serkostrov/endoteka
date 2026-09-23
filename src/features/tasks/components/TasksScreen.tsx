@@ -198,7 +198,7 @@ export function TasksScreen() {
           <SelectTrigger aria-label="Исполнитель">
             <SelectValue placeholder="Исполнитель" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все исполнители</SelectItem>
             <SelectItem value="unassigned">Без исполнителя</SelectItem>
             {(employees.data ?? []).map((employee) => (
@@ -218,7 +218,7 @@ export function TasksScreen() {
           <SelectTrigger aria-label="Приоритет">
             <SelectValue placeholder="Приоритет" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все приоритеты</SelectItem>
             {Object.values(TaskPriority).map((code) => (
               <SelectItem key={code} value={code}>
@@ -231,7 +231,7 @@ export function TasksScreen() {
           <SelectTrigger aria-label="Срок">
             <SelectValue placeholder="Срок" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             {Object.values(TaskDueFilter).map((code) => (
               <SelectItem key={code} value={code}>
                 {taskDueFilterLabels[code]}
@@ -249,7 +249,7 @@ export function TasksScreen() {
           <SelectTrigger aria-label="Связанный заказ">
             <SelectValue placeholder="Заказ" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             {Object.values(TaskLinkedFilter).map((code) => (
               <SelectItem key={code} value={code}>
                 {taskLinkedFilterLabels[code]}

@@ -68,7 +68,7 @@ export function CreateTemplateDialog({ open, onOpenChange }: { open: boolean; on
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable>
                 {Object.values(DocumentKind).map((code) => (
                   <SelectItem key={code} value={code}>
                     {documentKindLabels[code]}
@@ -84,7 +84,7 @@ export function CreateTemplateDialog({ open, onOpenChange }: { open: boolean; on
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent searchable>
                   {Object.values(DocumentPageSize).map((code) => (
                     <SelectItem key={code} value={code}>
                       {documentPageSizeLabels[code]}

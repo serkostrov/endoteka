@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useQueryClient } from '@tanstack/react-query'
 import { Briefcase, Trash2, Wrench } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -9,6 +10,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
+import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -31,6 +33,21 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
+import { useHasPermission } from '@/features/auth'
+import {
+  DynamicFieldRenderer,
+  DynamicFieldValue,
+  DynamicFieldsGrid,
+  filledFieldValues,
+  groupDynamicFields,
+  saveDynamicFieldValues,
+} from '@/features/dynamic-fields'
+import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
+import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
+import type {
+  DynamicFieldDefinition,
+  DynamicFieldValueData,
+} from '@/features/dynamic-fields/services/fields-service'
 import { InventoryItemSheet } from '@/features/inventory/components/InventoryItemScreen'
 import {
   useOrderInventoryUsage,
@@ -39,10 +56,12 @@ import {
   useUpdateOrderCustomPartLine,
 } from '@/features/inventory/hooks/use-inventory'
 import type { OrderInventoryUsage } from '@/features/inventory/services/inventory-service'
-import { useHasPermission } from '@/features/auth'
+import { useAutosave } from '@/hooks/use-autosave'
+import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
 import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
 import { ServiceTemplateSheet } from './ServiceTemplateSheet'
@@ -101,6 +120,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const canUpdateServices = useHasPermission(Permission.OrdersUpdate)
   const partsQuery = useOrderInventoryUsage(orderId)
   const servicesQuery = useOrderServiceLines(orderId)
+  const fieldsQuery = useDynamicFields(FieldEntity.OrderWork)
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
   const [openedTemplateId, setOpenedTemplateId] = useState<string | null>(null)
   const [customPart, setCustomPart] = useState<OrderInventoryUsage | null>(null)
@@ -108,11 +128,17 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
 
   const parts = partsQuery.data ?? []
   const services = servicesQuery.data ?? []
-  const isLoading = partsQuery.isLoading || servicesQuery.isLoading
-  const error = partsQuery.error ?? servicesQuery.error
+  const activeFields = useMemo(
+    () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
+    [fieldsQuery.data],
+  )
+  const isLoading = partsQuery.isLoading || servicesQuery.isLoading || fieldsQuery.isLoading
+  const error = partsQuery.error ?? servicesQuery.error ?? fieldsQuery.error
 
   const groups = useMemo(() => groupLines(parts, services), [parts, services])
-  const isEmpty = groups.length === 0
+  const hasLines = groups.length > 0
+  const hasFields = activeFields.length > 0
+  const isEmpty = !hasLines && !hasFields
 
   if (error) {
     return (
@@ -121,6 +147,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
         onRetry={() => {
           void partsQuery.refetch()
           void servicesQuery.refetch()
+          void fieldsQuery.refetch()
         }}
         className="py-6"
       />
@@ -149,59 +176,71 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
 
   return (
     <>
-      <div className="overflow-x-auto">
-        <Table className="table-fixed">
-          <colgroup>
-            <col style={{ width: '2rem' }} />
-            <col />
-            <col style={{ width: '5.5rem' }} />
-            <col style={{ width: '5.75rem' }} />
-            <col style={{ width: '5.5rem' }} />
-            <col style={{ width: '2rem' }} />
-          </colgroup>
-          <TableHeader>
-            <TableRow className="border-b hover:bg-transparent">
-              <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
-              <TableHead className={cn(cellPad, 'h-8 text-xs font-medium text-muted-foreground')}>
-                Наименование
-              </TableHead>
-              <TableHead
-                className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
-              >
-                Цена, ₽
-              </TableHead>
-              <TableHead
-                className={cn(
-                  cellPad,
-                  'h-8 pr-5 text-right text-xs font-medium text-muted-foreground',
-                )}
-              >
-                Кол-во
-              </TableHead>
-              <TableHead
-                className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
-              >
-                Сумма, ₽
-              </TableHead>
-              <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {groups.map((group) => (
-              <ActorGroupRows
-                key={group.actorName}
-                group={group}
-                orderId={orderId}
-                canWriteOff={canWriteOff}
-                canUpdateServices={canUpdateServices}
-                onOpenPart={(itemId) => setOpenedItemId(itemId)}
-                onOpenService={(templateId) => setOpenedTemplateId(templateId)}
-                onOpenCustomPart={(part) => setCustomPart(part)}
-                onOpenCustomService={(service) => setCustomService(service)}
-              />
-            ))}
-          </TableBody>
-        </Table>
+      <div className="space-y-4">
+        {hasLines ? (
+          <div className="overflow-x-auto">
+            <Table className="table-fixed">
+              <colgroup>
+                <col style={{ width: '2rem' }} />
+                <col />
+                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '5.75rem' }} />
+                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '2rem' }} />
+              </colgroup>
+              <TableHeader>
+                <TableRow className="border-b hover:bg-transparent">
+                  <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+                  <TableHead className={cn(cellPad, 'h-8 text-xs font-medium text-muted-foreground')}>
+                    Наименование
+                  </TableHead>
+                  <TableHead
+                    className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
+                  >
+                    Цена, ₽
+                  </TableHead>
+                  <TableHead
+                    className={cn(
+                      cellPad,
+                      'h-8 pr-5 text-right text-xs font-medium text-muted-foreground',
+                    )}
+                  >
+                    Кол-во
+                  </TableHead>
+                  <TableHead
+                    className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
+                  >
+                    Сумма, ₽
+                  </TableHead>
+                  <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {groups.map((group) => (
+                  <ActorGroupRows
+                    key={group.actorName}
+                    group={group}
+                    orderId={orderId}
+                    canWriteOff={canWriteOff}
+                    canUpdateServices={canUpdateServices}
+                    onOpenPart={(itemId) => setOpenedItemId(itemId)}
+                    onOpenService={(templateId) => setOpenedTemplateId(templateId)}
+                    onOpenCustomPart={(part) => setCustomPart(part)}
+                    onOpenCustomService={(service) => setCustomService(service)}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        ) : null}
+
+        {hasFields ? (
+          <WorkCompositionFields
+            orderId={orderId}
+            fields={activeFields}
+            canEdit={canUpdateServices}
+          />
+        ) : null}
       </div>
 
       <InventoryItemSheet
@@ -243,6 +282,88 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
         }}
       />
     </>
+  )
+}
+
+function WorkCompositionFields({
+  orderId,
+  fields,
+  canEdit,
+}: {
+  orderId: string
+  fields: DynamicFieldDefinition[]
+  canEdit: boolean
+}) {
+  const queryClient = useQueryClient()
+  const valuesQuery = useDynamicFieldValues(FieldEntity.OrderWork, orderId)
+  const [draft, setDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
+  const lastSavedKey = useRef<string | null>(null)
+  const values = draft ?? valuesQuery.data ?? {}
+  const fieldGroups = useMemo(() => groupDynamicFields(fields), [fields])
+
+  const persist = useCallback(
+    async (next: Record<string, DynamicFieldValueData>) => {
+      const payload = filledFieldValues(fields, { ...valuesQuery.data, ...next })
+      const key = JSON.stringify(payload)
+      if (key === lastSavedKey.current) {
+        return
+      }
+      try {
+        await saveDynamicFieldValues(FieldEntity.OrderWork, orderId, payload)
+        lastSavedKey.current = key
+        setDraft(null)
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.fields.values(FieldEntity.OrderWork, orderId),
+        })
+      } catch (error) {
+        toast.error(getErrorMessage(error))
+      }
+    },
+    [fields, orderId, queryClient, valuesQuery.data],
+  )
+
+  useAutosave(canEdit ? draft : null, persist)
+
+  useEffect(() => {
+    lastSavedKey.current = JSON.stringify(filledFieldValues(fields, valuesQuery.data ?? {}))
+  }, [fields, valuesQuery.data])
+
+  function setFieldValue(code: string, value: DynamicFieldValueData) {
+    setDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [code]: value }))
+  }
+
+  return (
+    <div className="space-y-3">
+      {fieldGroups.map((group) => (
+        <SectionCard key={group.name} title={group.name} flat>
+          <DynamicFieldsGrid className="gap-x-4 gap-y-3">
+            {group.fields.map((field) =>
+              canEdit ? (
+                <DynamicFieldRenderer
+                  key={field.id}
+                  field={field}
+                  value={values[field.code] ?? emptyFieldValue(field)}
+                  onChange={(value) => setFieldValue(field.code, value)}
+                />
+              ) : (
+                <div key={field.id} className={cn('space-y-1.5', fieldLayoutWidthClass(field))}>
+                  <p className="text-sm text-muted-foreground">
+                    {field.name}
+                    {field.isRequired ? <span className="text-destructive"> *</span> : null}
+                  </p>
+                  <p className="text-sm">
+                    <DynamicFieldValue
+                      field={field}
+                      value={values[field.code] ?? emptyFieldValue(field)}
+                    />
+                  </p>
+                </div>
+              ),
+            )}
+          </DynamicFieldsGrid>
+        </SectionCard>
+      ))}
+    </div>
   )
 }
 

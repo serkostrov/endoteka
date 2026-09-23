@@ -21,6 +21,7 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 
 import { CreateItemDialog } from './CreateItemDialog'
+import { InventoryItemCoverThumb } from './InventoryItemCoverThumb'
 import { InventoryItemSheet } from './InventoryItemScreen'
 import { useInventoryStock } from '../hooks/use-inventory'
 import type { InventoryItem } from '../services/inventory-service'
@@ -105,6 +106,7 @@ export function InventoryItemsScreen() {
           }
           renderItem={(item: InventoryItem) => (
             <FolderTreeItemButton depth={1} onClick={() => openItem(item.id)}>
+              <InventoryItemCoverThumb src={item.coverUrl} alt={item.name} />
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{item.name}</span>
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">

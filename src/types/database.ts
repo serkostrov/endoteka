@@ -262,6 +262,7 @@ type Row = {
     claimed_malfunction: string
     created_at: string
     updated_at: string
+    total_amount: number
   }
   order_status_events: {
     id: string
@@ -455,6 +456,7 @@ type Row = {
     barcode: string
     barcode_type: string
     name: string
+    description: string
     category_id: string
     unit_id: string
     purchase_price: number
@@ -1811,6 +1813,7 @@ export type Database = {
           item_purchase_price?: number
           item_repair_price?: number
           item_retail_price?: number
+          item_description?: string
         }
         Returns: string
       }
@@ -1826,6 +1829,7 @@ export type Database = {
           item_purchase_price?: number
           item_repair_price?: number
           item_retail_price?: number
+          item_description?: string
         }
         Returns: undefined
       }
@@ -1867,6 +1871,10 @@ export type Database = {
         Args: { target_photo_id: string }
         Returns: string
       }
+      set_inventory_item_photo_cover: {
+        Args: { target_photo_id: string }
+        Returns: undefined
+      }
       search_inventory_items: {
         Args: { search_query?: string; page_number?: number; page_size?: number; stock_filter?: string }
         Returns: {
@@ -1886,6 +1894,7 @@ export type Database = {
           created_at: string
           updated_at: string
           total_count: number
+          cover_file_path: string | null
         }[]
       }
       find_inventory_item_by_name: {

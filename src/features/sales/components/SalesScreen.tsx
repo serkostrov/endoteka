@@ -116,7 +116,7 @@ export function SalesScreen() {
           <SelectTrigger aria-label="Фильтр по статусу">
             <SelectValue placeholder="Статус" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все статусы</SelectItem>
             {Object.values(SaleStatus).map((code) => (
               <SelectItem key={code} value={code}>

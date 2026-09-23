@@ -1,7 +1,9 @@
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
-export const DATE_DISPLAY_FORMAT = 'dd/MM/yyyy'
+/** Отображение даты в UI: 23.09.26 */
+export const DATE_DISPLAY_FORMAT = 'dd.MM.yy'
+export const DATE_DISPLAY_PLACEHOLDER = 'дд.мм.гг'
 export const DATE_ISO_FORMAT = 'yyyy-MM-dd'
 
 export function parseDateInput(value: string): Date | null {
@@ -15,9 +17,10 @@ export function parseDateInput(value: string): Date | null {
     return localDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))
   }
 
-  const display = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(trimmed)
+  const display = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2}|\d{4})$/.exec(trimmed)
   if (display) {
-    return localDate(Number(display[3]), Number(display[2]), Number(display[1]))
+    const year = expandYear(display[3]!)
+    return localDate(year, Number(display[2]), Number(display[1]))
   }
 
   return null
@@ -72,6 +75,27 @@ export function formatDateTime(value: Date | string): string {
     return '—'
   }
   return format(date, `${DATE_DISPLAY_FORMAT} HH:mm`, { locale: ru })
+}
+
+/** дд.мм.гг при вводе; принимает и старые слэши. */
+export function maskDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 6)
+  if (digits.length <= 2) {
+    return digits
+  }
+  if (digits.length <= 4) {
+    return `${digits.slice(0, 2)}.${digits.slice(2)}`
+  }
+  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`
+}
+
+function expandYear(raw: string): number {
+  if (raw.length === 4) {
+    return Number(raw)
+  }
+  const yy = Number(raw)
+  // 00–99 → 2000–2099 (сроки гарантии / заказы в текущем веке)
+  return 2000 + yy
 }
 
 function localDate(year: number, month: number, day: number): Date | null {

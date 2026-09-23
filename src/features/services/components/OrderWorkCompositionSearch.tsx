@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { CreateItemDialog } from '@/features/inventory/components/CreateItemDialog'
+import { InventoryItemCoverThumb } from '@/features/inventory/components/InventoryItemCoverThumb'
 import {
   useConsumeInventoryForOrder,
   useInventoryBarcodeLookup,
@@ -347,6 +348,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                                         indent={2}
                                         title={item.name}
                                         subtitle={[meta, stock].filter(Boolean).join(' · ')}
+                                        coverUrl={item.coverUrl}
                                         price={item.repairPrice}
                                         disabled={busy}
                                         onHover={() => {
@@ -504,7 +506,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                 </span>
               </SelectValue>
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable>
               <SelectItem value={MASTER_NONE}>Не назначен</SelectItem>
               {(employees.data ?? []).map((employee) => (
                 <SelectItem key={employee.id} value={employee.id}>
@@ -595,6 +597,7 @@ function FolderBlock({
 function SuggestRow({
   title,
   subtitle,
+  coverUrl,
   price,
   active,
   indent,
@@ -604,6 +607,7 @@ function SuggestRow({
 }: {
   title: string
   subtitle?: string
+  coverUrl?: string | null
   price: number
   active: boolean
   indent: 1 | 2
@@ -624,6 +628,9 @@ function SuggestRow({
       onMouseDown={(event) => event.preventDefault()}
       onClick={onSelect}
     >
+      {coverUrl !== undefined ? (
+        <InventoryItemCoverThumb src={coverUrl} alt={title} className="size-8" />
+      ) : null}
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium leading-5">{title}</span>
         {subtitle ? (

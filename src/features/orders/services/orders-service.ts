@@ -21,6 +21,7 @@ export type OrderSortColumn =
   | 'responsible'
   | 'deadline'
   | 'malfunction'
+  | 'total'
   | 'updated'
 
 export type OrderListFilters = {
@@ -31,7 +32,10 @@ export type OrderListFilters = {
   customerId: string
   groupId: string
   brandId: string
+  /** Несколько id одного бренда из разных групп — фильтр по всем. */
+  brandIds?: string[]
   modelId: string
+  modelIds?: string[]
   activeOnly: boolean
   attentionOnly: boolean
   sort: OrderSortColumn
@@ -60,6 +64,7 @@ export type OrderListItem = {
   deadline: string | null
   deadlineState: DeadlineState
   claimedMalfunction: string
+  totalAmount: number
   createdAt: string
   updatedAt: string
 }
@@ -169,6 +174,7 @@ const SORT_COLUMNS: Record<OrderSortColumn, string> = {
   responsible: 'responsible_name',
   deadline: 'deadline',
   malfunction: 'claimed_malfunction',
+  total: 'total_amount',
   updated: 'updated_at',
 }
 
@@ -203,6 +209,7 @@ function mapListItem(row: OrderListItemRow): OrderListItem {
     deadline: row.deadline,
     deadlineState,
     claimedMalfunction: row.claimed_malfunction,
+    totalAmount: Number(row.total_amount ?? 0),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -270,12 +277,28 @@ export async function listOrders(filters: OrderListFilters): Promise<OrderListRe
     query = query.eq('device_group_id', filters.groupId)
   }
 
-  if (filters.brandId !== 'all') {
-    query = query.eq('device_brand_id', filters.brandId)
+  const brandIds =
+    filters.brandIds && filters.brandIds.length > 0
+      ? filters.brandIds
+      : filters.brandId !== 'all'
+        ? [filters.brandId]
+        : []
+  if (brandIds.length === 1) {
+    query = query.eq('device_brand_id', brandIds[0])
+  } else if (brandIds.length > 1) {
+    query = query.in('device_brand_id', brandIds)
   }
 
-  if (filters.modelId !== 'all') {
-    query = query.eq('device_model_id', filters.modelId)
+  const modelIds =
+    filters.modelIds && filters.modelIds.length > 0
+      ? filters.modelIds
+      : filters.modelId !== 'all'
+        ? [filters.modelId]
+        : []
+  if (modelIds.length === 1) {
+    query = query.eq('device_model_id', modelIds[0])
+  } else if (modelIds.length > 1) {
+    query = query.in('device_model_id', modelIds)
   }
 
   if (filters.attentionOnly) {

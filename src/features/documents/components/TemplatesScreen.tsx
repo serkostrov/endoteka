@@ -75,7 +75,7 @@ export function TemplatesScreen() {
           <SelectTrigger aria-label="Тип шаблона">
             <SelectValue placeholder="Тип" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent searchable>
             <SelectItem value="all">Все типы</SelectItem>
             {Object.values(DocumentKind).map((code) => (
               <SelectItem key={code} value={code}>

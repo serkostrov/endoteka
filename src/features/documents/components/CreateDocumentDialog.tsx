@@ -99,7 +99,7 @@ export function CreateDocumentDialog({
               <SelectTrigger aria-label="Шаблон">
                 <SelectValue placeholder="Выберите шаблон" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable>
                 {templates.map((template) => (
                   <SelectItem key={template.id} value={template.id}>
                     {template.name} · {documentKindLabels[template.kind]}

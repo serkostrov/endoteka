@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table'
 import { deviceSerialLine } from '@/features/devices/classification'
 import { DeadlineState } from '@/lib/constants/orders'
+import { formatMoney } from '@/lib/constants/inventory'
 import { formatDate, formatDateTime } from '@/lib/utils/date'
 import { formatInteger } from '@/lib/utils/number'
 import { cn } from '@/lib/utils'
@@ -36,12 +37,12 @@ const cellClass = 'min-w-0 px-3 py-2.5 align-middle whitespace-normal'
 
 const COLUMNS: { id: OrderSortColumn; label: string; className: string }[] = [
   { id: 'number', label: 'Заказ', className: 'w-36' },
-  { id: 'deadline', label: 'Крайний срок', className: 'w-36' },
-  { id: 'status', label: 'Статус', className: 'w-40' },
-  { id: 'responsible', label: 'Ответственный', className: 'hidden w-36 md:table-cell' },
+  { id: 'deadline', label: 'Срок', className: 'w-28' },
+  { id: 'status', label: 'Статус', className: 'w-32' },
+  { id: 'responsible', label: 'Ответственный', className: 'hidden w-28 md:table-cell' },
   { id: 'device', label: 'Изделие', className: '' },
-  { id: 'malfunction', label: 'Неисправность', className: 'hidden w-44 lg:table-cell' },
-  { id: 'client', label: 'Клиент', className: 'w-52' },
+  { id: 'client', label: 'Клиент', className: 'w-64' },
+  { id: 'total', label: 'Итог', className: 'w-36' },
 ]
 
 type OrderListTableProps = {
@@ -243,13 +244,11 @@ export function OrderListTable({
                       secondary={deviceSerialLine(order.serialNumber) || undefined}
                     />
                   </TableCell>
-                  <TableCell className={cn(cellClass, 'hidden lg:table-cell')}>
-                    <span className="block truncate text-muted-foreground">
-                      {order.claimedMalfunction || '—'}
-                    </span>
-                  </TableCell>
-                  <TableCell className={cn(cellClass, 'pr-4')}>
+                  <TableCell className={cellClass}>
                     <span className="block truncate font-medium text-primary">{order.customerName}</span>
+                  </TableCell>
+                  <TableCell className={cn(cellClass, 'pr-4 tabular-nums')}>
+                    <span className="font-medium">{formatMoney(order.totalAmount)} ₽</span>
                   </TableCell>
                 </TableRow>
               )

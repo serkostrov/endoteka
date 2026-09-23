@@ -46,7 +46,7 @@ function sheetZIndex(layer: number) {
 }
 
 /** Насколько нижний sheet шире верхнего (выглядывает слева, правый край на месте). */
-const SHEET_PEEK_REM = 3.5
+const SHEET_PEEK_REM = 12
 
 /** Длительность slide-out; держим контент смонтированным, пока играет анимация. */
 export const SHEET_EXIT_MS = 320

@@ -1,16 +1,17 @@
 import { format } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
-import { toDate } from '@/lib/utils/date'
+import { DATE_DISPLAY_FORMAT, toDate } from '@/lib/utils/date'
 
-export const DEFAULT_DOCUMENT_DATE_FORMAT = 'dd.MM.yyyy'
+export const DEFAULT_DOCUMENT_DATE_FORMAT = DATE_DISPLAY_FORMAT
 
 export const documentDateFormats = [
-  { value: 'dd.MM.yyyy', label: '18.09.2026' },
   { value: 'dd.MM.yy', label: '18.09.26' },
+  { value: 'dd.MM.yyyy', label: '18.09.2026' },
   { value: 'dd/MM/yyyy', label: '18/09/2026' },
   { value: 'yyyy-MM-dd', label: '2026-09-18' },
   { value: 'd MMMM yyyy', label: '18 сентября 2026' },
+  { value: 'dd.MM.yy HH:mm', label: '18.09.26 14:30' },
   { value: 'dd.MM.yyyy HH:mm', label: '18.09.2026 14:30' },
 ] as const
 
