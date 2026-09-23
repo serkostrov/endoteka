@@ -283,7 +283,7 @@ export async function listOrders(filters: OrderListFilters): Promise<OrderListRe
       : filters.brandId !== 'all'
         ? [filters.brandId]
         : []
-  if (brandIds.length === 1) {
+  if (brandIds.length === 1 && brandIds[0]) {
     query = query.eq('device_brand_id', brandIds[0])
   } else if (brandIds.length > 1) {
     query = query.in('device_brand_id', brandIds)
@@ -295,7 +295,7 @@ export async function listOrders(filters: OrderListFilters): Promise<OrderListRe
       : filters.modelId !== 'all'
         ? [filters.modelId]
         : []
-  if (modelIds.length === 1) {
+  if (modelIds.length === 1 && modelIds[0]) {
     query = query.eq('device_model_id', modelIds[0])
   } else if (modelIds.length > 1) {
     query = query.in('device_model_id', modelIds)
