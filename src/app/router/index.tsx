@@ -22,6 +22,7 @@ const DevicesPage = lazyNamedPage(() => import('@/pages/DevicesPage'), 'DevicesP
 const InventoryPage = lazyNamedPage(() => import('@/pages/InventoryPage'), 'InventoryPage')
 const InventoryItemsPage = lazyNamedPage(() => import('@/pages/InventoryItemsPage'), 'InventoryItemsPage')
 const InventoryReceiptsPage = lazyNamedPage(() => import('@/pages/InventoryReceiptsPage'), 'InventoryReceiptsPage')
+const InventoryWriteOffsPage = lazyNamedPage(() => import('@/pages/InventoryWriteOffsPage'), 'InventoryWriteOffsPage')
 const InventoryCountsPage = lazyNamedPage(() => import('@/pages/InventoryCountsPage'), 'InventoryCountsPage')
 const SalesPage = lazyNamedPage(() => import('@/pages/SalesPage'), 'SalesPage')
 const DocumentTemplatesPage = lazyNamedPage(() => import('@/pages/DocumentTemplatesPage'), 'DocumentTemplatesPage')
@@ -140,6 +141,10 @@ const router = createBrowserRouter([
           {
             element: <RequirePermission permission={Permission.InventoryReceive} />,
             children: [{ path: routes.inventoryReceipts, element: <InventoryReceiptsPage /> }],
+          },
+          {
+            element: <RequirePermission permission={Permission.InventoryWriteOff} />,
+            children: [{ path: routes.inventoryWriteOffs, element: <InventoryWriteOffsPage /> }],
           },
           {
             element: <RequirePermission permission={Permission.InventoryCount} />,

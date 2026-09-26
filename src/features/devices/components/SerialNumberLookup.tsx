@@ -287,7 +287,7 @@ export function DeviceLookupCard({
   disabled?: boolean
 }) {
   const clickable = Boolean(onOpen) && !disabled
-  const title = 'label' in device && device.label ? device.label : deviceTitle(device)
+  const title = deviceTitle(device)
   const ariaLabel = `Открыть карточку ${title}`
 
   function onCardKeyDown(event: KeyboardEvent<HTMLDivElement>) {

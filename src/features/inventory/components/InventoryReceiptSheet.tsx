@@ -66,11 +66,11 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
           <div className="space-y-4">
             <div className="min-w-0">
               <h2 className="text-lg font-semibold tracking-tight">
-                Приход · <SupplierLink name={receipt.supplier} customerId={receipt.supplierId} />
+                Приход <SupplierLink name={receipt.supplier} customerId={receipt.supplierId} />
               </h2>
               <p className="mt-1 text-sm text-muted-foreground">
                 {formatDate(receipt.receiptDate)}
-                {receipt.notes ? ` · ${receipt.notes}` : ''}
+                {receipt.notes ? ` ${receipt.notes}` : ''}
               </p>
             </div>
             <DataTable

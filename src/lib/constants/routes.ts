@@ -14,6 +14,7 @@ export const routes = {
   inventoryItems: '/inventory/items',
   inventoryItem: '/inventory/items/:id',
   inventoryReceipts: '/inventory/receipts',
+  inventoryWriteOffs: '/inventory/write-offs',
   inventoryCounts: '/inventory/counts',
   inventoryCount: '/inventory/counts/:id',
   sales: '/sales',
@@ -51,6 +52,7 @@ export const sheets = {
   count: (id: string) => `${routes.inventoryCounts}?count=${encodeURIComponent(id)}`,
   sale: (id: string) => `${routes.sales}?sale=${encodeURIComponent(id)}`,
   receipt: (id: string) => `${routes.inventoryReceipts}?receipt=${encodeURIComponent(id)}`,
+  writeOff: (id: string) => `${routes.inventoryWriteOffs}?writeOff=${encodeURIComponent(id)}`,
 } as const
 
 function sheetPath(base: string, key: string, id: string, opts?: { edit?: boolean }) {

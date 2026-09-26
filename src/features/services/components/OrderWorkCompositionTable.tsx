@@ -965,7 +965,7 @@ function groupLines(parts: OrderInventoryUsage[], services: OrderServiceLine[]):
         kind: 'part',
         id: part.id,
         name: part.itemName,
-        subtitle: [part.itemCode, part.itemArticle].filter(Boolean).join(' · '),
+        subtitle: [part.itemCode, part.itemArticle].filter(Boolean).join(' '),
         quantity: part.quantity,
         unitPrice: part.unitPrice,
         unitName: part.unitName || 'шт',

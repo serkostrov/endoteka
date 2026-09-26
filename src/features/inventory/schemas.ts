@@ -39,6 +39,14 @@ export const receiveFormSchema = z.object({
 
 export type ReceiveFormValues = z.infer<typeof receiveFormSchema>
 
+export const writeOffFormSchema = z.object({
+  writeOffDate: z.string().min(1, 'Укажите дату списания'),
+  reason: z.string().trim().min(1, 'Укажите причину списания'),
+  notes: z.string().trim(),
+})
+
+export type WriteOffFormValues = z.infer<typeof writeOffFormSchema>
+
 export const consumeFormSchema = z.object({
   quantity: quantitySchema,
 })

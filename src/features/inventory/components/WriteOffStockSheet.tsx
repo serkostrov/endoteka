@@ -31,132 +31,115 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { CustomerPicker } from '@/features/customers/components/CustomerPicker'
-import { formatMoney, formatQuantity, parseMoney } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { toIsoDate } from '@/lib/utils/date'
 
-import { CreateItemDialog } from './CreateItemDialog'
 import { InventoryItemCoverThumb } from './InventoryItemCoverThumb'
 import { InventoryItemSheet } from './InventoryItemScreen'
 import { ItemSearchField } from './ItemSearchField'
-import { useReceiveInventory } from '../hooks/use-inventory'
-import { receiveFormSchema, type ReceiveFormValues } from '../schemas'
+import { useCreateInventoryWriteOff } from '../hooks/use-inventory'
+import { writeOffFormSchema, type WriteOffFormValues } from '../schemas'
 import type { InventoryItem } from '../services/inventory-service'
 
 type DraftLine = {
   key: string
   item: InventoryItem
   quantity: number
-  purchasePrice: number
 }
 
-export type ReceiptSupplierPreset = {
-  id: string
-  name: string
-}
-
-type ReceiveStockSheetProps = {
+type WriteOffStockSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
-  presetSupplier?: ReceiptSupplierPreset
 }
 
 const cellPad = 'px-2 py-1.5'
 const spinless =
   '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
-export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: ReceiveStockSheetProps) {
-  const receive = useReceiveInventory()
+export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetProps) {
+  const create = useCreateInventoryWriteOff()
   const [lines, setLines] = useState<DraftLine[]>([])
-  const [supplierId, setSupplierId] = useState(presetSupplier?.id ?? '')
-  const [createItemOpen, setCreateItemOpen] = useState(false)
-  const [createQuery, setCreateQuery] = useState('')
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
-  const form = useForm<ReceiveFormValues>({
-    resolver: zodResolver(receiveFormSchema),
+  const form = useForm<WriteOffFormValues>({
+    resolver: zodResolver(writeOffFormSchema),
     defaultValues: {
-      supplier: presetSupplier?.name ?? '',
-      receiptDate: toIsoDate(new Date()),
+      writeOffDate: toIsoDate(new Date()),
+      reason: '',
       notes: '',
     },
   })
-  const documentTotal = lines.reduce((sum, line) => sum + line.quantity * line.purchasePrice, 0)
-  const lockedSupplier = Boolean(presetSupplier)
+  const documentTotal = lines.reduce((sum, line) => sum + line.quantity * line.item.purchasePrice, 0)
+  const insufficient = lines.filter((line) => line.quantity > line.item.stockQuantity)
 
   useEffect(() => {
     if (!open) {
       return
     }
     setLines([])
-    if (presetSupplier) {
-      setSupplierId(presetSupplier.id)
-      form.reset({
-        supplier: presetSupplier.name,
-        receiptDate: toIsoDate(new Date()),
-        notes: '',
-      })
-      return
-    }
-    setSupplierId('')
     form.reset({
-      supplier: '',
-      receiptDate: toIsoDate(new Date()),
+      writeOffDate: toIsoDate(new Date()),
+      reason: '',
       notes: '',
     })
-  }, [open, form, presetSupplier?.id, presetSupplier?.name])
+  }, [open, form])
 
-  function addLine(item: InventoryItem, quantity = 1, purchasePrice = item.purchasePrice) {
+  function addLine(item: InventoryItem, quantity = 1) {
     if (!Number.isFinite(quantity) || quantity <= 0) {
       toast.error('Количество должно быть больше нуля')
       return
     }
-    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
-      toast.error('Цена не может быть отрицательной')
+    if (item.stockQuantity <= 0) {
+      toast.error(`Нет остатка: ${item.name}`)
       return
     }
     setLines((current) => {
-      const existing = current.find((line) => line.item.id === item.id && line.purchasePrice === purchasePrice)
+      const existing = current.find((line) => line.item.id === item.id)
       if (existing) {
+        const nextQty = existing.quantity + quantity
+        if (nextQty > item.stockQuantity) {
+          toast.error(
+            `Недостаточно остатка. Доступно ${formatQuantity(item.stockQuantity)} ${item.unitName || 'шт'}`,
+          )
+          return current
+        }
         return current.map((line) =>
-          line.key === existing.key ? { ...line, quantity: line.quantity + quantity } : line,
+          line.key === existing.key ? { ...line, quantity: nextQty } : line,
         )
       }
-      return [
-        ...current,
-        { key: `${item.id}-${purchasePrice}-${Date.now()}`, item, quantity, purchasePrice },
-      ]
+      return [...current, { key: `${item.id}-${Date.now()}`, item, quantity }]
     })
     toast.success(`Добавлено: ${item.name}`)
   }
 
-  function updateLine(key: string, patch: Partial<Pick<DraftLine, 'quantity' | 'purchasePrice'>>) {
-    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
+  function updateLine(key: string, quantity: number) {
+    setLines((current) => current.map((line) => (line.key === key ? { ...line, quantity } : line)))
   }
 
-  async function persist(values: ReceiveFormValues) {
+  async function persist(values: WriteOffFormValues) {
     if (lines.length === 0) {
       throw new Error('Добавьте хотя бы одну позицию')
     }
-    if (lines.some((line) => line.quantity <= 0 || line.purchasePrice < 0)) {
-      throw new Error('Проверьте количество и цену в строках')
+    if (lines.some((line) => line.quantity <= 0)) {
+      throw new Error('Проверьте количество в строках')
     }
-    await receive.mutateAsync({
-      supplier: values.supplier,
-      supplierId: supplierId || null,
-      receiptDate: values.receiptDate,
+    if (lines.some((line) => line.quantity > line.item.stockQuantity)) {
+      throw new Error('Недостаточно остатка по одной или нескольким позициям')
+    }
+    await create.mutateAsync({
+      writeOffDate: values.writeOffDate,
+      reason: values.reason,
       notes: values.notes,
       lines: lines.map((line) => ({
         itemId: line.item.id,
         quantity: line.quantity,
-        purchasePrice: line.purchasePrice,
       })),
     })
-    toast.success('Приход проведён')
+    toast.success('Списание проведено')
   }
 
-  async function onSubmit(values: ReceiveFormValues) {
+  async function onSubmit(values: WriteOffFormValues) {
     try {
       await persist(values)
       onOpenChange(false)
@@ -178,9 +161,9 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
           className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,56rem)]"
         >
           <SheetHeader className="shrink-0 border-b px-4 py-3 pr-14">
-            <SheetTitle>Новый приход</SheetTitle>
+            <SheetTitle>Новое списание</SheetTitle>
             <SheetDescription>
-              Документ и строки. Проведение создаёт партии и журнал одной транзакцией.
+              Списание уменьшает остаток по FIFO: сначала самые ранние партии.
             </SheetDescription>
           </SheetHeader>
           <Form {...form}>
@@ -190,66 +173,30 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
               noValidate
             >
               <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4">
-                <SectionCard
-                  title="Документ"
-                  description="Поставщик, дата и комментарий."
-                >
+                <SectionCard title="Документ" description="Дата и причина списания.">
                   <div className="space-y-3">
-                    <div className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_10.5rem]">
+                    <div className="grid items-start gap-3 sm:grid-cols-[10.5rem_minmax(0,1fr)]">
                       <FormField
                         control={form.control}
-                        name="supplier"
+                        name="writeOffDate"
                         render={({ field }) => (
-                          <FormItem className="min-w-0">
-                            <div className="flex h-5 items-center justify-between gap-2">
-                              <FormLabel className="mb-0">Поставщик</FormLabel>
-                              {supplierId && !lockedSupplier ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-5 px-1.5 text-xs text-muted-foreground hover:text-foreground"
-                                  onClick={() => {
-                                    setSupplierId('')
-                                    field.onChange('')
-                                  }}
-                                >
-                                  Сменить
-                                </Button>
-                              ) : null}
-                            </div>
-                            {lockedSupplier ? (
-                              <div className="flex h-9 items-center rounded-md border bg-muted/30 px-3 text-sm font-medium">
-                                <span className="truncate">{field.value}</span>
-                              </div>
-                            ) : (
-                              <CustomerPicker
-                                compact
-                                hideChangeButton
-                                value={supplierId}
-                                searchLabel="Поиск поставщика"
-                                placeholder="Название, ИНН или телефон"
-                                emptyMessage="Контакты не найдены"
-                                createTitle="Новый контакт"
-                                createDescription="Поставщик сохранится в справочнике контактов."
-                                onChange={(customer) => {
-                                  setSupplierId(customer?.id ?? '')
-                                  field.onChange(customer?.name ?? '')
-                                }}
-                              />
-                            )}
+                          <FormItem>
+                            <FormLabel className="mb-0 flex h-5 items-center">Дата</FormLabel>
+                            <FormControl>
+                              <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
+                            </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
                       <FormField
                         control={form.control}
-                        name="receiptDate"
+                        name="reason"
                         render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="mb-0 flex h-5 items-center">Дата</FormLabel>
+                          <FormItem className="min-w-0">
+                            <FormLabel className="mb-0 flex h-5 items-center">Причина</FormLabel>
                             <FormControl>
-                              <DatePicker value={field.value} onChange={field.onChange} onBlur={field.onBlur} />
+                              <Input {...field} placeholder="Брак, порча, использование…" autoComplete="off" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -265,7 +212,6 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                           <FormControl>
                             <Textarea
                               {...field}
-                              rows={1}
                               placeholder="Необязательно"
                               className="field-sizing-content min-h-9 max-h-28 resize-none overflow-y-auto py-1.5 leading-5"
                             />
@@ -291,14 +237,23 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                       <Label className="text-[11px] font-medium text-muted-foreground">Товар</Label>
                       <ItemSearchField
                         onSelect={(item) => addLine(item)}
-                        allowCreate
                         searchPlaceholder="Наименование, штрихкод, код, артикул"
-                        onCreateRequest={(query) => {
-                          setCreateQuery(query)
-                          setCreateItemOpen(true)
-                        }}
                       />
                     </div>
+
+                    {insufficient.length > 0 ? (
+                      <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                        Недостаточно остатка:{' '}
+                        {insufficient
+                          .map(
+                            (line) =>
+                              `${line.item.name} (нужно ${formatQuantity(line.quantity)}, доступно ${formatQuantity(line.item.stockQuantity)})`,
+                          )
+                          .join('; ')}
+                        .
+                      </p>
+                    ) : null}
+
                     {lines.length === 0 ? (
                       <EmptyState
                         title="Позиций нет"
@@ -345,10 +300,10 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                           </TableHeader>
                           <TableBody>
                             {lines.map((line) => (
-                              <ReceiptDraftRow
+                              <WriteOffDraftRow
                                 key={line.key}
                                 line={line}
-                                onChange={(patch) => updateLine(line.key, patch)}
+                                onChange={(quantity) => updateLine(line.key, quantity)}
                                 onRemove={() =>
                                   setLines((current) => current.filter((item) => item.key !== line.key))
                                 }
@@ -380,8 +335,12 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                       Отмена
                     </Button>
                   </SheetClose>
-                  <Button type="submit" disabled={receive.isPending || lines.length === 0} className="flex-1 sm:flex-none">
-                    {receive.isPending ? 'Проведение…' : 'Провести приход'}
+                  <Button
+                    type="submit"
+                    disabled={create.isPending || lines.length === 0 || insufficient.length > 0}
+                    className="flex-1 sm:flex-none"
+                  >
+                    {create.isPending ? 'Проведение…' : 'Провести списание'}
                   </Button>
                 </div>
               </SheetFooter>
@@ -389,6 +348,7 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
           </Form>
         </SheetContent>
       </Sheet>
+
       <InventoryItemSheet
         itemId={openedItemId}
         open={Boolean(openedItemId)}
@@ -398,32 +358,28 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
           }
         }}
       />
-      <CreateItemDialog
-        open={createItemOpen}
-        onOpenChange={setCreateItemOpen}
-        initialQuery={createQuery}
-        onCreated={(item) => addLine(item)}
-      />
     </>
   )
 }
 
-function ReceiptDraftRow({
+function WriteOffDraftRow({
   line,
   onChange,
   onRemove,
   onOpenItem,
 }: {
   line: DraftLine
-  onChange: (patch: Partial<Pick<DraftLine, 'quantity' | 'purchasePrice'>>) => void
+  onChange: (quantity: number) => void
   onRemove: () => void
   onOpenItem: (itemId: string) => void
 }) {
-  const amount = line.quantity * line.purchasePrice
-  const meta = [line.item.code, line.item.article].filter(Boolean).join(' ')
+  const amount = line.quantity * line.item.purchasePrice
   const unit = line.item.unitName || 'шт'
-  const subtitle = [meta, `ост. ${formatQuantity(line.item.stockQuantity)} ${unit}`].filter(Boolean).join(' ')
-  const [priceEditKey, setPriceEditKey] = useState(0)
+  const meta = [line.item.code, line.item.article].filter(Boolean).join(' ')
+  const short = line.quantity > line.item.stockQuantity
+  const subtitle = [meta, `ост. ${formatQuantity(line.item.stockQuantity)} ${unit}`]
+    .filter(Boolean)
+    .join(' ')
 
   function commitQuantity(raw: string) {
     const parsed = Number(raw)
@@ -434,26 +390,7 @@ function ReceiptDraftRow({
       toast.error('Количество должно быть больше нуля')
       return
     }
-    onChange({ quantity: parsed })
-  }
-
-  function commitPrice(raw: string) {
-    const parsed = parseMoney(raw)
-    if (parsed == null) {
-      toast.error('Некорректная цена')
-      setPriceEditKey((key) => key + 1)
-      return
-    }
-    if (parsed < 0) {
-      toast.error('Цена не может быть отрицательной')
-      setPriceEditKey((key) => key + 1)
-      return
-    }
-    if (parsed === line.purchasePrice) {
-      setPriceEditKey((key) => key + 1)
-      return
-    }
-    onChange({ purchasePrice: parsed })
+    onChange(parsed)
   }
 
   return (
@@ -471,34 +408,19 @@ function ReceiptDraftRow({
             {line.item.name}
           </span>
           {subtitle ? (
-            <span className="w-full truncate text-[11px] text-muted-foreground">{subtitle}</span>
+            <span
+              className={cn(
+                'w-full truncate text-[11px]',
+                short ? 'font-medium text-destructive' : 'text-muted-foreground',
+              )}
+            >
+              {subtitle}
+            </span>
           ) : null}
         </button>
       </TableCell>
-      <TableCell className={cn(cellPad, 'text-right')}>
-        <Input
-          key={`${line.key}-price-${line.purchasePrice}-${priceEditKey}`}
-          type="text"
-          inputMode="decimal"
-          aria-label="Цена"
-          className={cn(
-            spinless,
-            'ml-auto h-7 w-[4.75rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
-            'hover:border-border hover:bg-background',
-            'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
-          )}
-          defaultValue={formatMoney(line.purchasePrice)}
-          onFocus={(event) => {
-            event.target.value = String(line.purchasePrice)
-            event.target.select()
-          }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.currentTarget.blur()
-            }
-          }}
-          onBlur={(event) => commitPrice(event.target.value)}
-        />
+      <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>
+        {formatMoney(line.item.purchasePrice)}
       </TableCell>
       <TableCell className={cn(cellPad, 'text-right')}>
         <div className="inline-flex w-full items-center justify-end gap-1">
@@ -513,6 +435,7 @@ function ReceiptDraftRow({
               'h-7 w-[2.75rem] shrink-0 border-transparent bg-transparent px-0.5 text-right text-sm shadow-none tabular-nums',
               'hover:border-border hover:bg-background',
               'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
+              short && 'text-destructive',
             )}
             defaultValue={line.quantity}
             onFocus={(event) => event.target.select()}

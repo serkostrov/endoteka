@@ -14,6 +14,7 @@ export const InventoryMovementType = {
   Sale: 'sale',
   InventoryAdjustment: 'inventory_adjustment',
   ShortageCover: 'shortage_cover',
+  WriteOff: 'write_off',
 } as const
 
 export type InventoryMovementType = (typeof InventoryMovementType)[keyof typeof InventoryMovementType]
@@ -25,6 +26,7 @@ export const inventoryMovementTypeLabels: Record<InventoryMovementType, string> 
   sale: 'Продан',
   inventory_adjustment: 'Инвентаризация',
   shortage_cover: 'Покрытие недостачи',
+  write_off: 'Списание',
 }
 
 export function isInventoryMovementType(value: string): value is InventoryMovementType {

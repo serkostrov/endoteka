@@ -23,11 +23,11 @@ export function deviceTitle(device: {
     .filter((value): value is string => Boolean(value))
 
   if (parts.length > 0) {
-    return parts.join(' · ')
+    return parts.join(' ')
   }
 
   const fallback = device.label?.trim() || device.deviceLabel?.trim()
-  return fallback || 'Прибор'
+  return (fallback || 'Прибор').replace(/\s*·\s*/g, ' ').replace(/\s+/g, ' ').trim() || 'Прибор'
 }
 
 export function deviceSerialLine(serialNumber: string) {

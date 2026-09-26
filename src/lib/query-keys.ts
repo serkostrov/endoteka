@@ -75,6 +75,9 @@ export const queryKeys = {
     receipts: (filters: { page: number; pageSize: number }) =>
       ['inventory', 'receipts', filters] as const,
     receipt: (id: string) => ['inventory', 'receipt', id] as const,
+    writeOffs: (filters: { page: number; pageSize: number }) =>
+      ['inventory', 'write-offs', filters] as const,
+    writeOff: (id: string) => ['inventory', 'write-off', id] as const,
     adjustments: (filters: { page: number; pageSize: number }) =>
       ['inventory', 'adjustments', filters] as const,
     counts: (filters: { status: string; page: number; pageSize: number }) =>

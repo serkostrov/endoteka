@@ -43,7 +43,7 @@ export function SalePrintDocument({ document }: { document: SaleDocument }) {
         getRowId={(row) => row.id}
         emptyTitle="Позиций нет"
         columns={[
-          { id: 'item', header: 'Позиция', cell: (row) => `${row.itemName}${row.itemArticle ? ` · ${row.itemArticle}` : ''}` },
+          { id: 'item', header: 'Позиция', cell: (row) => `${row.itemName}${row.itemArticle ? ` ${row.itemArticle}` : ''}` },
           { id: 'qty', header: 'Кол-во', cell: (row) => `${formatQuantity(row.quantity)} ${row.unitName}` },
           { id: 'price', header: 'Цена', cell: (row) => formatMoney(row.unitPrice) },
           { id: 'amount', header: 'Сумма', cell: (row) => formatMoney(row.amount) },
@@ -60,8 +60,8 @@ export function SalePrintDocument({ document }: { document: SaleDocument }) {
               line.allocations.map((allocation) => (
                 <li key={allocation.id}>
                   {line.itemName}: {formatQuantity(allocation.quantity)} {line.unitName}
-                  {allocation.receiptDate ? ` · партия ${formatDate(allocation.receiptDate)}` : ''}
-                  {allocation.supplier ? ` · ${allocation.supplier}` : ''}
+                  {allocation.receiptDate ? ` партия ${formatDate(allocation.receiptDate)}` : ''}
+                  {allocation.supplier ? ` ${allocation.supplier}` : ''}
                 </li>
               )),
             )}

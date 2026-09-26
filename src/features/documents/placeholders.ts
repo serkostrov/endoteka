@@ -300,7 +300,7 @@ export const SAMPLE_PLACEHOLDER_VALUES: Record<string, string> = {
   'device.model': 'GIF-H190',
   'device.brand': 'Olympus',
   'device.group': 'Гастроскоп',
-  'device.label': 'Гастроскоп · Olympus · GIF-H190',
+  'device.label': 'Гастроскоп Olympus GIF-H190',
   'sale.invoiceNumber': 'СЧ-000001',
   'sale.date': '2026-08-25',
   'sale.total': '15000.00',

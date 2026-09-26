@@ -272,7 +272,7 @@ function OrderPartCard({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const remove = useRemoveOrderPartLine(orderId)
   const amount = line.quantity * line.unitPrice
-  const meta = [line.itemCode, line.itemArticle].filter(Boolean).join(' · ')
+  const meta = [line.itemCode, line.itemArticle].filter(Boolean).join(' ')
   const unit = line.unitName || 'шт'
   const latestReceipt = line.batches.reduce<(typeof line.batches)[number] | null>((latest, batch) => {
     if (!latest || batch.receiptDate > latest.receiptDate) {
@@ -283,7 +283,7 @@ function OrderPartCard({
   const latestReceiptText = latestReceipt
     ? [formatDate(latestReceipt.receiptDate), latestReceipt.supplier, `${formatQuantity(latestReceipt.quantity)} ${unit}`]
         .filter(Boolean)
-        .join(' · ')
+        .join(' ')
     : ''
 
   return (

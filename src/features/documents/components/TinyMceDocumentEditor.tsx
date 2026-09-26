@@ -20,10 +20,13 @@ import 'tinymce/skins/content/default/content.js'
 
 import { DOCUMENT_CONTENT_STYLE } from '../document-content-style'
 import { DEFAULT_DOCUMENT_DATE_FORMAT, documentDateFormats } from '../date-formats'
+import { resolvePlaceholderValue } from '../interpolate'
 import {
   groupPlaceholders,
   mergePlaceholderCatalog,
   placeholdersForContext,
+  SAMPLE_PLACEHOLDER_VALUES,
+  placeholderRegistry,
   type PlaceholderDefinition,
 } from '../placeholders'
 
@@ -86,8 +89,15 @@ function createInit(getSettingsFields: () => PlaceholderDefinition[]): Record<st
     automatic_uploads: false,
     table_default_styles: { width: '100%', 'border-collapse': 'collapse' },
     table_default_attributes: { border: '1' },
-    extended_valid_elements: 'span[class|contenteditable|data-code|data-field|data-date-format|style]',
-    setup: (editor: TinyMCEEditor) => registerExtras(editor, getSettingsFields),
+    format_noneditable_selector: 'span.doc-field',
+    extended_valid_elements:
+      'span[class|contenteditable|data-code|data-field|data-date-format|data-mce-cef-wrappable|style]',
+    setup: (editor: TinyMCEEditor) => {
+      registerExtras(editor, getSettingsFields)
+      const refreshPreviews = () => hydrateFieldPreviews(editor, getSettingsFields())
+      editor.on('SetContent', refreshPreviews)
+      editor.on('init', refreshPreviews)
+    },
   }
 }
 
@@ -105,7 +115,7 @@ function registerExtras(editor: TinyMCEEditor, getSettingsFields: () => Placehol
           text: group.name,
           enabled: false,
         },
-        ...group.items.map((item) => insertFieldItem(editor, item)),
+        ...group.items.map((item) => insertFieldItem(editor, item, getSettingsFields)),
       ])
       callback(items.filter((item, index) => !(item.type === 'separator' && index === 0)))
     },
@@ -119,12 +129,12 @@ function registerExtras(editor: TinyMCEEditor, getSettingsFields: () => Placehol
         { type: 'menuitem', text: 'Запчасть заказа', enabled: false },
         ...placeholdersForContext('parts')
           .filter((item) => item.scope === 'row')
-          .map((item) => insertFieldItem(editor, item)),
+          .map((item) => insertFieldItem(editor, item, getSettingsFields)),
         { type: 'separator' },
         { type: 'menuitem', text: 'Строка накладной', enabled: false },
         ...placeholdersForContext('lines')
           .filter((item) => item.scope === 'row')
-          .map((item) => insertFieldItem(editor, item)),
+          .map((item) => insertFieldItem(editor, item, getSettingsFields)),
       ])
     },
   })
@@ -157,29 +167,43 @@ function registerExtras(editor: TinyMCEEditor, getSettingsFields: () => Placehol
   })
 }
 
-function insertFieldItem(editor: TinyMCEEditor, item: PlaceholderDefinition) {
+function insertFieldItem(
+  editor: TinyMCEEditor,
+  item: PlaceholderDefinition,
+  getSettingsFields: () => PlaceholderDefinition[],
+) {
   return {
     type: 'menuitem' as const,
     text: item.label,
     onAction: () => {
       if (item.isDate) {
-        openDateFormatDialog(editor, item.key, item.label)
+        openDateFormatDialog(editor, item.key, item.label, getSettingsFields)
         return
       }
-      insertFieldToken(editor, item.key)
+      insertFieldToken(editor, item.key, undefined, getSettingsFields)
     },
   }
 }
 
-function insertFieldToken(editor: TinyMCEEditor, key: string, dateFormat?: string) {
-  const token = dateFormat ? `{{${key}|${dateFormat}}}` : `{{${key}}}`
+function insertFieldToken(
+  editor: TinyMCEEditor,
+  key: string,
+  dateFormat?: string,
+  getSettingsFields?: () => PlaceholderDefinition[],
+) {
   const formatAttr = dateFormat ? ` data-date-format="${escapeAttr(dateFormat)}"` : ''
+  const preview = escapeHtml(fieldPreviewText(key, dateFormat, getSettingsFields?.() ?? []))
   editor.insertContent(
-    `<span class="doc-field" data-field="${escapeAttr(key)}"${formatAttr} contenteditable="false">${token}</span>&nbsp;`,
+    `<span class="doc-field" data-field="${escapeAttr(key)}"${formatAttr} data-mce-cef-wrappable="true" contenteditable="false">${preview}</span>&nbsp;`,
   )
 }
 
-function openDateFormatDialog(editor: TinyMCEEditor, key: string, label: string) {
+function openDateFormatDialog(
+  editor: TinyMCEEditor,
+  key: string,
+  label: string,
+  getSettingsFields: () => PlaceholderDefinition[],
+) {
   editor.windowManager.open({
     title: `Формат даты — ${label}`,
     body: {
@@ -202,10 +226,55 @@ function openDateFormatDialog(editor: TinyMCEEditor, key: string, label: string)
     onSubmit: (api) => {
       const data = api.getData() as { format?: string }
       const format = data.format?.trim() || DEFAULT_DOCUMENT_DATE_FORMAT
-      insertFieldToken(editor, key, format)
+      insertFieldToken(editor, key, format, getSettingsFields)
       api.close()
     },
   })
+}
+
+function hydrateFieldPreviews(editor: TinyMCEEditor, settingsFields: PlaceholderDefinition[]) {
+  const body = editor.getBody()
+  if (!body) {
+    return
+  }
+  for (const el of body.querySelectorAll<HTMLElement>('.doc-field')) {
+    let key = el.getAttribute('data-field')?.trim() ?? ''
+    let dateFormat = el.getAttribute('data-date-format')?.trim() || undefined
+    const text = el.textContent?.trim() ?? ''
+    if (!key) {
+      const match = text.match(/^\{\{\s*([a-zA-Z][a-zA-Z0-9_.]*)(?:\|([^}]+))?\s*\}\}$/)
+      if (match?.[1]) {
+        key = match[1]
+        dateFormat = match[2]?.trim() || dateFormat
+        el.setAttribute('data-field', key)
+        if (dateFormat) {
+          el.setAttribute('data-date-format', dateFormat)
+        }
+      }
+    }
+    if (!key) {
+      continue
+    }
+    el.setAttribute('contenteditable', 'false')
+    el.setAttribute('data-mce-cef-wrappable', 'true')
+    if (!text || /^\{\{/.test(text)) {
+      el.textContent = fieldPreviewText(key, dateFormat, settingsFields)
+    }
+  }
+}
+
+function fieldPreviewText(
+  key: string,
+  dateFormat: string | undefined,
+  settingsFields: PlaceholderDefinition[],
+) {
+  const raw = SAMPLE_PLACEHOLDER_VALUES[key]
+  if (raw != null && raw !== '') {
+    return resolvePlaceholderValue(key, raw, dateFormat)
+  }
+  const fromRegistry = key in placeholderRegistry ? placeholderRegistry[key as keyof typeof placeholderRegistry] : null
+  const fromSettings = settingsFields.find((item) => item.key === key)
+  return fromSettings?.label || fromRegistry?.label || key
 }
 
 function openUrlDialog(
@@ -237,4 +306,11 @@ function openUrlDialog(
 
 function escapeAttr(value: string) {
   return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;')
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
 }

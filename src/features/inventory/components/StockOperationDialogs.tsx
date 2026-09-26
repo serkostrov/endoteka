@@ -78,7 +78,7 @@ export function AdjustStockDialog({ open, onOpenChange, item = null }: AdjustDia
           <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
             {item ? (
               <p className="text-sm">
-                {item.name} · остаток {formatQuantity(item.stockQuantity)} {item.unitName}
+                {item.name} остаток {formatQuantity(item.stockQuantity)} {item.unitName}
               </p>
             ) : (
               <ItemSearchField selected={picked} onSelect={setPicked} onClear={() => setPicked(null)} />

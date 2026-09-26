@@ -339,7 +339,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                                   {group.items.map((item) => {
                                     const id = `product:${item.id}`
                                     const index = flatSuggestions.findIndex((row) => row.id === id)
-                                    const meta = [item.code, item.article].filter(Boolean).join(' · ')
+                                    const meta = [item.code, item.article].filter(Boolean).join(' ')
                                     const stock = `ост. ${formatQuantity(item.stockQuantity)} ${item.unitName || 'шт'}`
                                     return (
                                       <SuggestRow
@@ -347,7 +347,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                                         active={index === activeIndex}
                                         indent={2}
                                         title={item.name}
-                                        subtitle={[meta, stock].filter(Boolean).join(' · ')}
+                                        subtitle={[meta, stock].filter(Boolean).join(' ')}
                                         coverUrl={item.coverUrl}
                                         price={item.repairPrice}
                                         disabled={busy}

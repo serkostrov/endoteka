@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Package,
+  PackageMinus,
   PackagePlus,
   ScanLine,
   Settings,
@@ -78,6 +79,13 @@ export const navGroups: NavGroup[] = [
         icon: PackagePlus,
         permission: Permission.InventoryReceive,
         description: 'Поступления на склад',
+      },
+      {
+        label: 'Списания',
+        to: routes.inventoryWriteOffs,
+        icon: PackageMinus,
+        permission: Permission.InventoryWriteOff,
+        description: 'Списание со склада',
       },
       {
         label: 'Инвентаризация',

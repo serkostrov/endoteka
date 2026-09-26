@@ -104,8 +104,8 @@ function OrderSourcePicker({
               <span className="font-medium">{order.number}</span>
               <span className="text-xs text-muted-foreground">
                 {order.customerName}
-                {order.deviceLabel ? ` · ${order.deviceLabel}` : ''}
-                {order.serialNumber ? ` · ${deviceSerialLine(order.serialNumber)}` : ''}
+                {order.deviceLabel ? ` ${order.deviceLabel}` : ''}
+                {order.serialNumber ? ` ${deviceSerialLine(order.serialNumber)}` : ''}
               </span>
             </button>
           </li>

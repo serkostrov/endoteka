@@ -1,13 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useRef, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Briefcase, Printer, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Printer, Trash2 } from 'lucide-react'
 
 import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { DataTable, type DataTableColumn } from '@/components/shared/DataTable'
 import { DatePicker } from '@/components/shared/DatePicker'
-import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
@@ -26,6 +25,14 @@ import {
   SheetTitle,
   useSheetExitPresence,
 } from '@/components/ui/sheet'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { CustomerPicker } from '@/features/customers'
 import { SaleDocumentsTab } from '@/features/documents'
 import { ItemSearchField } from '@/features/inventory/components/ItemSearchField'
@@ -39,7 +46,6 @@ import { formatDate } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 import type { InventoryItem } from '@/features/inventory/services/inventory-service'
 
-import { SaleLinesBulkActions } from './SaleLinesBulkActions'
 import { SalePrintDocument } from './SalePrintDocument'
 import {
   useAddSaleLine,
@@ -52,6 +58,10 @@ import {
   useUpdateSale,
 } from '../hooks/use-sales'
 import type { SaleAllocation, SaleDocument, SaleFifoPreviewLine, SaleLine } from '../services/sales-service'
+
+const cellPad = 'px-2 py-1.5'
+const spinless =
+  '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
 export function SaleDetailSheet({
   saleId,
@@ -97,7 +107,7 @@ function SaleDetailSheetContent({ saleId, onClose }: { saleId: string; onClose: 
   return (
     <SheetContent
       side="right"
-      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,40rem)]"
+      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,56rem)]"
       actions={
         document ? (
           <SheetEntityToolbar onDelete={canRemove ? () => setDeleteOpen(true) : undefined} />
@@ -142,7 +152,6 @@ function SaleDocumentBody({
   hideChromeDelete?: boolean
 }) {
   const navigate = useNavigate()
-  const openSheet = useOpenEntitySheet()
   const canCreate = useHasPermission(Permission.SalesCreate)
   const canUpdate = useHasPermission(Permission.SalesUpdate)
   const canDelete = useHasPermission(Permission.SalesDelete)
@@ -153,16 +162,6 @@ function SaleDocumentBody({
   const remove = useDeleteSale()
   const update = useUpdateSale(document.id)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const lineIdsKey = document.lines.map((line) => line.id).join('|')
-
-  useEffect(() => {
-    const visible = new Set(lineIdsKey ? lineIdsKey.split('|') : [])
-    setSelectedIds((current) => {
-      const next = current.filter((id) => visible.has(id))
-      return next.length === current.length ? current : next
-    })
-  }, [lineIdsKey])
 
   const insufficient = document.lines.filter((line) => line.quantity > line.stockQuantity || !line.fifoPreview.enough)
   const canConfirm =
@@ -255,7 +254,7 @@ function SaleDocumentBody({
           <StatusBadge tone={saleStatusTone(document.status)}>{saleStatusLabels[document.status]}</StatusBadge>
           <span className="text-sm text-muted-foreground">
             {document.createdByName ? `Оформил ${document.createdByName}` : 'Оформил —'}
-            {document.confirmedAt ? ` · подтверждена ${formatDate(document.confirmedAt)}` : ''}
+            {document.confirmedAt ? ` подтверждена ${formatDate(document.confirmedAt)}` : ''}
           </span>
         </div>
 
@@ -277,8 +276,8 @@ function SaleDocumentBody({
               ) : (
                 <p className="text-sm">
                   {document.customerName || '—'}
-                  {document.customerInn ? ` · ИНН ${document.customerInn}` : ''}
-                  {document.customerPhone ? ` · ${document.customerPhone}` : ''}
+                  {document.customerInn ? ` ИНН ${document.customerInn}` : ''}
+                  {document.customerPhone ? ` ${document.customerPhone}` : ''}
                 </p>
               )}
             </div>
@@ -338,35 +337,9 @@ function SaleDocumentBody({
           title="Позиции"
           actions={<p className="text-sm font-medium">Итого {formatMoney(document.total)}</p>}
         >
-          <div className="space-y-3">
+          <div className="space-y-4">
             {editable ? <AddSaleLineForm saleId={document.id} /> : null}
-            {!document.customerId && editable ? (
-              <p className="text-sm text-muted-foreground">Укажите покупателя, чтобы подтвердить продажу.</p>
-            ) : null}
-            {selectedIds.length > 0 ? (
-              <SaleLinesBulkActions
-                saleId={document.id}
-                selectedIds={selectedIds}
-                lines={document.lines}
-                editable={editable}
-                onClear={() => setSelectedIds([])}
-              />
-            ) : null}
-            <DataTable
-              caption="Строки счёта"
-              data={document.lines}
-              getRowId={(row) => row.id}
-              emptyTitle="Позиций нет"
-              emptyDescription="Найдите товар выше и добавьте в счёт."
-              dense
-              framed
-              selection={{
-                selectedIds,
-                onSelectedIdsChange: setSelectedIds,
-              }}
-              onRowClick={(row) => openSheet('item', row.itemId)}
-              columns={saleLineColumns(document, editable)}
-            />
+            <SaleLinesTable document={document} editable={editable} />
           </div>
         </SectionCard>
 
@@ -392,194 +365,238 @@ function SaleDocumentBody({
   )
 }
 
-function saleLineColumns(document: SaleDocument, editable: boolean): DataTableColumn<SaleLine>[] {
-  const columns: DataTableColumn<SaleLine>[] = [
-    {
-      id: 'item',
-      header: 'Позиция',
-      className: 'min-w-[12rem]',
-      cell: (row) => (
-        <div className="min-w-0" onClick={(event) => event.stopPropagation()}>
-          <EntitySheetLink kind="item" id={row.itemId} className="font-medium">
-            {row.itemName}
-          </EntitySheetLink>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {row.itemCode}
-            {row.itemArticle ? ` · ${row.itemArticle}` : ''}
-          </p>
-        </div>
-      ),
-    },
-    {
-      id: 'qty',
-      header: 'Кол-во',
-      className: 'w-[1%]',
-      cell: (row) =>
-        editable ? (
-          <div onClick={(event) => event.stopPropagation()}>
-            <LineNumberInput line={row} field="quantity" saleId={document.id} />
-          </div>
-        ) : (
-          <span className="tabular-nums">
-            {formatQuantity(row.quantity)} {row.unitName}
-          </span>
-        ),
-    },
-    {
-      id: 'price',
-      header: 'Цена',
-      className: 'w-[1%]',
-      cell: (row) =>
-        editable ? (
-          <div onClick={(event) => event.stopPropagation()}>
-            <LineNumberInput line={row} field="unitPrice" saleId={document.id} />
-          </div>
-        ) : (
-          <span className="tabular-nums">{formatMoney(row.unitPrice)}</span>
-        ),
-    },
-    {
-      id: 'amount',
-      header: 'Сумма',
-      className: 'w-[1%] tabular-nums',
-      cell: (row) => formatMoney(row.amount),
-    },
-    {
-      id: 'stock',
-      header: 'Ост',
-      className: 'w-[1%]',
-      cell: (row) => (
-        <span
-          className={cn(
-            'tabular-nums',
-            row.quantity > row.stockQuantity ? 'font-medium text-destructive' : undefined,
-          )}
-        >
-          {formatQuantity(row.stockQuantity)}
-        </span>
-      ),
-    },
-    {
-      id: 'fifo',
-      header: 'Партии',
-      className: 'hidden min-w-[8rem] lg:table-cell',
-      cell: (row) => <FifoCell line={row} confirmed={document.status === SaleStatus.Confirmed} />,
-    },
-  ]
+function SaleLinesTable({ document, editable }: { document: SaleDocument; editable: boolean }) {
+  const openSheet = useOpenEntitySheet()
 
-  if (editable) {
-    columns.push({
-      id: 'remove',
-      header: '',
-      className: 'w-[1%]',
-      cell: (row) => (
-        <div
-          className="flex justify-end"
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <RemoveLineButton saleId={document.id} lineId={row.id} />
-        </div>
-      ),
-    })
-  }
-
-  return columns
-}
-
-function AddSaleLineForm({ saleId }: { saleId: string }) {
-  const add = useAddSaleLine(saleId)
-  const [picked, setPicked] = useState<InventoryItem | null>(null)
-  const [quantity, setQuantity] = useState(1)
-  const [unitPrice, setUnitPrice] = useState(0)
-  const exceedsStock = Boolean(picked && quantity > picked.stockQuantity)
-
-  async function submit() {
-    if (!picked) {
-      toast.error('Выберите позицию')
-      return
-    }
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      toast.error('Количество должно быть больше нуля')
-      return
-    }
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      toast.error('Цена не может быть отрицательной')
-      return
-    }
-    try {
-      await add.mutateAsync({ itemId: picked.id, quantity, unitPrice })
-      toast.success('Позиция добавлена')
-      setPicked(null)
-      setQuantity(1)
-      setUnitPrice(0)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
+  if (document.lines.length === 0) {
+    return (
+      <EmptyState
+        title="Позиций нет"
+        description="Найдите товар выше — он сразу попадёт в счёт."
+        className="border-0 bg-transparent py-8"
+      />
+    )
   }
 
   return (
-    <div className="space-y-2">
-      <ItemSearchField
-        selected={picked}
-        onSelect={(item) => {
-          setPicked(item)
-          setQuantity(1)
-          setUnitPrice(item.retailPrice)
-        }}
-        onClear={() => {
-          setPicked(null)
-          setUnitPrice(0)
-        }}
-      />
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="sale-add-qty">Кол-во</Label>
-          <Input
-            id="sale-add-qty"
-            type="number"
-            min={0.001}
-            step="0.001"
-            value={Number.isFinite(quantity) ? quantity : ''}
-            onChange={(event) => setQuantity(Number(event.target.value))}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="sale-add-price">Цена</Label>
-          <Input
-            id="sale-add-price"
-            type="number"
-            min={0}
-            step="0.01"
-            value={Number.isFinite(unitPrice) ? unitPrice : ''}
-            onChange={(event) => setUnitPrice(Number(event.target.value))}
-          />
-        </div>
-        <Button type="button" disabled={add.isPending || !picked} onClick={() => void submit()}>
-          {add.isPending ? '…' : 'Добавить'}
-        </Button>
-      </div>
-      {picked ? (
-        <p className={cn('text-sm', exceedsStock ? 'text-destructive' : 'text-muted-foreground')}>
-          Остаток {formatQuantity(picked.stockQuantity)} {picked.unitName}
-          {exceedsStock ? '. Такого количества нет на складе.' : ''}
-        </p>
-      ) : null}
+    <div className="overflow-x-auto">
+      <Table className="table-fixed">
+        <colgroup>
+          <col style={{ width: '2rem' }} />
+          <col />
+          <col style={{ width: '5.5rem' }} />
+          <col style={{ width: '5.75rem' }} />
+          <col style={{ width: '5.5rem' }} />
+          <col style={{ width: '2rem' }} />
+        </colgroup>
+        <TableHeader>
+          <TableRow className="border-b hover:bg-transparent">
+            <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+            <TableHead className={cn(cellPad, 'h-8 text-xs font-medium text-muted-foreground')}>
+              Наименование
+            </TableHead>
+            <TableHead className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}>
+              Цена, ₽
+            </TableHead>
+            <TableHead
+              className={cn(cellPad, 'h-8 pr-5 text-right text-xs font-medium text-muted-foreground')}
+            >
+              Кол-во
+            </TableHead>
+            <TableHead className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}>
+              Сумма, ₽
+            </TableHead>
+            <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {document.lines.map((line) => (
+            <SaleLineRow
+              key={line.id}
+              line={line}
+              saleId={document.id}
+              editable={editable}
+              confirmed={document.status === SaleStatus.Confirmed}
+              onOpen={() => openSheet('item', line.itemId)}
+            />
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
 
-function LineNumberInput({
+function SaleLineRow({
   line,
-  field,
   saleId,
+  editable,
+  confirmed,
+  onOpen,
 }: {
   line: SaleLine
-  field: 'quantity' | 'unitPrice'
   saleId: string
+  editable: boolean
+  confirmed: boolean
+  onOpen: () => void
+}) {
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const remove = useRemoveSaleLine(saleId)
+  const short = line.quantity > line.stockQuantity || !line.fifoPreview.enough
+  const meta = [line.itemCode, line.itemArticle].filter(Boolean).join(' ')
+  const stockHint = `ост. ${formatQuantity(line.stockQuantity)} ${line.unitName}`
+  const subtitle = [meta, stockHint].filter(Boolean).join(' ')
+
+  function handleRowClick(event: MouseEvent<HTMLTableRowElement>) {
+    const target = event.target as HTMLElement
+    if (target.closest('input, textarea, button, a, [data-row-ignore-click]')) {
+      return
+    }
+    const selection = window.getSelection()
+    if (selection && !selection.isCollapsed && selection.toString().length > 0) {
+      return
+    }
+    onOpen()
+  }
+
+  return (
+    <TableRow
+      className="group/row cursor-pointer border-b last:border-b-0 hover:bg-muted/20"
+      onClick={handleRowClick}
+    >
+      <TableCell className={cn(cellPad, 'w-8 text-muted-foreground')}>
+        <Briefcase className="size-3.5 opacity-70" aria-hidden />
+        <span className="sr-only">Товар</span>
+      </TableCell>
+      <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal')}>
+        <div className="flex min-w-0 max-w-full items-baseline gap-2">
+          <span className="cursor-text select-text truncate text-sm font-medium text-primary">
+            {line.itemName}
+          </span>
+          {subtitle ? (
+            <span
+              className={cn(
+                'hidden min-w-0 cursor-text select-text truncate text-[11px] sm:inline',
+                short ? 'font-medium text-destructive' : 'text-muted-foreground',
+              )}
+            >
+              {subtitle}
+            </span>
+          ) : null}
+        </div>
+        {subtitle ? (
+          <p
+            className={cn(
+              'mt-0.5 cursor-text select-text truncate text-[11px] sm:hidden',
+              short ? 'font-medium text-destructive' : 'text-muted-foreground',
+            )}
+          >
+            {subtitle}
+          </p>
+        ) : null}
+        <FifoHint line={line} confirmed={confirmed} />
+      </TableCell>
+      <TableCell className={cn(cellPad, 'text-right')} data-row-ignore-click>
+        <SaleInlineNumberField line={line} saleId={saleId} field="unitPrice" disabled={!editable} />
+      </TableCell>
+      <TableCell className={cn(cellPad, 'text-right')} data-row-ignore-click>
+        <SaleInlineNumberField
+          line={line}
+          saleId={saleId}
+          field="quantity"
+          disabled={!editable}
+          suffix={line.unitName}
+        />
+      </TableCell>
+      <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>
+        {formatMoney(line.amount)}
+      </TableCell>
+      <TableCell className={cellPad} data-row-ignore-click>
+        {editable ? (
+          <IconActionButton
+            label="Удалить"
+            variant="ghost"
+            size="icon-xs"
+            className="text-destructive opacity-0 transition-opacity group-hover/row:opacity-100 hover:text-destructive focus-visible:opacity-100"
+            disabled={remove.isPending}
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 />
+          </IconActionButton>
+        ) : null}
+
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить позицию"
+          description={`«${line.itemName}» будет убрана из счёта.`}
+          confirmLabel="Удалить"
+          isPending={remove.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => {
+            remove.mutate(line.id, {
+              onSuccess: () => {
+                setDeleteOpen(false)
+                toast.success('Позиция удалена')
+              },
+              onError: (error) => toast.error(getErrorMessage(error)),
+            })
+          }}
+        />
+      </TableCell>
+    </TableRow>
+  )
+}
+
+function AddSaleLineForm({ saleId }: { saleId: string }) {
+  const add = useAddSaleLine(saleId)
+  const addInFlight = useRef(false)
+
+  async function handleSelect(item: InventoryItem) {
+    if (addInFlight.current) {
+      return
+    }
+    addInFlight.current = true
+    try {
+      await add.mutateAsync({
+        itemId: item.id,
+        quantity: 1,
+        unitPrice: item.retailPrice,
+      })
+      toast.success(`Добавлено: ${item.name}`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      addInFlight.current = false
+    }
+  }
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-[11px] font-medium text-muted-foreground">Товар</Label>
+      <ItemSearchField
+        disabled={add.isPending}
+        onSelect={(item) => void handleSelect(item)}
+        searchPlaceholder="Наименование, штрихкод, код, артикул"
+      />
+    </div>
+  )
+}
+
+function SaleInlineNumberField({
+  line,
+  saleId,
+  field,
+  disabled,
+  suffix,
+}: {
+  line: SaleLine
+  saleId: string
+  field: 'quantity' | 'unitPrice'
+  disabled: boolean
+  suffix?: string
 }) {
   const setLine = useSetSaleLine(saleId)
   const current = field === 'quantity' ? line.quantity : line.unitPrice
+  const isQty = field === 'quantity'
 
   function commit(raw: string) {
     const parsed = Number(raw)
@@ -604,36 +621,75 @@ function LineNumberInput({
     )
   }
 
+  if (isQty) {
+    return (
+      <div className="inline-flex w-full items-center justify-end gap-1">
+        {disabled ? (
+          <span className="min-w-[2.25rem] text-right text-sm tabular-nums text-foreground">
+            {formatQuantity(current)}
+          </span>
+        ) : (
+          <Input
+            key={`${line.id}-${field}-${current}`}
+            type="number"
+            min={0.001}
+            step="0.001"
+            aria-label="Количество"
+            className={cn(
+              spinless,
+              'h-7 w-[2.75rem] shrink-0 border-transparent bg-transparent px-0.5 text-right text-sm shadow-none tabular-nums',
+              'hover:border-border hover:bg-background',
+              'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
+            )}
+            defaultValue={current}
+            disabled={setLine.isPending}
+            onClick={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onFocus={(event) => event.target.select()}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.currentTarget.blur()
+              }
+            }}
+            onBlur={(event) => commit(event.target.value)}
+          />
+        )}
+        <span className="w-8 shrink-0 text-left text-[11px] leading-none text-muted-foreground">
+          {suffix || 'шт'}
+        </span>
+      </div>
+    )
+  }
+
+  if (disabled) {
+    return <span className="block text-right text-sm tabular-nums text-foreground">{formatMoney(current)}</span>
+  }
+
   return (
     <Input
       key={`${line.id}-${field}-${current}`}
       type="number"
-      min={field === 'quantity' ? 0.001 : 0}
-      step={field === 'quantity' ? '0.001' : '0.01'}
-      className="w-24"
+      min={0}
+      step="0.01"
+      aria-label="Цена"
+      className={cn(
+        spinless,
+        'ml-auto h-7 w-[4.75rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
+        'hover:border-border hover:bg-background',
+        'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
+      )}
       defaultValue={current}
-      aria-label={field === 'quantity' ? 'Количество' : 'Цена'}
+      disabled={setLine.isPending}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onFocus={(event) => event.target.select()}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.currentTarget.blur()
+        }
+      }}
       onBlur={(event) => commit(event.target.value)}
     />
-  )
-}
-
-function RemoveLineButton({ saleId, lineId }: { saleId: string; lineId: string }) {
-  const remove = useRemoveSaleLine(saleId)
-
-  return (
-    <IconActionButton
-      label="Удалить"
-      variant="ghost"
-      disabled={remove.isPending}
-      onClick={() => {
-        remove.mutate(lineId, {
-          onError: (error) => toast.error(getErrorMessage(error)),
-        })
-      }}
-    >
-      <Trash2 />
-    </IconActionButton>
   )
 }
 
@@ -644,19 +700,19 @@ function fifoRowKey(row: SaleAllocation | SaleFifoPreviewLine) {
   return `${row.batchId}-${row.receiptDate}-${row.quantity}`
 }
 
-function FifoCell({ line, confirmed }: { line: SaleLine; confirmed: boolean }) {
+function FifoHint({ line, confirmed }: { line: SaleLine; confirmed: boolean }) {
   const rows = confirmed ? line.allocations : line.fifoPreview.lines
   if (rows.length === 0) {
-    return <span className="text-muted-foreground">—</span>
+    return null
   }
 
   return (
-    <ul className="space-y-0.5 text-xs text-muted-foreground">
+    <ul className="mt-0.5 hidden space-y-0.5 text-[11px] text-muted-foreground lg:block">
       {rows.map((row) => (
         <li key={fifoRowKey(row)}>
-          {formatQuantity(row.quantity)}
-          {row.receiptDate ? ` · ${formatDate(row.receiptDate)}` : ''}
-          {row.supplier ? ` · ${row.supplier}` : ''}
+          партия {formatQuantity(row.quantity)}
+          {row.receiptDate ? ` ${formatDate(row.receiptDate)}` : ''}
+          {row.supplier ? ` ${row.supplier}` : ''}
         </li>
       ))}
     </ul>

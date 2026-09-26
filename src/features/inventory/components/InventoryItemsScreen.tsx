@@ -110,7 +110,7 @@ export function InventoryItemsScreen() {
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-medium">{item.name}</span>
                 <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                  {[item.code, item.article].filter(Boolean).join(' · ') || '—'}
+                  {[item.code, item.article].filter(Boolean).join(' ') || '—'}
                 </span>
               </span>
               <span className="hidden w-12 shrink-0 text-muted-foreground sm:block">{item.unitName}</span>

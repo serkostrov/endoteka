@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify'
 import QRCode from 'qrcode'
 
 import { buildCode128Path } from './barcode'
-import { interpolateTemplate } from './interpolate'
+import { interpolateTemplate, isResolvablePlaceholderKey, resolvePlaceholderValue } from './interpolate'
 import type { DocumentContext, TemplateBlock } from './template-schema'
 
 const FIELD_PATTERN =
@@ -214,12 +214,30 @@ function expandRepeatingTable(table: HTMLTableElement, context: DocumentContext)
 }
 
 function interpolateNode(node: Element, values: Record<string, string>) {
+  for (const element of node.querySelectorAll<HTMLElement>('.doc-field[data-field]')) {
+    const key = element.getAttribute('data-field')?.trim() ?? ''
+    if (!key) {
+      continue
+    }
+    const dateFormat = element.getAttribute('data-date-format')?.trim() || undefined
+    if (!(key in values) && !isResolvablePlaceholderKey(key)) {
+      element.textContent = ''
+      continue
+    }
+    const raw = values[key]
+    element.textContent =
+      raw == null || raw === '' ? '' : resolvePlaceholderValue(key, raw, dateFormat)
+  }
+
   const walker = node.ownerDocument.createTreeWalker(node, NodeFilter.SHOW_TEXT)
   const texts: Text[] = []
   while (walker.nextNode()) {
     texts.push(walker.currentNode as Text)
   }
   for (const text of texts) {
+    if (text.parentElement?.closest('.doc-field[data-field]')) {
+      continue
+    }
     text.data = interpolateTemplate(text.data, values)
   }
 
@@ -244,7 +262,7 @@ function blockToHtml(block: TemplateBlock): string {
     return `<p>${inlineHtml(block.text)}</p>`
   }
   if (block.type === 'placeholder') {
-    return `<p><span class="doc-field">{{${block.key}}}</span></p>`
+    return `<p><span class="doc-field" data-field="${escapeAttr(block.key)}">{{${block.key}}}</span></p>`
   }
   if (block.type === 'image') {
     return `<p><img src="${escapeAttr(block.url)}" alt="${escapeAttr(block.alt)}" style="max-height: 12rem;"></p>`
@@ -272,7 +290,7 @@ function blockToHtml(block: TemplateBlock): string {
 function inlineHtml(value: string) {
   return escapeHtml(value).replace(FIELD_PATTERN, (_full, key: string, dateFormat?: string) => {
     const token = dateFormat ? `{{${key}|${dateFormat}}}` : `{{${key}}}`
-    return `<span class="doc-field">${token}</span>`
+    return `<span class="doc-field" data-field="${escapeAttr(key)}">${token}</span>`
   })
 }
 

@@ -254,7 +254,7 @@ function CustomerLookupCard({
   onOpen: () => void
 }) {
   const clickable = !disabled
-  const compactMeta = [customerKindLabel(customer.kind), customer.phone].filter(Boolean).join(' · ')
+  const compactMeta = [customerKindLabel(customer.kind), customer.phone].filter(Boolean).join(' ')
   const ariaLabel = `Открыть карточку ${customer.name}`
 
   function onCardKeyDown(event: KeyboardEvent<HTMLElement>) {
@@ -282,7 +282,7 @@ function CustomerLookupCard({
       >
         <div className="min-w-0 flex-1 truncate text-left text-sm">
           <span className="font-medium">{customer.name}</span>
-          {compactMeta ? <span className="text-muted-foreground"> · {compactMeta}</span> : null}
+          {compactMeta ? <span className="text-muted-foreground"> {compactMeta}</span> : null}
         </div>
       </div>
     )

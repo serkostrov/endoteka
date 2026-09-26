@@ -687,6 +687,47 @@ export async function getInventoryReceipt(id: string): Promise<InventoryReceiptD
 
 export type InventoryReceiptDeleteMode = 'hide' | 'reverse'
 
+export type InventoryWriteOffListItem = {
+  id: string
+  writeOffDate: string
+  reason: string
+  notes: string
+  createdAt: string
+  actorName: string
+  lineCount: number
+  totalQuantity: number
+  totalAmount: number
+}
+
+export type InventoryWriteOffLine = {
+  id: string
+  itemId: string
+  itemName: string
+  itemCode: string
+  itemArticle: string
+  unitName: string
+  quantity: number
+  unitPrice: number
+  amount: number
+}
+
+export type InventoryWriteOffDetail = {
+  id: string
+  writeOffDate: string
+  reason: string
+  notes: string
+  createdAt: string
+  actorName: string
+  lines: InventoryWriteOffLine[]
+}
+
+export type WriteOffLineInput = {
+  itemId: string
+  quantity: number
+}
+
+export type InventoryWriteOffDeleteMode = 'hide' | 'reverse'
+
 export async function deleteInventoryReceipt(
   receiptId: string,
   mode: InventoryReceiptDeleteMode,
@@ -698,6 +739,115 @@ export async function deleteInventoryReceipt(
 
   if (error) {
     throw toAppError(error, 'Не удалось удалить приход.')
+  }
+}
+
+export async function createInventoryWriteOff(input: {
+  writeOffDate: string
+  reason: string
+  notes: string
+  lines: WriteOffLineInput[]
+}): Promise<string> {
+  const { data, error } = await getSupabase().rpc('create_inventory_write_off', {
+    doc_write_off_date: input.writeOffDate,
+    reason_text: input.reason,
+    notes_text: input.notes,
+    lines: input.lines.map((line) => ({
+      item_id: line.itemId,
+      quantity: line.quantity,
+    })),
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось оформить списание.')
+  }
+
+  return data
+}
+
+export async function listInventoryWriteOffs(page: number, pageSize: number) {
+  const { data, error } = await getSupabase().rpc('list_inventory_write_offs', {
+    page_number: page,
+    page_size: pageSize,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить списания.')
+  }
+
+  const rows = data ?? []
+  return {
+    items: rows.map((row) => ({
+      id: row.id,
+      writeOffDate: row.write_off_date,
+      reason: row.reason,
+      notes: row.notes,
+      createdAt: row.created_at,
+      actorName: row.actor_name,
+      lineCount: Number(row.line_count ?? 0),
+      totalQuantity: asNumber(row.total_quantity),
+      totalAmount: asNumber(row.total_amount),
+    })),
+    total: rows[0]?.total_count ?? 0,
+  }
+}
+
+export async function getInventoryWriteOff(id: string): Promise<InventoryWriteOffDetail | null> {
+  const { data, error } = await getSupabase().rpc('get_inventory_write_off', {
+    target_write_off_id: id,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить списание.')
+  }
+
+  const row = asRecord(data)
+  if (!row || typeof row.id !== 'string') {
+    return null
+  }
+
+  return {
+    id: row.id,
+    writeOffDate: asString(row.write_off_date),
+    reason: asString(row.reason),
+    notes: asString(row.notes),
+    createdAt: asString(row.created_at),
+    actorName: asString(row.actor_name),
+    lines: Array.isArray(row.lines)
+      ? row.lines.flatMap((line) => {
+          const item = asRecord(line)
+          if (!item || typeof item.id !== 'string') {
+            return []
+          }
+          return [
+            {
+              id: item.id,
+              itemId: asString(item.item_id),
+              itemName: asString(item.item_name),
+              itemCode: asString(item.item_code),
+              itemArticle: asString(item.item_article),
+              unitName: asString(item.unit_name) || 'шт',
+              quantity: asNumber(item.quantity),
+              unitPrice: asNumber(item.unit_price),
+              amount: asNumber(item.amount),
+            },
+          ]
+        })
+      : [],
+  }
+}
+
+export async function deleteInventoryWriteOff(
+  writeOffId: string,
+  mode: InventoryWriteOffDeleteMode,
+): Promise<void> {
+  const { error } = await getSupabase().rpc('delete_inventory_write_off', {
+    target_write_off_id: writeOffId,
+    delete_mode: mode,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось удалить списание.')
   }
 }
 

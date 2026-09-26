@@ -102,7 +102,7 @@ export function CreateDocumentDialog({
               <SelectContent searchable>
                 {templates.map((template) => (
                   <SelectItem key={template.id} value={template.id}>
-                    {template.name} · {documentKindLabels[template.kind]}
+                    {template.name} {documentKindLabels[template.kind]}
                   </SelectItem>
                 ))}
               </SelectContent>

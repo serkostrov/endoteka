@@ -239,11 +239,11 @@ const DEFAULT_TEMPLATE_HTML = `<p style="text-align: center;"><strong>{{company.
 <hr>
 <p style="text-align: center;"><strong>АКТ ПРИЁМА-ПЕРЕДАЧИ {{order.number}}</strong></p>
 <p>г. {{customer.city}} ________________________________________________________________ {{document.issuedAt}}</p>
-<p>Клиент: <span class="doc-field">{{customer.name}}</span></p>
-<p>Прибор: <span class="doc-field">{{device.label}}</span></p>
-<p>Серийный номер: <span class="doc-field">{{device.serialNumber}}</span></p>
-<p>Сопроводительная записка: <span class="doc-field">{{order.claimedMalfunction}}</span></p>
-<p>Комплектация: <span class="doc-field">{{order.completeness}}</span></p>
+<p>Клиент: <span class="doc-field" data-field="customer.name">{{customer.name}}</span></p>
+<p>Прибор: <span class="doc-field" data-field="device.label">{{device.label}}</span></p>
+<p>Серийный номер: <span class="doc-field" data-field="device.serialNumber">{{device.serialNumber}}</span></p>
+<p>Сопроводительная записка: <span class="doc-field" data-field="order.claimedMalfunction">{{order.claimedMalfunction}}</span></p>
+<p>Комплектация: <span class="doc-field" data-field="order.completeness">{{order.completeness}}</span></p>
 <p>&nbsp;</p>
 <table style="width: 100%; border-collapse: collapse;">
 <tbody>

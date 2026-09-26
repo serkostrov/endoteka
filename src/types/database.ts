@@ -485,6 +485,16 @@ type Row = {
     created_by: string | null
     created_at: string
   }
+  inventory_write_offs: {
+    id: string
+    write_off_date: string
+    reason: string
+    notes: string
+    created_by: string | null
+    created_at: string
+    hidden_at: string | null
+    reversed_at: string | null
+  }
   inventory_sales: {
     id: string
     invoice_number: string
@@ -1118,6 +1128,12 @@ export type Database = {
       }
       inventory_receipts: {
         Row: Row['inventory_receipts']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      inventory_write_offs: {
+        Row: Row['inventory_write_offs']
         Insert: never
         Update: never
         Relationships: []
@@ -1979,6 +1995,38 @@ export type Database = {
       }
       delete_inventory_receipt: {
         Args: { target_receipt_id: string; delete_mode: string }
+        Returns: undefined
+      }
+      create_inventory_write_off: {
+        Args: {
+          doc_write_off_date: string
+          reason_text: string
+          notes_text: string
+          lines: Json
+        }
+        Returns: string
+      }
+      list_inventory_write_offs: {
+        Args: { page_number?: number; page_size?: number }
+        Returns: {
+          id: string
+          write_off_date: string
+          reason: string
+          notes: string
+          created_at: string
+          actor_name: string
+          line_count: number
+          total_quantity: number
+          total_amount: number
+          total_count: number
+        }[]
+      }
+      get_inventory_write_off: {
+        Args: { target_write_off_id: string }
+        Returns: Json
+      }
+      delete_inventory_write_off: {
+        Args: { target_write_off_id: string; delete_mode: string }
         Returns: undefined
       }
       list_inventory_adjustments: {

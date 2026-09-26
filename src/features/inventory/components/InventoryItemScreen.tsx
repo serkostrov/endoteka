@@ -236,7 +236,7 @@ function ItemCardBody({
     item.article ? `Артикул: ${item.article}` : null,
   ]
     .filter(Boolean)
-    .join(' · ')
+    .join(' ')
   const stockEmpty = item.stockQuantity <= 0
   const stockShortage = item.stockQuantity < 0
   const stockLine = stockShortage

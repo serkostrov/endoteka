@@ -67,7 +67,7 @@ export function DevicesScreen() {
     return [device.modelName, device.modificationName]
       .map((value) => value.trim())
       .filter((value) => value && !serial.includes(value.toLocaleLowerCase('ru')))
-      .join(' · ')
+      .join(' ')
   }
 
   function setTab(next: DevicesTab) {

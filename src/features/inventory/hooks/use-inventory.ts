@@ -31,15 +31,19 @@ import {
   deleteInventoryItem,
   deleteInventoryItemPhoto,
   deleteInventoryReceipt,
+  deleteInventoryWriteOff,
   findInventoryItemByName,
   findInventoryItemsByBarcode,
   getInventoryItemCard,
   getInventoryReceipt,
+  getInventoryWriteOff,
   getOrderInventoryUsage,
   listInventoryAdjustments,
   listInventoryItemPhotos,
   listInventoryReceipts,
+  listInventoryWriteOffs,
   receiveInventory,
+  createInventoryWriteOff,
   removeOrderPartLine,
   searchInventoryItems,
   setInventoryItemLabel,
@@ -50,10 +54,12 @@ import {
   uploadInventoryItemPhoto,
   type InventoryItemInput,
   type InventoryReceiptDeleteMode,
+  type InventoryWriteOffDeleteMode,
   type ReceiptLineInput,
+  type WriteOffLineInput,
 } from '../services/inventory-service'
 
-export type { InventoryReceiptDeleteMode }
+export type { InventoryReceiptDeleteMode, InventoryWriteOffDeleteMode }
 
 export function useInventoryStock(search: string, page: number, pageSize: number, stockFilter = 'all') {
   return useQuery({
@@ -124,6 +130,51 @@ export function useDeleteInventoryReceipt() {
       if (mode === 'reverse') {
         await queryClient.invalidateQueries({ queryKey: queryKeys.orders.all })
       }
+    },
+  })
+}
+
+export function useInventoryWriteOffs(page: number, pageSize: number) {
+  return useQuery({
+    queryKey: queryKeys.inventory.writeOffs({ page, pageSize }),
+    queryFn: () => listInventoryWriteOffs(page, pageSize),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useInventoryWriteOff(id: string | undefined) {
+  return useQuery({
+    queryKey: id ? queryKeys.inventory.writeOff(id) : queryKeys.inventory.all,
+    queryFn: () => getInventoryWriteOff(id ?? ''),
+    enabled: Boolean(id),
+  })
+}
+
+export function useCreateInventoryWriteOff() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: {
+      writeOffDate: string
+      reason: string
+      notes: string
+      lines: WriteOffLineInput[]
+    }) => createInventoryWriteOff(input),
+    onSuccess: async () => {
+      await invalidateInventory(queryClient)
+    },
+  })
+}
+
+export function useDeleteInventoryWriteOff() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, mode }: { id: string; mode: InventoryWriteOffDeleteMode }) =>
+      deleteInventoryWriteOff(id, mode),
+    onSuccess: async (_data, { id }) => {
+      queryClient.removeQueries({ queryKey: queryKeys.inventory.writeOff(id) })
+      await invalidateInventory(queryClient)
     },
   })
 }

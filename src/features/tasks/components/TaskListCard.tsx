@@ -93,7 +93,7 @@ export function TaskListCard({ task, onOpen }: TaskListCardProps) {
             >
               <Link2 className="size-3.5" aria-hidden="true" />
               {task.orderNumber}
-              {task.customerName ? ` · ${task.customerName}` : ''}
+              {task.customerName ? ` ${task.customerName}` : ''}
             </EntitySheetLink>
           ) : null}
           <span className="inline-flex items-center gap-1">

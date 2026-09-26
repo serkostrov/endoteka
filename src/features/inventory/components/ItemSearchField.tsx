@@ -158,7 +158,7 @@ export function ItemSearchField({
           <p className="text-xs text-muted-foreground">
             {[selected.code, selected.article, `остаток ${formatQuantity(selected.stockQuantity)} ${selected.unitName}`]
               .filter(Boolean)
-              .join(' · ')}
+              .join(' ')}
           </p>
         </div>
         {onClear ? (
@@ -210,7 +210,7 @@ export function ItemSearchField({
                       >
                         {group.items.map((item) => {
                           const index = flatItems.findIndex((row) => row.id === item.id)
-                          const meta = [item.code, item.article].filter(Boolean).join(' · ')
+                          const meta = [item.code, item.article].filter(Boolean).join(' ')
                           const outOfStock = item.stockQuantity <= 0
                           return (
                             <button

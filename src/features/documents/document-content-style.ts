@@ -18,12 +18,17 @@ export const DOCUMENT_CONTENT_STYLE = `
   td, th { border: 1px dotted #94a3b8; padding: 6px 8px; vertical-align: middle; }
   img { max-width: 100%; height: auto; }
   .doc-field {
-    background: #e8f0fe;
-    color: #1d4ed8;
-    padding: 0 0.35em;
-    border-radius: 4px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.92em;
+    background: color-mix(in srgb, #3b82f6 14%, transparent);
+    border-radius: 2px;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    padding: 0 0.12em;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    font-style: inherit;
+    color: inherit;
+    text-decoration: inherit;
   }
   .doc-qr, .doc-barcode {
     display: inline-flex;
