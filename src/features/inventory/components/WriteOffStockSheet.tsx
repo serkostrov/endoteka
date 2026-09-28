@@ -136,7 +136,7 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
         quantity: line.quantity,
       })),
     })
-    toast.success('Списание проведено')
+    toast.success('Списание проведено, товар убран со склада')
   }
 
   async function onSubmit(values: WriteOffFormValues) {

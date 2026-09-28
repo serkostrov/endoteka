@@ -181,6 +181,10 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
     if (addInFlight.current || !canWriteOff) {
       return
     }
+    if (item.stockQuantity < 1) {
+      toast.error(`Нет остатка: ${item.name}`)
+      return
+    }
     addInFlight.current = true
     try {
       await consume.mutateAsync({
@@ -188,7 +192,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
         quantity: 1,
         unitPrice: item.repairPrice,
       })
-      toast.success(`Добавлено: ${item.name}`)
+      toast.success(`Добавлено на заказ, списано со склада: ${item.name}`)
       setSearch('')
       setOpen(false)
     } catch (error) {
@@ -341,6 +345,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                                     const index = flatSuggestions.findIndex((row) => row.id === id)
                                     const meta = [item.code, item.article].filter(Boolean).join(' ')
                                     const stock = `ост. ${formatQuantity(item.stockQuantity)} ${item.unitName || 'шт'}`
+                                    const outOfStock = item.stockQuantity < 1
                                     return (
                                       <SuggestRow
                                         key={id}
@@ -350,7 +355,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                                         subtitle={[meta, stock].filter(Boolean).join(' ')}
                                         coverUrl={item.coverUrl}
                                         price={item.repairPrice}
-                                        disabled={busy}
+                                        disabled={busy || outOfStock}
                                         onHover={() => {
                                           if (index >= 0) {
                                             setActiveIndex(index)

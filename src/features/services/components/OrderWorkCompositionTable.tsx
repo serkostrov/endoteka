@@ -527,7 +527,7 @@ function WorkLineRow({
               removePart.mutate(line.id, {
                 onSuccess: () => {
                   setDeleteOpen(false)
-                  toast.success('Запчасть удалена из заказа')
+                  toast.success('Запчасть возвращена на склад')
                 },
                 onError: (error) => toast.error(getErrorMessage(error)),
               })

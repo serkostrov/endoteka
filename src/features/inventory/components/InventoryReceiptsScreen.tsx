@@ -50,7 +50,7 @@ export function InventoryReceiptsScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Приходы"
-        description="Каждый приход создаёт партии. Остаток считается по журналу, не по ручному полю."
+        description="Приход добавляет остаток. Состав работ и списание уменьшают. Удаление из заказа возвращает на склад."
         actions={
           canReceive ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>

@@ -88,7 +88,7 @@ export function InventoryStockScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Склад"
-        description="Текущий остаток по журналу движений. Карточка позиции открывается из строки."
+        description="Остаток = приходы − списания в заказы − складские списания. Отрицательным быть не может."
       />
 
       <FilterBar>

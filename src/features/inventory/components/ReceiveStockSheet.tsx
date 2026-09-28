@@ -153,7 +153,7 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
         purchasePrice: line.purchasePrice,
       })),
     })
-    toast.success('Приход проведён')
+    toast.success('Приход проведён, товар добавлен на склад')
   }
 
   async function onSubmit(values: ReceiveFormValues) {

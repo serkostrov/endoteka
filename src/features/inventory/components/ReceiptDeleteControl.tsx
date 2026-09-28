@@ -43,7 +43,7 @@ export function ReceiptDeleteControl({
     try {
       await remove.mutateAsync({ id: receipt.id, mode })
       onDeleted?.()
-      toast.success(mode === 'hide' ? 'Запись прихода скрыта' : 'Приход отменён, остаток уменьшен')
+      toast.success(mode === 'hide' ? 'Запись прихода скрыта (остаток не изменён)' : 'Приход отменён, товар списан со склада')
       setOpen(false)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -84,12 +84,12 @@ export function ReceiptDeleteControl({
       {trigger}
       <ConfirmDialog
         open={open}
-        title="Удалить приход?"
-        description={`${receipt.supplier}: «Удалить запись» скроет документ без изменения остатка. «Удалить приход» спишет со склада всё, что пришло по этому документу (если позиции ещё не использованы).`}
-        cancelLabel="Отменить"
-        confirmLabel="Удалить приход"
+        title="Отменить приход?"
+        description={`${receipt.supplier}: «Отменить приход» убирает товар со склада (если он ещё не израсходован). «Скрыть запись» только убирает документ из списка, остаток не меняется.`}
+        cancelLabel="Закрыть"
+        confirmLabel="Отменить приход"
         extraAction={{
-          label: 'Удалить запись',
+          label: 'Скрыть запись',
           variant: 'outline',
           isPending: pendingMode === 'hide',
           onClick: () => void runDelete('hide'),

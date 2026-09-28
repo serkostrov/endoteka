@@ -59,11 +59,17 @@ export function OrderPartsTab({ orderId, showLines = true }: OrderPartsTabProps)
     if (consumeInFlight.current) {
       return
     }
+    if (qty > item.stockQuantity) {
+      toast.error(
+        `Недостаточно остатка. Доступно ${formatQuantity(item.stockQuantity)} ${item.unitName || 'шт'}`,
+      )
+      return
+    }
 
     consumeInFlight.current = true
     try {
       await consume.mutateAsync({ itemId: item.id, quantity: qty, unitPrice: price })
-      toast.success(`Добавлено: ${item.name}`)
+      toast.success(`Добавлено на заказ, списано со склада: ${item.name}`)
       pickItem(null)
     } catch (error) {
       toast.error(getErrorMessage(error))
