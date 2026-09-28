@@ -163,7 +163,10 @@ function SaleDocumentBody({
   const update = useUpdateSale(document.id)
   const [deleteOpen, setDeleteOpen] = useState(false)
 
-  const insufficient = document.lines.filter((line) => line.quantity > line.stockQuantity || !line.fifoPreview.enough)
+  // После подтверждения остаток уже списан — сравнение qty с текущим stock даёт ложную нехватку.
+  const insufficient = editable
+    ? document.lines.filter((line) => line.quantity > line.stockQuantity || !line.fifoPreview.enough)
+    : []
   const canConfirm =
     canCreate &&
     editable &&
@@ -441,9 +444,10 @@ function SaleLineRow({
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const remove = useRemoveSaleLine(saleId)
-  const short = line.quantity > line.stockQuantity || !line.fifoPreview.enough
+  const short =
+    editable && (line.quantity > line.stockQuantity || !line.fifoPreview.enough)
   const meta = [line.itemCode, line.itemArticle].filter(Boolean).join(' ')
-  const stockHint = `ост. ${formatQuantity(line.stockQuantity)} ${line.unitName}`
+  const stockHint = editable ? `ост. ${formatQuantity(line.stockQuantity)} ${line.unitName}` : ''
   const subtitle = [meta, stockHint].filter(Boolean).join(' ')
 
   function handleRowClick(event: MouseEvent<HTMLTableRowElement>) {
