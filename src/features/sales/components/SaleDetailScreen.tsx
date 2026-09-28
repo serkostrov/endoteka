@@ -37,7 +37,7 @@ import { CustomerPicker } from '@/features/customers'
 import { SaleDocumentsTab } from '@/features/documents'
 import { ItemSearchField } from '@/features/inventory/components/ItemSearchField'
 import { useHasPermission } from '@/features/auth'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity, parseQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { SaleStatus, saleStatusLabels, saleStatusTone } from '@/lib/constants/sales'
@@ -603,24 +603,36 @@ function SaleInlineNumberField({
   const isQty = field === 'quantity'
 
   function commit(raw: string) {
+    if (field === 'quantity') {
+      const parsed = parseQuantity(raw)
+      if (parsed == null) {
+        toast.error('Количество должно быть целым числом')
+        return
+      }
+      if (parsed === current) {
+        return
+      }
+      if (parsed <= 0) {
+        toast.error('Количество должно быть больше нуля')
+        return
+      }
+      setLine.mutate(
+        { lineId: line.id, quantity: parsed, unitPrice: line.unitPrice },
+        { onError: (error) => toast.error(getErrorMessage(error)) },
+      )
+      return
+    }
+
     const parsed = Number(raw)
     if (!Number.isFinite(parsed) || parsed === current) {
       return
     }
-    if (field === 'quantity' && parsed <= 0) {
-      toast.error('Количество должно быть больше нуля')
-      return
-    }
-    if (field === 'unitPrice' && parsed < 0) {
+    if (parsed < 0) {
       toast.error('Цена не может быть отрицательной')
       return
     }
     setLine.mutate(
-      {
-        lineId: line.id,
-        quantity: field === 'quantity' ? parsed : line.quantity,
-        unitPrice: field === 'unitPrice' ? parsed : line.unitPrice,
-      },
+      { lineId: line.id, quantity: line.quantity, unitPrice: parsed },
       { onError: (error) => toast.error(getErrorMessage(error)) },
     )
   }
@@ -636,8 +648,8 @@ function SaleInlineNumberField({
           <Input
             key={`${line.id}-${field}-${current}`}
             type="number"
-            min={0.001}
-            step="0.001"
+            min={1}
+            step="1"
             aria-label="Количество"
             className={cn(
               spinless,

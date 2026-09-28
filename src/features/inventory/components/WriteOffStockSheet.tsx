@@ -31,7 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity, parseQuantity } from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { toIsoDate } from '@/lib/utils/date'
@@ -86,8 +86,8 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
   }, [open, form])
 
   function addLine(item: InventoryItem, quantity = 1) {
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      toast.error('Количество должно быть больше нуля')
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      toast.error('Количество должно быть целым числом больше нуля')
       return
     }
     if (item.stockQuantity <= 0) {
@@ -382,8 +382,12 @@ function WriteOffDraftRow({
     .join(' ')
 
   function commitQuantity(raw: string) {
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed) || parsed === line.quantity) {
+    const parsed = parseQuantity(raw)
+    if (parsed == null) {
+      toast.error('Количество должно быть целым числом')
+      return
+    }
+    if (parsed === line.quantity) {
       return
     }
     if (parsed <= 0) {
@@ -427,8 +431,8 @@ function WriteOffDraftRow({
           <Input
             key={`${line.key}-qty-${line.quantity}`}
             type="number"
-            min={0.001}
-            step="0.001"
+            min={1}
+            step="1"
             aria-label="Количество"
             className={cn(
               spinless,

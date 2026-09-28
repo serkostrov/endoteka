@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useHasPermission } from '@/features/auth'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity, parseQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 
@@ -278,24 +278,36 @@ function ServiceNumberField({
   const fieldId = `${line.id}-${field}`
 
   function commit(raw: string) {
+    if (field === 'quantity') {
+      const parsed = parseQuantity(raw)
+      if (parsed == null) {
+        toast.error('Количество должно быть целым числом')
+        return
+      }
+      if (parsed === current) {
+        return
+      }
+      if (parsed <= 0) {
+        toast.error('Количество должно быть больше нуля')
+        return
+      }
+      setLine.mutate(
+        { lineId: line.id, quantity: parsed, unitPrice: line.unitPrice },
+        { onError: (error) => toast.error(getErrorMessage(error)) },
+      )
+      return
+    }
+
     const parsed = Number(raw)
     if (!Number.isFinite(parsed) || parsed === current) {
       return
     }
-    if (field === 'quantity' && parsed <= 0) {
-      toast.error('Количество должно быть больше нуля')
-      return
-    }
-    if (field === 'unitPrice' && parsed < 0) {
+    if (parsed < 0) {
       toast.error('Цена не может быть отрицательной')
       return
     }
     setLine.mutate(
-      {
-        lineId: line.id,
-        quantity: field === 'quantity' ? parsed : line.quantity,
-        unitPrice: field === 'unitPrice' ? parsed : line.unitPrice,
-      },
+      { lineId: line.id, quantity: line.quantity, unitPrice: parsed },
       { onError: (error) => toast.error(getErrorMessage(error)) },
     )
   }
@@ -315,8 +327,8 @@ function ServiceNumberField({
             id={fieldId}
             key={`${line.id}-${field}-${current}`}
             type="number"
-            min={field === 'quantity' ? 0.001 : 0}
-            step={field === 'quantity' ? '0.001' : '0.01'}
+            min={field === 'quantity' ? 1 : 0}
+            step={field === 'quantity' ? '1' : '0.01'}
             className="h-7 w-[4.75rem] px-2 tabular-nums"
             defaultValue={current}
             disabled={setLine.isPending}

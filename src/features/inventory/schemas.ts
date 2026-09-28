@@ -1,7 +1,10 @@
 import { z } from 'zod'
 
 const moneySchema = z.number().min(0, 'Цена не может быть отрицательной')
-const quantitySchema = z.number().positive('Количество должно быть больше нуля')
+const quantitySchema = z
+  .number()
+  .int('Количество должно быть целым числом')
+  .positive('Количество должно быть больше нуля')
 
 export const inventoryItemFormSchema = z.object({
   name: z.string().trim().min(1, 'Укажите наименование'),
@@ -54,7 +57,10 @@ export const consumeFormSchema = z.object({
 export type ConsumeFormValues = z.infer<typeof consumeFormSchema>
 
 export const adjustFormSchema = z.object({
-  quantityDelta: z.number().refine((value) => value !== 0, 'Количество не может быть нулевым'),
+  quantityDelta: z
+    .number()
+    .int('Количество должно быть целым числом')
+    .refine((value) => value !== 0, 'Количество не может быть нулевым'),
   reason: z.string().trim().min(1, 'Укажите причину'),
 })
 

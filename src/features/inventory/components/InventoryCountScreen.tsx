@@ -28,6 +28,7 @@ import {
   formatQuantity,
   inventoryCountStatusLabels,
   inventoryCountStatusTone,
+  parseQuantity,
 } from '@/lib/constants/inventory'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
@@ -553,9 +554,9 @@ function CountActualInput({
     if (raw.trim() === '') {
       return
     }
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed) || parsed < 0) {
-      toast.error('Факт не может быть отрицательным')
+    const parsed = parseQuantity(raw)
+    if (parsed == null || parsed < 0) {
+      toast.error('Факт должен быть целым числом не меньше нуля')
       return
     }
     if (parsed === line.actualQuantity) {
@@ -569,7 +570,7 @@ function CountActualInput({
       key={`${line.id}-${line.actualQuantity ?? 'empty'}`}
       type="number"
       min={0}
-      step="0.001"
+      step="1"
       className="h-8 w-24"
       disabled={disabled}
       defaultValue={line.actualQuantity === null ? '' : String(line.actualQuantity)}

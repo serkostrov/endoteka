@@ -92,7 +92,7 @@ export function AdjustStockDialog({ open, onOpenChange, item = null }: AdjustDia
                   <FormControl>
                     <Input
                       type="number"
-                      step="0.001"
+                      step="1"
                       value={field.value}
                       onChange={(event) => field.onChange(Number(event.target.value))}
                     />

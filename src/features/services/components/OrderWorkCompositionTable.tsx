@@ -58,7 +58,7 @@ import {
 import type { OrderInventoryUsage } from '@/features/inventory/services/inventory-service'
 import { useAutosave } from '@/hooks/use-autosave'
 import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity, parseQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { queryKeys } from '@/lib/query-keys'
@@ -102,14 +102,14 @@ const spinless =
 const customPartSchema = z.object({
   name: z.string().trim().min(1, 'Укажите наименование'),
   unitPrice: z.number().min(0, 'Цена не может быть отрицательной'),
-  quantity: z.number().positive('Количество должно быть больше нуля'),
+  quantity: z.number().int('Количество должно быть целым числом').positive('Количество должно быть больше нуля'),
 })
 
 const customServiceSchema = z.object({
   name: z.string().trim().min(1, 'Укажите наименование'),
   description: z.string().trim(),
   unitPrice: z.number().min(0, 'Цена не может быть отрицательной'),
-  quantity: z.number().positive('Количество должно быть больше нуля'),
+  quantity: z.number().int('Количество должно быть целым числом').positive('Количество должно быть больше нуля'),
 })
 
 type CustomPartFormValues = z.infer<typeof customPartSchema>
@@ -653,8 +653,8 @@ function EditCustomPartDialog({
                     <FormControl>
                       <Input
                         type="number"
-                        min={0.001}
-                        step="0.001"
+                        min={1}
+                        step="1"
                         className="tabular-nums"
                         value={Number.isFinite(field.value) ? field.value : ''}
                         onChange={(event) => field.onChange(Number(event.target.value))}
@@ -809,8 +809,8 @@ function EditCustomServiceDialog({
                     <FormControl>
                       <Input
                         type="number"
-                        min={0.001}
-                        step="0.001"
+                        min={1}
+                        step="1"
                         className="tabular-nums"
                         value={Number.isFinite(field.value) ? field.value : ''}
                         onChange={(event) => field.onChange(Number(event.target.value))}
@@ -859,23 +859,45 @@ function InlineNumberField({
   const isQty = field === 'quantity'
 
   function commit(raw: string) {
+    if (field === 'quantity') {
+      const parsed = parseQuantity(raw)
+      if (parsed == null) {
+        toast.error('Количество должно быть целым числом')
+        return
+      }
+      if (parsed === current) {
+        return
+      }
+      if (parsed <= 0) {
+        toast.error('Количество должно быть больше нуля')
+        return
+      }
+      const payload = {
+        lineId: line.id,
+        quantity: parsed,
+        unitPrice: line.unitPrice,
+      }
+      if (line.kind === 'part') {
+        setPart.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
+        return
+      }
+      setService.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
+      return
+    }
+
     const parsed = Number(raw)
     if (!Number.isFinite(parsed) || parsed === current) {
       return
     }
-    if (field === 'quantity' && parsed <= 0) {
-      toast.error('Количество должно быть больше нуля')
-      return
-    }
-    if (field === 'unitPrice' && parsed < 0) {
+    if (parsed < 0) {
       toast.error('Цена не может быть отрицательной')
       return
     }
 
     const payload = {
       lineId: line.id,
-      quantity: field === 'quantity' ? parsed : line.quantity,
-      unitPrice: field === 'unitPrice' ? parsed : line.unitPrice,
+      quantity: line.quantity,
+      unitPrice: parsed,
     }
 
     if (line.kind === 'part') {
@@ -896,8 +918,8 @@ function InlineNumberField({
           <Input
             key={`${line.key}-${field}-${current}`}
             type="number"
-            min={0.001}
-            step="0.001"
+            min={1}
+            step="1"
             aria-label="Количество"
             className={cn(
               spinless,

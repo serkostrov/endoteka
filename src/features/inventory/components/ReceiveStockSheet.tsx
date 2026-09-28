@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/table'
 import { Textarea } from '@/components/ui/textarea'
 import { CustomerPicker } from '@/features/customers/components/CustomerPicker'
-import { formatMoney, formatQuantity, parseMoney } from '@/lib/constants/inventory'
+import { formatMoney, formatQuantity, parseMoney, parseQuantity } from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 import { toIsoDate } from '@/lib/utils/date'
@@ -108,8 +108,8 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
   }, [open, form, presetSupplier?.id, presetSupplier?.name])
 
   function addLine(item: InventoryItem, quantity = 1, purchasePrice = item.purchasePrice) {
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      toast.error('Количество должно быть больше нуля')
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      toast.error('Количество должно быть целым числом больше нуля')
       return
     }
     if (!Number.isFinite(purchasePrice) || purchasePrice < 0) {
@@ -426,8 +426,12 @@ function ReceiptDraftRow({
   const [priceEditKey, setPriceEditKey] = useState(0)
 
   function commitQuantity(raw: string) {
-    const parsed = Number(raw)
-    if (!Number.isFinite(parsed) || parsed === line.quantity) {
+    const parsed = parseQuantity(raw)
+    if (parsed == null) {
+      toast.error('Количество должно быть целым числом')
+      return
+    }
+    if (parsed === line.quantity) {
       return
     }
     if (parsed <= 0) {
@@ -505,8 +509,8 @@ function ReceiptDraftRow({
           <Input
             key={`${line.key}-qty-${line.quantity}`}
             type="number"
-            min={0.001}
-            step="0.001"
+            min={1}
+            step="1"
             aria-label="Количество"
             className={cn(
               spinless,
