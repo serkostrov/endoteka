@@ -857,34 +857,88 @@ function InlineNumberField({
   const setPending = line.kind === 'part' ? setPart.isPending : setService.isPending
   const current = field === 'quantity' ? line.quantity : line.unitPrice
   const isQty = field === 'quantity'
+  const stockCap =
+    isQty && line.kind === 'part' && line.part?.itemId != null && line.part.stockQuantity != null
+      ? Math.max(1, Math.round(line.part.stockQuantity) + Math.round(line.quantity))
+      : null
 
-  function commit(raw: string) {
-    if (field === 'quantity') {
-      const parsed = parseQuantity(raw)
-      if (parsed == null) {
-        toast.error('Количество должно быть целым числом')
-        return
+  const [draft, setDraft] = useState(String(current))
+  const [flash, setFlash] = useState(false)
+  const draftRef = useRef(draft)
+  const flashTimer = useRef<number | null>(null)
+  draftRef.current = draft
+
+  useEffect(() => {
+    setDraft(String(current))
+  }, [current, line.key])
+
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current != null) {
+        window.clearTimeout(flashTimer.current)
       }
-      if (parsed === current) {
-        return
+    }
+  }, [])
+
+  function flashCap() {
+    setFlash(false)
+    requestAnimationFrame(() => {
+      setFlash(true)
+      if (flashTimer.current != null) {
+        window.clearTimeout(flashTimer.current)
       }
-      if (parsed <= 0) {
-        toast.error('Количество должно быть больше нуля')
-        return
-      }
-      const payload = {
-        lineId: line.id,
-        quantity: parsed,
-        unitPrice: line.unitPrice,
-      }
-      if (line.kind === 'part') {
-        setPart.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
-        return
-      }
-      setService.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
+      flashTimer.current = window.setTimeout(() => setFlash(false), 550)
+    })
+  }
+
+  function applyQuantity(raw: string, persist: boolean) {
+    if (!persist && raw.trim() === '') {
+      setDraft(raw)
       return
     }
 
+    const parsed = parseQuantity(raw)
+    if (parsed == null) {
+      if (persist) {
+        toast.error('Количество должно быть целым числом')
+        setDraft(String(current))
+      } else {
+        setDraft(raw)
+      }
+      return
+    }
+    if (parsed <= 0) {
+      if (persist) {
+        toast.error('Количество должно быть больше нуля')
+        setDraft(String(current))
+      } else {
+        setDraft(raw)
+      }
+      return
+    }
+
+    let next = parsed
+    if (stockCap != null && next > stockCap) {
+      next = stockCap
+      setDraft(String(next))
+      flashCap()
+    } else {
+      setDraft(String(next))
+    }
+
+    if (!persist || next === current) {
+      return
+    }
+
+    const payload = { lineId: line.id, quantity: next, unitPrice: line.unitPrice }
+    if (line.kind === 'part') {
+      setPart.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
+      return
+    }
+    setService.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
+  }
+
+  function commitPrice(raw: string) {
     const parsed = Number(raw)
     if (!Number.isFinite(parsed) || parsed === current) {
       return
@@ -916,9 +970,9 @@ function InlineNumberField({
           </span>
         ) : (
           <Input
-            key={`${line.key}-${field}-${current}`}
             type="number"
             min={1}
+            max={stockCap ?? undefined}
             step="1"
             aria-label="Количество"
             className={cn(
@@ -926,18 +980,20 @@ function InlineNumberField({
               'h-7 w-[2.75rem] shrink-0 border-transparent bg-transparent px-0.5 text-right text-sm shadow-none tabular-nums',
               'hover:border-border hover:bg-background',
               'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
+              flash && 'animate-stock-cap',
             )}
-            defaultValue={current}
+            value={draft}
             disabled={setPending}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             onFocus={(event) => event.target.select()}
+            onChange={(event) => applyQuantity(event.target.value, false)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.currentTarget.blur()
               }
             }}
-            onBlur={(event) => commit(event.target.value)}
+            onBlur={() => applyQuantity(draftRef.current, true)}
           />
         )}
         <span className="w-8 shrink-0 text-left text-[11px] leading-none text-muted-foreground">
@@ -974,7 +1030,7 @@ function InlineNumberField({
           event.currentTarget.blur()
         }
       }}
-      onBlur={(event) => commit(event.target.value)}
+      onBlur={(event) => commitPrice(event.target.value)}
     />
   )
 }

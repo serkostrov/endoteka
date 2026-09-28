@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -376,25 +376,80 @@ function WriteOffDraftRow({
   const amount = line.quantity * line.item.purchasePrice
   const unit = line.item.unitName || 'шт'
   const meta = [line.item.code, line.item.article].filter(Boolean).join(' ')
-  const short = line.quantity > line.item.stockQuantity
+  const stockCap = Math.max(1, Math.round(line.item.stockQuantity))
+  const short = line.quantity > stockCap
   const subtitle = [meta, `ост. ${formatQuantity(line.item.stockQuantity)} ${unit}`]
     .filter(Boolean)
     .join(' ')
 
-  function commitQuantity(raw: string) {
-    const parsed = parseQuantity(raw)
-    if (parsed == null) {
-      toast.error('Количество должно быть целым числом')
+  const [draft, setDraft] = useState(String(line.quantity))
+  const [flash, setFlash] = useState(false)
+  const draftRef = useRef(draft)
+  const flashTimer = useRef<number | null>(null)
+  draftRef.current = draft
+
+  useEffect(() => {
+    setDraft(String(line.quantity))
+  }, [line.quantity, line.key])
+
+  useEffect(() => {
+    return () => {
+      if (flashTimer.current != null) {
+        window.clearTimeout(flashTimer.current)
+      }
+    }
+  }, [])
+
+  function flashCap() {
+    setFlash(false)
+    requestAnimationFrame(() => {
+      setFlash(true)
+      if (flashTimer.current != null) {
+        window.clearTimeout(flashTimer.current)
+      }
+      flashTimer.current = window.setTimeout(() => setFlash(false), 550)
+    })
+  }
+
+  function applyQuantity(raw: string, persist: boolean) {
+    if (!persist && raw.trim() === '') {
+      setDraft(raw)
       return
     }
-    if (parsed === line.quantity) {
+
+    const parsed = parseQuantity(raw)
+    if (parsed == null) {
+      if (persist) {
+        toast.error('Количество должно быть целым числом')
+        setDraft(String(line.quantity))
+      } else {
+        setDraft(raw)
+      }
       return
     }
     if (parsed <= 0) {
-      toast.error('Количество должно быть больше нуля')
+      if (persist) {
+        toast.error('Количество должно быть больше нуля')
+        setDraft(String(line.quantity))
+      } else {
+        setDraft(raw)
+      }
       return
     }
-    onChange(parsed)
+
+    let next = parsed
+    if (next > stockCap) {
+      next = stockCap
+      setDraft(String(next))
+      flashCap()
+    } else {
+      setDraft(String(next))
+    }
+
+    if (!persist || next === line.quantity) {
+      return
+    }
+    onChange(next)
   }
 
   return (
@@ -429,9 +484,9 @@ function WriteOffDraftRow({
       <TableCell className={cn(cellPad, 'text-right')}>
         <div className="inline-flex w-full items-center justify-end gap-1">
           <Input
-            key={`${line.key}-qty-${line.quantity}`}
             type="number"
             min={1}
+            max={stockCap}
             step="1"
             aria-label="Количество"
             className={cn(
@@ -439,16 +494,17 @@ function WriteOffDraftRow({
               'h-7 w-[2.75rem] shrink-0 border-transparent bg-transparent px-0.5 text-right text-sm shadow-none tabular-nums',
               'hover:border-border hover:bg-background',
               'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
-              short && 'text-destructive',
+              flash && 'animate-stock-cap',
             )}
-            defaultValue={line.quantity}
+            value={draft}
             onFocus={(event) => event.target.select()}
+            onChange={(event) => applyQuantity(event.target.value, false)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') {
                 event.currentTarget.blur()
               }
             }}
-            onBlur={(event) => commitQuantity(event.target.value)}
+            onBlur={() => applyQuantity(draftRef.current, true)}
           />
           <span className="w-8 shrink-0 text-left text-[11px] leading-none text-muted-foreground">{unit}</span>
         </div>

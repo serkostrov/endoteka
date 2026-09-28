@@ -163,6 +163,8 @@ export type OrderInventoryUsage = {
   unitName: string
   quantity: number
   unitPrice: number
+  /** Свободный остаток на складе; null — произвольная позиция без номенклатуры. */
+  stockQuantity: number | null
   batches: OrderPartBatch[]
   actorName: string
   createdAt: string
@@ -905,6 +907,12 @@ export async function getOrderInventoryUsage(orderId: string): Promise<OrderInve
         unitName: asString(item.unit_name) || 'шт',
         quantity: asNumber(item.quantity),
         unitPrice: asNumber(item.unit_price),
+        stockQuantity:
+          item.item_id == null
+            ? null
+            : typeof item.stock_quantity === 'number' || typeof item.stock_quantity === 'string'
+              ? asNumber(item.stock_quantity)
+              : null,
         batches: Array.isArray(item.batches)
           ? item.batches.flatMap((batch) => {
               const row = asRecord(batch)
