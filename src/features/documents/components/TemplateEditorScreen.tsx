@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Eye, Pencil, Printer, Trash2 } from 'lucide-react'
+import { Pencil, Printer, Trash2 } from 'lucide-react'
+import type { Editor as TinyMCEEditor } from 'tinymce'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -30,18 +31,13 @@ import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDocumentSettingsFields } from '@/features/dynamic-fields/hooks/use-fields'
 
-import { TemplateRenderer } from './TemplateRenderer'
 import { TinyMceDocumentEditor } from './TinyMceDocumentEditor'
 import { useDeleteDocumentTemplate, useDocumentTemplate, useUpdateDocumentTemplate } from '../hooks/use-documents'
 import { htmlTemplateBody, templateHtml } from '../html-template'
-import { SAMPLE_LINES, SAMPLE_PARTS, SAMPLE_PLACEHOLDER_VALUES } from '../placeholders'
 import type { DocumentTemplate } from '../services/documents-service'
-
-const sampleContext = {
-  values: SAMPLE_PLACEHOLDER_VALUES,
-  parts: SAMPLE_PARTS,
-  lines: SAMPLE_LINES,
-}
+import {
+  normalizePageMargins,
+} from '../template-schema'
 
 export function TemplateEditorScreen() {
   const { id } = useParams()
@@ -60,7 +56,7 @@ export function TemplateEditorScreen() {
     return <ErrorState description="Шаблон не найден." />
   }
 
-  return <TemplateEditorForm key={`${template.id}-${template.updatedAt}`} template={template} />
+  return <TemplateEditorForm key={template.id} template={template} />
 }
 
 function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
@@ -68,8 +64,8 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
   const remove = useDeleteDocumentTemplate()
   const navigate = useNavigate()
   const settingsFieldsQuery = useDocumentSettingsFields()
+  const editorRef = useRef<TinyMCEEditor | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [previewOpen, setPreviewOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [name, setName] = useState(template.name)
   const [kind, setKind] = useState(template.kind)
@@ -78,14 +74,22 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
   const [html, setHtml] = useState(initialHtml)
   const htmlBlockId = template.body.find((block) => block.type === 'html')?.id
   const settingsFields = settingsFieldsQuery.data ?? []
+  const effectivePageSize = kind === DocumentKind.Label ? DocumentPageSize.Label : pageSize
+  const effectiveMargins = normalizePageMargins(
+    undefined,
+    effectivePageSize === DocumentPageSize.Label ? 'label' : 'a4',
+  )
 
   async function save() {
     try {
+      // Берём HTML из редактора — иначе правки отступов/таблиц могут не попасть в React state.
+      const content = editorRef.current?.getContent() ?? html
+      setHtml(content)
       await update.mutateAsync({
         name,
         kind,
-        pageSize: kind === DocumentKind.Label ? DocumentPageSize.Label : pageSize,
-        body: htmlTemplateBody(html, htmlBlockId),
+        pageSize: effectivePageSize,
+        body: htmlTemplateBody(content, htmlBlockId, effectiveMargins),
       })
       toast.success('Шаблон сохранён')
     } catch (error) {
@@ -112,10 +116,6 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
         description="Поля подставятся при выпуске документа."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setPreviewOpen(true)}>
-              <Eye className="size-4" />
-              Предпросмотр
-            </Button>
             <Button asChild variant="outline" size="sm">
               <Link to={routes.documentTemplatePrint.replace(':id', template.id)}>
                 <Printer className="size-4" />
@@ -141,28 +141,15 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
         }
       />
 
-      <TinyMceDocumentEditor value={html} onChange={setHtml} settingsFields={settingsFields} />
+      <TinyMceDocumentEditor
+        value={html}
+        onChange={setHtml}
+        settingsFields={settingsFields}
+        pageSize={effectivePageSize}
+        margins={effectiveMargins}
+        editorRef={editorRef}
+      />
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="flex max-h-[90vh] flex-col gap-3 overflow-hidden sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Предпросмотр</DialogTitle>
-            <DialogDescription>
-              Поля заполнены примерами. Несохранённые правки тоже видны.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-auto rounded-xl border bg-white">
-            {previewOpen ? (
-              <TemplateRenderer
-                blocks={htmlTemplateBody(html, htmlBlockId)}
-                context={sampleContext}
-                pageSize={kind === DocumentKind.Label ? DocumentPageSize.Label : pageSize}
-                variant="canvas"
-              />
-            ) : null}
-          </div>
-        </DialogContent>
-      </Dialog>
       <SettingsDialog
         open={settingsOpen}
         name={name}
@@ -207,12 +194,12 @@ function SettingsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Свойства шаблона</DialogTitle>
-          <DialogDescription>Название, тип и формат листа. Сохраняются вместе с макетом.</DialogDescription>
+          <DialogDescription>Название и формат листа. Поля страницы фиксированы: 10 мм со всех сторон.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+        <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="template-name">Название</Label>
             <Input id="template-name" value={name} onChange={(event) => onNameChange(event.target.value)} />

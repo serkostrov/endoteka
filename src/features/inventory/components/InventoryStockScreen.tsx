@@ -33,7 +33,8 @@ export function InventoryStockScreen() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const stockFilter = searchParams.get('stock') === 'zero' ? 'zero' : 'all'
+  const stockParam = searchParams.get('stock')
+  const stockFilter = stockParam === 'zero' || stockParam === 'in_stock' ? stockParam : 'all'
   const itemId = searchParams.get('item')
   const filterKey = stockFilter
   const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
@@ -111,8 +112,8 @@ export function InventoryStockScreen() {
             value={stockFilter}
             onValueChange={(value) => {
               const next = new URLSearchParams(searchParams)
-              if (value === 'zero') {
-                next.set('stock', 'zero')
+              if (value === 'zero' || value === 'in_stock') {
+                next.set('stock', value)
               } else {
                 next.delete('stock')
               }
@@ -125,6 +126,7 @@ export function InventoryStockScreen() {
             </SelectTrigger>
             <SelectContent searchable>
               <SelectItem value="all">Все позиции</SelectItem>
+              <SelectItem value="in_stock">В наличии</SelectItem>
               <SelectItem value="zero">Нет остатка</SelectItem>
             </SelectContent>
           </Select>
@@ -143,7 +145,11 @@ export function InventoryStockScreen() {
         getRowId={(row) => row.id}
         emptyTitle="Позиции не найдены"
         emptyDescription={
-          stockFilter === 'zero' ? 'Нет позиций с нулевым остатком.' : 'Измените запрос или оформите приход.'
+          stockFilter === 'zero'
+            ? 'Нет позиций с нулевым остатком.'
+            : stockFilter === 'in_stock'
+              ? 'Нет позиций в наличии.'
+              : 'Измените запрос или оформите приход.'
         }
         onRowClick={(row) => openItem(row.id)}
         selection={{

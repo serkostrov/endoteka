@@ -77,10 +77,34 @@ export type BarcodeBlock = {
   value: string
 }
 
+/** Поля страницы (отступы содержимого), мм. */
+export type PageMarginsMm = {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
+export const DEFAULT_PAGE_MARGINS_MM: PageMarginsMm = {
+  top: 10,
+  right: 10,
+  bottom: 10,
+  left: 10,
+}
+
+export const DEFAULT_LABEL_MARGINS_MM: PageMarginsMm = {
+  top: 3,
+  right: 3,
+  bottom: 3,
+  left: 3,
+}
+
 export type HtmlBlock = {
   id: string
   type: 'html'
   html: string
+  /** Отступы от краёв листа (как поля / колонтитулы), мм. */
+  margins?: PageMarginsMm
 }
 
 export type TemplateBlock =
@@ -184,10 +208,69 @@ export function parseTemplateBlock(value: unknown): TemplateBlock | null {
     return { id: row.id, type: 'barcode', value: asString(row.value) }
   }
   if (row.type === TemplateBlockType.Html) {
-    return { id: row.id, type: 'html', html: asString(row.html) }
+    const margins = parsePageMargins(row.margins)
+    return {
+      id: row.id,
+      type: 'html',
+      html: asString(row.html),
+      ...(margins ? { margins } : {}),
+    }
   }
 
   return null
+}
+
+function parseMarginMm(value: unknown, fallback: number) {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) {
+    return fallback
+  }
+  return Math.min(80, Math.max(0, Math.round(n * 10) / 10))
+}
+
+export function parsePageMargins(value: unknown): PageMarginsMm | null {
+  const row = asRecord(value)
+  if (!row) {
+    return null
+  }
+  return {
+    top: parseMarginMm(row.top, DEFAULT_PAGE_MARGINS_MM.top),
+    right: parseMarginMm(row.right, DEFAULT_PAGE_MARGINS_MM.right),
+    bottom: parseMarginMm(row.bottom, DEFAULT_PAGE_MARGINS_MM.bottom),
+    left: parseMarginMm(row.left, DEFAULT_PAGE_MARGINS_MM.left),
+  }
+}
+
+export function normalizePageMargins(
+  value: PageMarginsMm | null | undefined,
+  pageSize: 'a4' | 'label' = 'a4',
+): PageMarginsMm {
+  // A4: единые фиксированные поля 10 мм — без пользовательской настройки
+  if (pageSize !== 'label') {
+    return { ...DEFAULT_PAGE_MARGINS_MM }
+  }
+  const defaults = DEFAULT_LABEL_MARGINS_MM
+  if (!value) {
+    return { ...defaults }
+  }
+  return {
+    top: parseMarginMm(value.top, defaults.top),
+    right: parseMarginMm(value.right, defaults.right),
+    bottom: parseMarginMm(value.bottom, defaults.bottom),
+    left: parseMarginMm(value.left, defaults.left),
+  }
+}
+
+/** Поля страницы из html-блока шаблона. */
+export function templatePageMargins(
+  blocks: TemplateBlock[],
+  pageSize: 'a4' | 'label' = 'a4',
+): PageMarginsMm {
+  const htmlBlock = blocks.find((block) => block.type === 'html')
+  if (htmlBlock && htmlBlock.type === 'html') {
+    return normalizePageMargins(htmlBlock.margins, pageSize)
+  }
+  return normalizePageMargins(undefined, pageSize)
 }
 
 export function parseTemplateBody(value: Json | unknown): TemplateBlock[] {
@@ -231,8 +314,13 @@ export function emptyTemplateBody(): TemplateBlock[] {
   return [createHtmlBlock(DEFAULT_TEMPLATE_HTML)]
 }
 
-export function createHtmlBlock(html: string): HtmlBlock {
-  return { id: crypto.randomUUID(), type: 'html', html }
+export function createHtmlBlock(html: string, margins?: PageMarginsMm): HtmlBlock {
+  return {
+    id: crypto.randomUUID(),
+    type: 'html',
+    html,
+    ...(margins ? { margins: normalizePageMargins(margins) } : {}),
+  }
 }
 
 const DEFAULT_TEMPLATE_HTML = `<p style="text-align: center;"><strong>{{company.name}}</strong></p>

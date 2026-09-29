@@ -32,13 +32,13 @@
   --border: oklch(0.88 0.008 250);
   --input: oklch(0.9 0.006 250);
   --ring: oklch(0.5 0.14 250);
-  --sidebar: oklch(0.18 0.045 255);
-  --sidebar-foreground: oklch(0.92 0.015 250);
-  --sidebar-primary: oklch(0.72 0.12 250);
-  --sidebar-primary-foreground: oklch(0.16 0.04 255);
-  --sidebar-accent: oklch(0.26 0.05 255);
-  --sidebar-accent-foreground: oklch(0.97 0.01 250);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar: #343a40;
+  --sidebar-foreground: #f1f3f5;
+  --sidebar-primary: oklch(0.62 0.14 250);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #495057;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 12%);
   --sidebar-ring: oklch(0.65 0.12 250);
 
   --status-neutral: var(--muted-foreground);
@@ -74,13 +74,13 @@
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 14%);
   --ring: oklch(0.68 0.12 250);
-  --sidebar: oklch(0.15 0.05 255);
-  --sidebar-foreground: oklch(0.94 0.012 250);
-  --sidebar-primary: oklch(0.7 0.12 250);
-  --sidebar-primary-foreground: oklch(0.14 0.04 255);
-  --sidebar-accent: oklch(0.24 0.055 255);
-  --sidebar-accent-foreground: oklch(0.97 0.01 250);
-  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar: #2f353b;
+  --sidebar-foreground: #f1f3f5;
+  --sidebar-primary: oklch(0.68 0.12 250);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #495057;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgb(255 255 255 / 12%);
   --sidebar-ring: oklch(0.68 0.12 250);
 
   --status-neutral: var(--muted-foreground);
@@ -164,14 +164,15 @@
 
 @page {
   size: A4;
-  margin: 12mm;
+  margin: 0;
 }
 
 .document-sheet-a4 {
   width: 210mm;
   max-width: 100%;
-  min-height: 277mm;
-  padding: 8mm 10mm;
+  min-height: 297mm;
+  /* padding задаётся из полей шаблона (inline) */
+  padding: 12mm 14mm 16mm;
   box-sizing: border-box;
 }
 
@@ -189,29 +190,50 @@
   box-sizing: border-box;
 }
 
+.document-print-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 24px 16px 48px;
+  background: #c5cad3;
+  border-radius: 0.75rem;
+}
+
+.document-print-stack .document-sheet-a4 {
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 10px 28px rgba(0, 0, 0, 0.12);
+  border: 1px solid #9aa3b2;
+}
+
+/* Стили тела документа — Times, сплошные рамки только у table[border="1"] */
 .document-html-body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Times New Roman', Times, serif;
   font-size: 12pt;
-  line-height: 1.45;
-  color: #111;
+  line-height: 1.15;
+  color: #000;
 }
 
 .document-html-body h1 {
-  font-size: 2em;
+  font-size: 1.75em;
   font-weight: 700;
-  margin: 0.67em 0;
+  margin: 0.35em 0 0.25em;
+  line-height: 1.2;
 }
 
 .document-html-body h2 {
-  font-size: 1.5em;
+  font-size: 1.35em;
   font-weight: 700;
-  margin: 0.75em 0;
+  margin: 0.35em 0 0.25em;
+  line-height: 1.2;
 }
 
 .document-html-body h3 {
-  font-size: 1.17em;
+  font-size: 1.15em;
   font-weight: 700;
-  margin: 1em 0;
+  margin: 0.35em 0 0.25em;
+  line-height: 1.2;
 }
 
 .document-html-body h4,
@@ -219,24 +241,25 @@
 .document-html-body h6 {
   font-size: 1em;
   font-weight: 700;
-  margin: 1.33em 0;
+  margin: 0.35em 0 0.25em;
+  line-height: 1.2;
 }
 
 .document-html-body p {
-  margin: 0 0 1em;
+  margin: 0 0 0.15em;
 }
 
 .document-html-body ul,
 .document-html-body ol {
-  margin: 1em 0;
+  margin: 0.35em 0;
   padding-inline-start: 40px;
   list-style: revert;
 }
 
 .document-html-body hr {
-  margin: 1em 0;
+  margin: 0.4em 0;
   border: none;
-  border-top: 1px solid #ccc;
+  border-top: 1px solid #000;
 }
 
 .document-html-body table {
@@ -246,9 +269,24 @@
 
 .document-html-body td,
 .document-html-body th {
-  border: 1px dotted #94a3b8;
-  padding: 6px 8px;
+  padding: 1px 4px;
   vertical-align: middle;
+  border: none;
+  line-height: inherit;
+}
+
+.document-html-body td > p,
+.document-html-body th > p {
+  margin: 0;
+  padding: 0;
+  line-height: inherit;
+}
+
+.document-html-body table[border]:not([border='0']) td,
+.document-html-body table[border]:not([border='0']) th {
+  border-width: 1px;
+  border-style: solid;
+  border-color: #000;
 }
 
 .document-html-body img {
@@ -303,24 +341,106 @@
   height: 100%;
 }
 
+.document-tinymce--paged .tox-edit-area {
+  background: #c5cad3;
+}
+
+.document-tinymce--paged .tox-edit-area__iframe {
+  background: #c5cad3;
+}
+
+.document-tinymce--paged .tox-statusbar {
+  border-top: 1px solid var(--border);
+}
+
+/* Диалоги TinyMCE (свойства таблицы и др.) — ближе к UI приложения */
+.tox:not(.tox-tinymce-inline) .tox-dialog {
+  border-radius: 12px;
+  box-shadow:
+    0 4px 6px -1px rgb(15 23 42 / 8%),
+    0 16px 40px -8px rgb(15 23 42 / 18%);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.tox .tox-dialog__header {
+  padding: 14px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.tox .tox-dialog__title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.tox .tox-dialog__body-content {
+  padding: 14px 18px 8px;
+}
+
+.tox .tox-dialog__footer {
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in oklch, var(--muted) 55%, white);
+}
+
+.tox .tox-button--secondary {
+  border-radius: 8px;
+}
+
+.tox .tox-button:not(.tox-button--secondary):not(.tox-button--icon) {
+  border-radius: 8px;
+}
+
+.tox .tox-textfield,
+.tox .tox-listboxfield .tox-listbox--select,
+.tox .tox-textarea {
+  border-radius: 8px;
+}
+
+.tox .tox-form__group-title {
+  color: var(--foreground);
+  font-size: 12px;
+}
+
 @media print {
-  .document-sheet-a4 {
-    width: auto;
-    min-height: auto;
+  .document-print-stack {
+    display: block;
+    gap: 0;
     padding: 0;
+    background: transparent;
+    border-radius: 0;
+  }
+
+  .document-sheet-a4 {
+    width: 210mm;
+    min-height: 297mm;
+    height: 297mm;
+    max-width: none;
+    overflow: hidden;
     box-shadow: none;
+    border: none;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  .document-sheet-a4:last-child {
+    break-after: auto;
+    page-break-after: auto;
   }
 
   .document-sheet-label {
     border: none;
     width: 58mm;
     min-height: 40mm;
-    padding: 0;
   }
 
-  .document-html-body td,
-  .document-html-body th {
-    border: 1px solid #222;
+  .document-html-body table[border]:not([border='0']) td,
+  .document-html-body table[border]:not([border='0']) th {
+    border-width: 1px;
+    border-style: solid;
+    border-color: #000;
   }
 }
 

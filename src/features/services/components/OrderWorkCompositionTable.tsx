@@ -298,11 +298,15 @@ function WorkCompositionFields({
   const valuesQuery = useDynamicFieldValues(FieldEntity.OrderWork, orderId)
   const [draft, setDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
   const lastSavedKey = useRef<string | null>(null)
+  const valuesReady = valuesQuery.isSuccess
   const values = draft ?? valuesQuery.data ?? {}
   const fieldGroups = useMemo(() => groupDynamicFields(fields), [fields])
 
   const persist = useCallback(
     async (next: Record<string, DynamicFieldValueData>) => {
+      if (!valuesQuery.isSuccess) {
+        return
+      }
       const payload = filledFieldValues(fields, { ...valuesQuery.data, ...next })
       const key = JSON.stringify(payload)
       if (key === lastSavedKey.current) {
@@ -319,17 +323,40 @@ function WorkCompositionFields({
         toast.error(getErrorMessage(error))
       }
     },
-    [fields, orderId, queryClient, valuesQuery.data],
+    [fields, orderId, queryClient, valuesQuery.data, valuesQuery.isSuccess],
   )
 
-  useAutosave(canEdit ? draft : null, persist)
+  useAutosave(canEdit && valuesReady ? draft : null, persist)
 
   useEffect(() => {
+    if (!valuesQuery.isSuccess) {
+      return
+    }
     lastSavedKey.current = JSON.stringify(filledFieldValues(fields, valuesQuery.data ?? {}))
-  }, [fields, valuesQuery.data])
+  }, [fields, valuesQuery.data, valuesQuery.isSuccess])
 
   function setFieldValue(code: string, value: DynamicFieldValueData) {
     setDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [code]: value }))
+  }
+
+  if (valuesQuery.isLoading) {
+    return (
+      <div className="space-y-1.5" aria-busy="true">
+        <Skeleton className="h-8 w-40 rounded-md" />
+        <Skeleton className="h-20 w-full rounded-md" />
+        <Skeleton className="h-20 w-full rounded-md" />
+      </div>
+    )
+  }
+
+  if (valuesQuery.error) {
+    return (
+      <ErrorState
+        description={getErrorMessage(valuesQuery.error)}
+        onRetry={() => void valuesQuery.refetch()}
+        className="py-4"
+      />
+    )
   }
 
   return (

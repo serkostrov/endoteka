@@ -16,9 +16,9 @@ import { IconActionButton } from '@/components/shared/IconActionButton'
 import { InlineTextInput } from '@/components/shared/InlineTextInput'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { PageTabs } from '@/components/shared/PageTabs'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
-import { StatusBadge } from '@/components/shared/StatusBadge'
 import { SupplierLink } from '@/components/shared/SupplierLink'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -45,18 +45,17 @@ import {
   formatQuantity,
   INVENTORY_SEARCH_DEBOUNCE_MS,
   InventoryCountSeedMode,
-  inventoryMovementTypeLabels,
-  isInventoryMovementType,
 } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { queryKeys } from '@/lib/query-keys'
-import { formatDate, formatDateTime } from '@/lib/utils/date'
+import { formatDate } from '@/lib/utils/date'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
 import { ItemFields } from './ItemFields'
+import { ItemHistorySection } from './ItemHistorySection'
 import { ItemLabelPrintButton } from './ItemLabelPrintButton'
 import { ItemMediaLabel, ItemMediaLabelReadonly } from './ItemMediaLabel'
 import {
@@ -73,6 +72,8 @@ import {
   type InventoryItem,
   type InventoryMovement,
 } from '../services/inventory-service'
+
+type ItemTab = 'card' | 'batches' | 'history'
 
 export function InventoryItemSheet({
   itemId,
@@ -203,6 +204,7 @@ function ItemCardBody({
   const createCount = useCreateInventoryCount()
   const remove = useDeleteInventoryItem()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [tab, setTab] = useState<ItemTab>('card')
 
   const sortedBatches = useMemo(
     () =>
@@ -214,6 +216,15 @@ function ItemCardBody({
         return a.createdAt.localeCompare(b.createdAt)
       }),
     [batches],
+  )
+
+  const tabItems = useMemo(
+    () => [
+      { id: 'card' as const, label: 'Карточка' },
+      { id: 'batches' as const, label: 'Партии', count: sortedBatches.length },
+      { id: 'history' as const, label: 'История', count: movements.length },
+    ],
+    [movements.length, sortedBatches.length],
   )
 
   async function handleDelete() {
@@ -311,158 +322,71 @@ function ItemCardBody({
     </div>
   )
 
+  const deleteDialog =
+    variant === 'page' ? (
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить позицию"
+        description={`${item.name} будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.`}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
+      />
+    ) : null
+
+  if (canReceive && tab === 'card') {
+    return (
+      <div className="space-y-4">
+        <ItemCardEditor
+          item={item}
+          variant={variant}
+          actionsRow={actionsRow}
+          tabItems={tabItems}
+          onTabChange={setTab}
+        />
+        <ItemFieldsSection itemId={item.id} canEdit />
+        {deleteDialog}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
-      {canReceive ? (
-        <ItemCardEditor item={item} variant={variant} actionsRow={actionsRow} />
+      {variant === 'page' ? (
+        <div className="space-y-3">
+          <PageHeader title={item.name} description={codeArticleLine} />
+          {actionsRow}
+        </div>
       ) : (
-        <>
-          {variant === 'page' ? (
-            <div className="space-y-3">
-              <PageHeader title={item.name} description={codeArticleLine} />
-              {actionsRow}
-            </div>
-          ) : (
-            <div className="space-y-3 pr-2">
-              <div className="min-w-0">
-                <h2 className="text-lg font-semibold tracking-tight">{item.name}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{codeArticleLine}</p>
-              </div>
-              {actionsRow}
-            </div>
-          )}
-          <ItemDataSection item={item} />
-        </>
+        <div className="space-y-3 pr-2">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold tracking-tight">{item.name}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{codeArticleLine}</p>
+          </div>
+          {actionsRow}
+        </div>
       )}
 
-      <ItemFieldsSection itemId={item.id} canEdit={canReceive} />
+      <PageTabs
+        aria-label="Разделы карточки позиции"
+        value={tab}
+        onChange={setTab}
+        items={tabItems}
+      />
 
-      <SectionCard
-        title="Остаток по партиям"
-        description="Списание со склада — с самых ранних."
-      >
-        <DataTable
-          caption="Партии"
-          dense
-          framed={false}
-          maxVisibleRows={5}
-          data={sortedBatches}
-          getRowId={(row) => row.id}
-          emptyTitle="Партий нет"
-          emptyDescription="Появятся после прихода или положительной инвентаризации."
-          rowClassName={(row) =>
-            row.remainingQuantity <= 0 || row.supplier === 'Недостача' ? 'text-muted-foreground' : undefined
-          }
-          columns={[
-            {
-              id: 'date',
-              header: 'Дата',
-              className: 'w-[6.5rem]',
-              cell: (row) => formatDate(row.receiptDate),
-            },
-            {
-              id: 'supplier',
-              header: 'Поставщик',
-              cell: (row) =>
-                row.supplier === 'Недостача' ? (
-                  <span>Недостача</span>
-                ) : (
-                  <SupplierLink name={row.supplier} customerId={row.supplierId} />
-                ),
-            },
-            {
-              id: 'qty',
-              header: 'Пришло',
-              className: 'w-[4.5rem] text-right tabular-nums',
-              cell: (row) => formatQuantity(row.quantity),
-            },
-            {
-              id: 'left',
-              header: 'Остаток',
-              className: 'w-[4.5rem] text-right tabular-nums',
-              cell: (row) => (
-                <span
-                  className={
-                    row.remainingQuantity < 0
-                      ? 'font-medium text-destructive'
-                      : row.remainingQuantity <= 0
-                        ? undefined
-                        : 'font-medium'
-                  }
-                >
-                  {formatQuantity(row.remainingQuantity)}
-                </span>
-              ),
-            },
-            {
-              id: 'price',
-              header: 'Цена',
-              className: 'w-[5rem] text-right tabular-nums',
-              cell: (row) => formatMoney(row.purchasePrice),
-            },
-          ]}
-        />
-      </SectionCard>
-
-      {variant === 'page' ? (
-        <SectionCard title="Движения" description="Журнал нельзя править. Каждая запись указывает, куда ушёл товар.">
-          <DataTable
-            caption="Движения"
-            dense
-            framed={false}
-            data={movements}
-            getRowId={(row) => row.id}
-            emptyTitle="Движений нет"
-            onRowClick={(row) => {
-              if (row.referenceType === 'order') {
-                openSheet('order', row.referenceId)
-              }
-              if (row.referenceType === 'sale') {
-                openSheet('sale', row.referenceId)
-              }
-            }}
-            columns={[
-              { id: 'when', header: 'Когда', cell: (row) => formatDateTime(row.createdAt) },
-              {
-                id: 'type',
-                header: 'Тип',
-                cell: (row) => (
-                  <StatusBadge tone={row.quantity < 0 ? 'warning' : 'success'}>
-                    {isInventoryMovementType(row.movementType)
-                      ? inventoryMovementTypeLabels[row.movementType]
-                      : row.movementType}
-                  </StatusBadge>
-                ),
-              },
-              {
-                id: 'qty',
-                header: 'Кол-во',
-                cell: (row) => formatQuantity(row.quantity),
-              },
-              { id: 'price', header: 'Цена', cell: (row) => formatMoney(row.unitPrice) },
-              { id: 'dest', header: 'Куда', cell: (row) => row.destination || '—' },
-              {
-                id: 'user',
-                header: 'Кто',
-                className: 'hidden md:table-cell',
-                cell: (row) => row.actorName || '—',
-              },
-            ]}
-          />
-        </SectionCard>
+      {tab === 'card' ? (
+        <>
+          <ItemDataSection item={item} />
+          <ItemFieldsSection itemId={item.id} canEdit={false} />
+        </>
       ) : null}
 
-      {variant === 'page' ? (
-        <ConfirmDialog
-          open={deleteOpen}
-          title="Удалить позицию"
-          description={`${item.name} будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.`}
-          confirmLabel="Удалить"
-          isPending={remove.isPending}
-          onOpenChange={setDeleteOpen}
-          onConfirm={() => void handleDelete()}
-        />
-      ) : null}
+      {tab === 'batches' ? <ItemBatchesSection batches={sortedBatches} /> : null}
+
+      {tab === 'history' ? <ItemHistorySection movements={movements} /> : null}
+
+      {deleteDialog}
     </div>
   )
 }
@@ -471,10 +395,14 @@ function ItemCardEditor({
   item,
   variant,
   actionsRow,
+  tabItems,
+  onTabChange,
 }: {
   item: InventoryItem
   variant: 'page' | 'sheet'
   actionsRow: ReactNode
+  tabItems: { id: ItemTab; label: string; count?: number }[]
+  onTabChange: (tab: ItemTab) => void
 }) {
   const update = useUpdateInventoryItem(item.id)
   const form = useForm<InventoryItemFormValues>({
@@ -607,6 +535,13 @@ function ItemCardEditor({
           headerBlock
         )}
 
+        <PageTabs
+          aria-label="Разделы карточки позиции"
+          value="card"
+          onChange={onTabChange}
+          items={tabItems}
+        />
+
         {matches.length > 0 ? (
           <Alert>
             <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
@@ -625,7 +560,7 @@ function ItemCardEditor({
           </Alert>
         ) : null}
 
-        <SectionCard>
+        <SectionCard title="Карточка">
           <div className="space-y-4">
             <ItemMediaLabel item={item} form={form} canEdit />
             <FormField
@@ -646,7 +581,15 @@ function ItemCardEditor({
                 </FormItem>
               )}
             />
-            <ItemFields form={form} excludeItemId={item.id} hideName hideCodeArticle hideBarcode hideDescription layout="card" />
+            <ItemFields
+              form={form}
+              excludeItemId={item.id}
+              hideName
+              hideCodeArticle
+              hideBarcode
+              hideDescription
+              layout="card"
+            />
           </div>
         </SectionCard>
       </form>
@@ -654,9 +597,77 @@ function ItemCardEditor({
   )
 }
 
+function ItemBatchesSection({ batches }: { batches: InventoryBatch[] }) {
+  return (
+    <SectionCard title="Остаток по партиям" description="Списание со склада — с самых ранних.">
+      <DataTable
+        caption="Партии"
+        dense
+        framed={false}
+        maxVisibleRows={8}
+        data={batches}
+        getRowId={(row) => row.id}
+        emptyTitle="Партий нет"
+        emptyDescription="Появятся после прихода или положительной инвентаризации."
+        rowClassName={(row) =>
+          row.remainingQuantity <= 0 || row.supplier === 'Недостача' ? 'text-muted-foreground' : undefined
+        }
+        columns={[
+          {
+            id: 'date',
+            header: 'Дата',
+            className: 'w-[6.5rem]',
+            cell: (row) => formatDate(row.receiptDate),
+          },
+          {
+            id: 'supplier',
+            header: 'Поставщик',
+            cell: (row) =>
+              row.supplier === 'Недостача' ? (
+                <span>Недостача</span>
+              ) : (
+                <SupplierLink name={row.supplier} customerId={row.supplierId} />
+              ),
+          },
+          {
+            id: 'qty',
+            header: 'Пришло',
+            className: 'w-[4.5rem] text-right tabular-nums',
+            cell: (row) => formatQuantity(row.quantity),
+          },
+          {
+            id: 'left',
+            header: 'Остаток',
+            className: 'w-[4.5rem] text-right tabular-nums',
+            cell: (row) => (
+              <span
+                className={
+                  row.remainingQuantity < 0
+                    ? 'font-medium text-destructive'
+                    : row.remainingQuantity <= 0
+                      ? undefined
+                      : 'font-medium'
+                }
+              >
+                {formatQuantity(row.remainingQuantity)}
+              </span>
+            ),
+          },
+          {
+            id: 'price',
+            header: 'Цена',
+            className: 'w-[5rem] text-right tabular-nums',
+            cell: (row) => formatMoney(row.purchasePrice),
+          },
+        ]}
+      />
+    </SectionCard>
+  )
+}
+
 function ItemDataSection({ item }: { item: InventoryItem }) {
   return (
-    <SectionCard>
+    <SectionCard title="Карточка">
       <div className="space-y-4">
         <ItemMediaLabelReadonly item={item} />
         {item.description ? (

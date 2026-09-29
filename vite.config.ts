@@ -11,6 +11,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(projectRoot, './src'),
+      // jspdf / старые импорты: html2canvas без oklch → форк с поддержкой
+      html2canvas: path.resolve(projectRoot, 'node_modules/html2canvas-pro'),
     },
+  },
+  optimizeDeps: {
+    include: ['html2canvas-pro'],
   },
 })

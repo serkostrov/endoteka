@@ -179,11 +179,7 @@ export function OrdersScreen() {
       brandIds: hasSearch || brandId === 'all' ? undefined : matchedBrandIds,
       modelId: hasSearch ? 'all' : modelId,
       modelIds: hasSearch || modelId === 'all' ? undefined : matchedModelIds,
-      activeOnly: hasSearch
-        ? false
-        : isList
-          ? !attentionOnly && statusCode === 'all'
-          : activeOnly && statusCode === 'all',
+      activeOnly: hasSearch ? false : activeOnly && statusCode === 'all',
       attentionOnly: hasSearch ? false : attentionOnly,
       sort: isList ? listSort : 'updated',
       direction: isList ? listDir : 'desc',

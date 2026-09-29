@@ -89,6 +89,12 @@ export type InventoryMovement = {
   batchSupplier: string
   actorName: string
   destination: string
+  /** Заголовок документа для колонки «Документ», напр. «Заказ ЗК-0004». */
+  documentTitle: string
+  /** Клиент / поставщик / причина — для выделения в описании. */
+  counterpartyName: string
+  /** Короткий префикс описания без контрагента. */
+  descriptionPrefix: string
 }
 
 export type InventoryItemCard = {
@@ -313,6 +319,11 @@ function mapMovement(value: Json): InventoryMovement | null {
     return null
   }
 
+  const destination = asString(row.destination)
+  const documentTitle = asString(row.document_title) || destination
+  const counterpartyName = asString(row.counterparty_name)
+  const descriptionPrefix = asString(row.description_prefix)
+
   return {
     id: row.id,
     quantity: asNumber(row.quantity),
@@ -325,7 +336,10 @@ function mapMovement(value: Json): InventoryMovement | null {
     batchReceiptDate: asString(row.batch_receipt_date),
     batchSupplier: asString(row.batch_supplier),
     actorName: asString(row.actor_name),
-    destination: asString(row.destination),
+    destination,
+    documentTitle,
+    counterpartyName,
+    descriptionPrefix,
   }
 }
 

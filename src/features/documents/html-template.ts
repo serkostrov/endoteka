@@ -3,7 +3,8 @@ import QRCode from 'qrcode'
 
 import { buildCode128Path } from './barcode'
 import { interpolateTemplate, isResolvablePlaceholderKey, resolvePlaceholderValue } from './interpolate'
-import type { DocumentContext, TemplateBlock } from './template-schema'
+import type { DocumentContext, PageMarginsMm, TemplateBlock } from './template-schema'
+import { normalizePageMargins } from './template-schema'
 
 const FIELD_PATTERN =
   /\{\{\s*([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z][a-zA-Z0-9_]*)+)(?:\|([^}]+))?\s*\}\}/g
@@ -16,8 +17,19 @@ export function templateHtml(blocks: TemplateBlock[]): string {
   return blocks.map(blockToHtml).join('')
 }
 
-export function htmlTemplateBody(html: string, id?: string): TemplateBlock[] {
-  return [{ id: id ?? crypto.randomUUID(), type: 'html', html }]
+export function htmlTemplateBody(
+  html: string,
+  id?: string,
+  margins?: PageMarginsMm,
+): TemplateBlock[] {
+  return [
+    {
+      id: id ?? crypto.randomUUID(),
+      type: 'html',
+      html,
+      margins: normalizePageMargins(margins),
+    },
+  ]
 }
 
 export function sanitizeDocumentHtml(html: string) {
