@@ -16,6 +16,21 @@ alter table public.inventory_movements
     )
   );
 
+alter table public.inventory_movements
+  drop constraint if exists inventory_movements_reference_check;
+
+alter table public.inventory_movements
+  add constraint inventory_movements_reference_check check (
+    reference_type in (
+      'receipt',
+      'order',
+      'sale',
+      'inventory_adjustment',
+      'inventory_count',
+      'inventory_write_off'
+    )
+  );
+
 create table if not exists public.inventory_write_offs (
   id uuid primary key default gen_random_uuid(),
   write_off_date date not null,
