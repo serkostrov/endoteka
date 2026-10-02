@@ -24,8 +24,8 @@ export function DeviceTypePhotosReadonly({
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
 
-  const modId = emptyToNull(modificationId ?? null)
-  const mdlId = emptyToNull(modelId ?? null)
+  const modId = emptyToNull(modificationId ?? '')
+  const mdlId = emptyToNull(modelId ?? '')
   const primaryId = modId ?? mdlId
   const fallbackId = modId && mdlId && modId !== mdlId ? mdlId : null
 
