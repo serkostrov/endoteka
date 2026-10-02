@@ -5,12 +5,14 @@ import { Plus } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { FilterBar } from '@/components/shared/FilterBar'
+import { activeFilterControlClass } from '@/components/shared/active-filter-style'
 import { ListPagination } from '@/components/shared/ListPagination'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SegmentedFilter } from '@/components/shared/SegmentedFilter'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth, useHasPermission } from '@/features/auth'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
@@ -32,6 +34,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
 import { CreateTaskDialog } from './CreateTaskDialog'
+import { TaskBulkActions } from './TaskBulkActions'
 import { TaskDetailSheet } from './TaskDetailSheet'
 import { TaskListCard } from './TaskListCard'
 import { groupTasks } from './task-groups'
@@ -64,16 +67,26 @@ export function TasksScreen() {
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const [fromMe, setFromMe] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const canCreate = useHasPermission(Permission.TasksCreate)
+  const canUpdate = useHasPermission(Permission.TasksUpdate)
+  const canDelete = useHasPermission(Permission.TasksDelete)
+  const canSelect = canUpdate || canDelete
   const employees = useActiveEmployees()
   const debouncedSearch = useDebouncedValue(search, TASK_SEARCH_DEBOUNCE_MS)
   const assigneeId = assigneeParam === 'me' ? (user?.id ?? '') : assigneeParam
   const filtersReady = assigneeParam !== 'me' || Boolean(user?.id)
   const filterKey = `${assigneeParam}|${status}|${due}|${fromMe}`
+  const selectionKey = `${filterKey}|${priority}|${linked}|${debouncedSearch}|${page}|${pageSize}`
   const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
+  const [seenSelectionKey, setSeenSelectionKey] = useState(selectionKey)
   if (seenFilterKey !== filterKey) {
     setSeenFilterKey(filterKey)
     setPage(1)
+  }
+  if (seenSelectionKey !== selectionKey) {
+    setSeenSelectionKey(selectionKey)
+    setSelectedIds([])
   }
   const assigneeSelectValue = assigneeParam === 'me' ? (user?.id ?? 'me') : assigneeParam
   const assignmentChip: AssignmentChip = fromMe ? 'from_me' : assigneeParam === 'me' ? 'to_me' : assigneeParam === 'all' ? 'all' : 'all'
@@ -95,10 +108,32 @@ export function TasksScreen() {
   const pageCount = Math.max(1, Math.ceil((tasksQuery.data?.total ?? 0) / pageSize))
   const groups = groupTasks(items)
   const tabStatus = status === TaskStatusFilter.Completed ? TaskStatusFilter.Completed : TaskStatusFilter.Open
+  const pageIds = items.map((task) => task.id)
+  const selectedOnPage = pageIds.filter((id) => selectedIds.includes(id))
+  const allSelected = pageIds.length > 0 && selectedOnPage.length === pageIds.length
+  const someSelected = selectedOnPage.length > 0 && !allSelected
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+  }
+
+  function toggleSelectAll(next: boolean) {
+    if (next) {
+      setSelectedIds((current) => [...new Set([...current, ...pageIds])])
+      return
+    }
+    const pageSet = new Set(pageIds)
+    setSelectedIds((current) => current.filter((id) => !pageSet.has(id)))
+  }
+
+  function toggleSelect(taskId: string, next: boolean) {
+    setSelectedIds((current) => {
+      if (next) {
+        return current.includes(taskId) ? current : [...current, taskId]
+      }
+      return current.filter((id) => id !== taskId)
+    })
   }
 
   function patchFilters(patch: Record<string, string | null>) {
@@ -134,8 +169,8 @@ export function TasksScreen() {
   const taskId = searchParams.get('task')
 
   return (
-    <div className="space-y-4">
-      <PageHeader title="Задачи" description="Назначения, сроки и контроль работ." />
+    <div className="flex w-full min-w-0 flex-col gap-2">
+      <PageHeader title="Задачи" description="Назначения сотрудникам, сроки и контроль выполнения." />
 
       <div className="flex gap-1 border-b">
         {statusTabs.map((item) => (
@@ -143,7 +178,7 @@ export function TasksScreen() {
             key={item.id}
             type="button"
             className={cn(
-              'border-b-2 px-3 py-2 text-sm',
+              'border-b-2 px-3 py-1.5 text-sm',
               tabStatus === item.id
                 ? 'border-primary font-medium text-foreground'
                 : 'border-transparent text-muted-foreground hover:text-foreground',
@@ -159,6 +194,7 @@ export function TasksScreen() {
       </div>
 
       <FilterBar
+        className="[&_[data-slot=select-trigger]]:min-w-0 [&_[data-slot=select-trigger]]:flex-1 [&_[data-slot=select-trigger]]:shrink [&>[data-slot=search-input]]:max-w-[16rem]"
         end={
           canCreate ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
@@ -171,10 +207,11 @@ export function TasksScreen() {
         <SegmentedFilter
           aria-label="Назначение"
           value={assignmentChip}
+          inactiveValues={['all']}
           options={[
-            { value: 'all', label: 'Все задачи' },
-            { value: 'to_me', label: 'Назначены мне' },
-            { value: 'from_me', label: 'Назначены мной' },
+            { value: 'all', label: 'Все' },
+            { value: 'to_me', label: 'Мне' },
+            { value: 'from_me', label: 'От меня' },
           ]}
           onChange={setAssignment}
         />
@@ -186,6 +223,11 @@ export function TasksScreen() {
           }}
           label="Поиск задач"
           placeholder="Название или номер заказа"
+          className={cn(
+            'min-w-[10rem] max-w-[16rem] flex-1',
+            search.trim().length > 0 &&
+              '[&_input]:border-primary [&_input]:bg-primary [&_input]:text-primary-foreground [&_input]:placeholder:text-primary-foreground/70 [&_svg]:text-primary-foreground',
+          )}
         />
         <Select
           value={assigneeSelectValue}
@@ -195,7 +237,10 @@ export function TasksScreen() {
             patchFilters({ assignee: next })
           }}
         >
-          <SelectTrigger aria-label="Исполнитель">
+          <SelectTrigger
+            aria-label="Исполнитель"
+            className={activeFilterControlClass(assigneeParam !== 'all', 'w-auto min-w-0 flex-1')}
+          >
             <SelectValue placeholder="Исполнитель" />
           </SelectTrigger>
           <SelectContent searchable>
@@ -215,7 +260,10 @@ export function TasksScreen() {
             setPage(1)
           }}
         >
-          <SelectTrigger aria-label="Приоритет">
+          <SelectTrigger
+            aria-label="Приоритет"
+            className={activeFilterControlClass(priority !== 'all', 'w-auto min-w-0 flex-1')}
+          >
             <SelectValue placeholder="Приоритет" />
           </SelectTrigger>
           <SelectContent searchable>
@@ -228,7 +276,10 @@ export function TasksScreen() {
           </SelectContent>
         </Select>
         <Select value={due} onValueChange={(value) => patchFilters({ due: value })}>
-          <SelectTrigger aria-label="Срок">
+          <SelectTrigger
+            aria-label="Срок"
+            className={activeFilterControlClass(due !== TaskDueFilter.All, 'w-auto min-w-0 flex-1')}
+          >
             <SelectValue placeholder="Срок" />
           </SelectTrigger>
           <SelectContent searchable>
@@ -246,7 +297,10 @@ export function TasksScreen() {
             setPage(1)
           }}
         >
-          <SelectTrigger aria-label="Связанный заказ">
+          <SelectTrigger
+            aria-label="Связанный заказ"
+            className={activeFilterControlClass(linked !== TaskLinkedFilter.All, 'w-auto min-w-0 flex-1')}
+          >
             <SelectValue placeholder="Заказ" />
           </SelectTrigger>
           <SelectContent searchable>
@@ -266,26 +320,58 @@ export function TasksScreen() {
       ) : items.length === 0 ? (
         <EmptyState title="Задач нет" description="Создайте задачу или измените фильтры." />
       ) : (
-        <div className="space-y-6">
-          {groups.map((group) => (
-            <section key={group.id} className="space-y-2">
-              <h2
-                className={cn(
-                  'text-sm font-semibold',
-                  group.id === 'overdue' ? 'text-destructive' : 'text-foreground',
-                )}
-              >
-                {group.label}
-                <span className="ml-1.5 font-normal text-muted-foreground">· {group.items.length}</span>
-              </h2>
-              <div className="space-y-2">
-                {group.items.map((task) => (
-                  <TaskListCard key={task.id} task={task} onOpen={openTask} />
-                ))}
-              </div>
-            </section>
-          ))}
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <TaskBulkActions
+            selectedIds={selectedIds}
+            tasks={items}
+            onClear={() => setSelectedIds([])}
+          />
+
+          <div className="space-y-3">
+            {groups.map((group, index) => (
+              <section key={group.id} className="space-y-1.5">
+                <div className="flex items-center justify-between gap-3">
+                  <h2
+                    className={cn(
+                      'text-sm font-semibold',
+                      group.id === 'overdue' ? 'text-destructive' : 'text-foreground',
+                    )}
+                  >
+                    {group.label}
+                    <span className="ml-1.5 font-normal text-muted-foreground">· {group.items.length}</span>
+                  </h2>
+                  {index === 0 && canSelect ? (
+                    <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                      <Checkbox
+                        checked={allSelected ? true : someSelected ? 'indeterminate' : false}
+                        onCheckedChange={(value) => toggleSelectAll(value === true)}
+                        aria-label="Выбрать все на странице"
+                      />
+                      Выбрать все
+                      {selectedIds.length > 0 ? (
+                        <span className="tabular-nums">· {formatInteger(selectedIds.length)}</span>
+                      ) : null}
+                    </label>
+                  ) : null}
+                </div>
+                <div className="space-y-1">
+                  {group.items.map((task) => (
+                    <TaskListCard
+                      key={task.id}
+                      task={task}
+                      onOpen={openTask}
+                      selected={canSelect ? selectedIds.includes(task.id) : undefined}
+                      onSelectedChange={
+                        canSelect ? (next) => toggleSelect(task.id, next) : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             {!fromMe && total > 0 ? (
               <p className="text-sm text-muted-foreground">Всего — {formatInteger(total)}</p>
             ) : (

@@ -32,6 +32,8 @@ type ItemSearchFieldProps = {
   scanHint?: string
   searchHint?: string
   searchPlaceholder?: string
+  /** Сторона выпадающего списка. */
+  suggestSide?: 'top' | 'bottom'
 }
 
 type CategoryGroup = {
@@ -50,6 +52,7 @@ export function ItemSearchField({
   showScan = true,
   onBarcode,
   searchPlaceholder = 'Найти запчасть или считать штрихкод',
+  suggestSide = 'bottom',
 }: ItemSearchFieldProps) {
   const inputId = useId()
   const [search, setSearch] = useState('')
@@ -175,6 +178,7 @@ export function ItemSearchField({
       <SearchSuggestOverlay
         open={showPanel}
         onOpenChange={setOpen}
+        side={suggestSide}
         contentClassName="w-[min(40rem,calc(100vw-2rem))]"
         panel={
           <SearchSuggestPanel

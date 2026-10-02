@@ -89,7 +89,7 @@ export type InventoryMovement = {
   batchSupplier: string
   actorName: string
   destination: string
-  /** Заголовок документа для колонки «Документ», напр. «Заказ ЗК-0004». */
+  /** Заголовок документа для колонки «Документ», напр. «Заказ А0004». */
   documentTitle: string
   /** Клиент / поставщик / причина — для выделения в описании. */
   counterpartyName: string

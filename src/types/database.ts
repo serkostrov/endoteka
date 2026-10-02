@@ -465,6 +465,25 @@ type Row = {
     created_at: string
     updated_at: string
   }
+  device_compatible_parts: {
+    id: string
+    reference_item_id: string
+    item_id: string
+    sort_order: number
+    created_by: string | null
+    created_at: string
+  }
+  reference_item_photos: {
+    id: string
+    reference_item_id: string
+    file_path: string
+    file_name: string
+    mime_type: string
+    file_size: number
+    sort_order: number
+    created_by: string | null
+    created_at: string
+  }
   inventory_item_photos: {
     id: string
     item_id: string
@@ -1120,6 +1139,18 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      device_compatible_parts: {
+        Row: Row['device_compatible_parts']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      reference_item_photos: {
+        Row: Row['reference_item_photos']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       inventory_item_photos: {
         Row: Row['inventory_item_photos']
         Insert: never
@@ -1340,6 +1371,18 @@ export type Database = {
         Returns: string
       }
       clear_my_avatar: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_company_logo: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      set_company_logo: {
+        Args: { file_path: string }
+        Returns: string
+      }
+      clear_company_logo: {
         Args: Record<PropertyKey, never>
         Returns: string
       }
@@ -1912,6 +1955,81 @@ export type Database = {
           total_count: number
           cover_file_path: string | null
         }[]
+      }
+      list_device_compatible_parts: {
+        Args: { target_reference_item_id: string }
+        Returns: {
+          id: string
+          code: string
+          article: string
+          barcode: string
+          name: string
+          category_id: string
+          category_name: string
+          unit_id: string
+          unit_name: string
+          purchase_price: number
+          repair_price: number
+          retail_price: number
+          stock_quantity: number
+          cover_file_path: string | null
+          link_id: string
+          sort_order: number
+          created_at: string
+        }[]
+      }
+      list_inventory_item_compatible_types: {
+        Args: { target_item_id: string }
+        Returns: {
+          id: string
+          code: string
+          name: string
+          set_code: string
+          set_name: string
+          path_label: string
+          cover_file_path: string | null
+          link_id: string
+          sort_order: number
+          created_at: string
+        }[]
+      }
+      list_reference_item_photos: {
+        Args: { target_reference_item_id: string }
+        Returns: {
+          id: string
+          file_path: string
+          file_name: string
+          mime_type: string
+          file_size: number
+          sort_order: number
+          created_at: string
+        }[]
+      }
+      register_reference_item_photo: {
+        Args: {
+          target_reference_item_id: string
+          file_path: string
+          file_name: string
+          mime_type: string
+          file_size: number
+        }
+        Returns: string
+      }
+      delete_reference_item_photo: {
+        Args: { target_photo_id: string }
+        Returns: string
+      }
+      set_reference_item_photo_cover: {
+        Args: { target_photo_id: string }
+        Returns: undefined
+      }
+      add_device_compatible_part: {
+        Args: { target_reference_item_id: string; target_item_id: string }
+        Returns: string
+      }
+      remove_device_compatible_part: {
+        Args: { target_reference_item_id: string; target_item_id: string }
+        Returns: undefined
       }
       find_inventory_item_by_name: {
         Args: { name_query: string; exclude_id?: string | null }

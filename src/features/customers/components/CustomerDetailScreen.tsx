@@ -363,7 +363,7 @@ function CustomerReceiptsSection({
               ? [
                   {
                     id: 'actions',
-                    header: '',
+                    header: 'Действия',
                     className: 'w-[1%] whitespace-nowrap',
                     cell: (row: CustomerReceipt) => (
                       <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>

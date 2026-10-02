@@ -1,0 +1,96 @@
+import { useState } from 'react'
+import { Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+
+import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { SelectionBulkBar } from '@/components/shared/SelectionBulkBar'
+import { Button } from '@/components/ui/button'
+import { useHasPermission } from '@/features/auth'
+import { Permission } from '@/lib/constants/permissions'
+import { getErrorMessage } from '@/lib/errors'
+import { formatInteger } from '@/lib/utils/number'
+
+import {
+  useDeleteInventoryWriteOff,
+  type InventoryWriteOffDeleteMode,
+} from '../hooks/use-inventory'
+
+type WriteOffBulkActionsProps = {
+  selectedIds: string[]
+  onClear: () => void
+}
+
+export function WriteOffBulkActions({ selectedIds, onClear }: WriteOffBulkActionsProps) {
+  const count = selectedIds.length
+  const canWriteOff = useHasPermission(Permission.InventoryWriteOff)
+  const remove = useDeleteInventoryWriteOff()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [pendingMode, setPendingMode] = useState<InventoryWriteOffDeleteMode | null>(null)
+
+  if (count === 0 || !canWriteOff) {
+    return null
+  }
+
+  async function runDelete(mode: InventoryWriteOffDeleteMode) {
+    setPendingMode(mode)
+    try {
+      for (const id of selectedIds) {
+        await remove.mutateAsync({ id, mode })
+      }
+      toast.success(
+        mode === 'hide'
+          ? count === 1
+            ? 'Запись списания скрыта'
+            : `Скрыто записей: ${formatInteger(count)}`
+          : count === 1
+            ? 'Списание отменено'
+            : `Отменено списаний: ${formatInteger(count)}`,
+      )
+      setDeleteOpen(false)
+      onClear()
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setPendingMode(null)
+    }
+  }
+
+  return (
+    <>
+      <SelectionBulkBar count={count} onClear={onClear} pending={Boolean(pendingMode)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="icon-sm"
+          className="text-destructive hover:text-destructive"
+          aria-label="Удалить"
+          disabled={Boolean(pendingMode)}
+          onClick={() => setDeleteOpen(true)}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </SelectionBulkBar>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Отменить списания?"
+        description={
+          count === 1
+            ? '«Отменить списание» возвращает остаток на склад. «Скрыть запись» только убирает документ из списка.'
+            : `Выбрано документов: ${formatInteger(count)}. «Отменить» возвращает остаток, «Скрыть» только убирает из списка.`
+        }
+        cancelLabel="Закрыть"
+        confirmLabel="Отменить списания"
+        extraAction={{
+          label: 'Скрыть записи',
+          variant: 'outline',
+          isPending: pendingMode === 'hide',
+          onClick: () => void runDelete('hide'),
+        }}
+        isPending={pendingMode === 'reverse'}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void runDelete('reverse')}
+      />
+    </>
+  )
+}

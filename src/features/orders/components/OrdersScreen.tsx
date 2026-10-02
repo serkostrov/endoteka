@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 
 import { ErrorState } from '@/components/shared/ErrorState'
 import { FilterBar } from '@/components/shared/FilterBar'
+import { activeFilterControlClass } from '@/components/shared/active-filter-style'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
@@ -27,6 +28,7 @@ import { ReferenceSetCode } from '@/lib/constants/references'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
+import { cn } from '@/lib/utils'
 
 import { CreateOrderDialog } from './CreateOrderDialog'
 import { OrderBulkActions } from './OrderBulkActions'
@@ -332,14 +334,14 @@ export function OrdersScreen() {
   const statusOptions = (catalogQuery.data ?? []).filter((item) => item.isActive)
 
   return (
-    <div className="flex min-h-0 w-full min-w-0 flex-col gap-4">
+    <div className="flex min-h-0 w-full min-w-0 flex-col gap-2">
       <PageHeader
         title="Заказы"
         titleExtra={<OrdersViewSwitcher value={view} onChange={setView} />}
         description={
           isList
-            ? 'Все заказы списком. Карточка открывается справа.'
-            : 'Доска ремонта по этапам. Карточка открывается справа.'
+            ? 'Все ремонтные заказы в виде таблицы.'
+            : 'Заказы на доске по этапам ремонта.'
         }
       />
 
@@ -348,20 +350,20 @@ export function OrdersScreen() {
           <SegmentedFilter
             aria-label="Назначение"
             value={assignmentFilter}
+            inactiveValues={['all']}
             options={[
-              { value: 'all', label: 'Все заказы' },
-              { value: 'me', label: 'Назначены мне' },
+              { value: 'all', label: 'Все' },
+              { value: 'me', label: 'Мне' },
             ]}
             onChange={setAssignmentFilter}
           />
           {attentionOnly || activeOnly ? (
             <Button
               type="button"
-              variant="outline"
               onClick={() => patchFilters({ attention: null, active: null })}
             >
               {attentionOnly ? 'Требуют внимания' : 'Только активные'}
-              <span className="text-muted-foreground">Сбросить</span>
+              <span className="opacity-80">Сбросить</span>
             </Button>
           ) : null}
           <SearchInput
@@ -374,7 +376,11 @@ export function OrdersScreen() {
             }}
             label="Поиск заказов"
             placeholder="Номер, клиент или серийный номер"
-            className="min-w-[12rem] max-w-none flex-1"
+            className={cn(
+              'min-w-[12rem] max-w-none flex-1',
+              search.trim().length > 0 &&
+                '[&_input]:border-primary [&_input]:bg-primary [&_input]:text-primary-foreground [&_input]:placeholder:text-primary-foreground/70 [&_svg]:text-primary-foreground',
+            )}
           />
           {canCreate ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
@@ -391,7 +397,10 @@ export function OrdersScreen() {
               patchFilters({ responsible: next, attention: null, active: null })
             }}
           >
-            <SelectTrigger aria-label="Фильтр по ответственному" className="w-auto min-w-0 flex-1">
+            <SelectTrigger
+              aria-label="Фильтр по ответственному"
+              className={activeFilterControlClass(responsibleParam !== 'all', 'w-auto min-w-0 flex-1')}
+            >
               <SelectValue placeholder="Ответственный" />
             </SelectTrigger>
             <SelectContent searchable>
@@ -409,7 +418,10 @@ export function OrdersScreen() {
             value={statusCode}
             onValueChange={(value) => patchFilters({ status: value, attention: null, active: null })}
           >
-            <SelectTrigger aria-label="Фильтр по статусу" className="w-auto min-w-0 flex-1">
+            <SelectTrigger
+              aria-label="Фильтр по статусу"
+              className={activeFilterControlClass(statusCode !== 'all', 'w-auto min-w-0 flex-1')}
+            >
               <SelectValue placeholder="Статус" />
             </SelectTrigger>
             <SelectContent searchable>
@@ -426,7 +438,10 @@ export function OrdersScreen() {
             value={customerId}
             onValueChange={(value) => patchFilters({ customer: value, attention: null, active: null })}
           >
-            <SelectTrigger aria-label="Фильтр по клиенту" className="w-auto min-w-0 flex-1">
+            <SelectTrigger
+              aria-label="Фильтр по клиенту"
+              className={activeFilterControlClass(customerId !== 'all', 'w-auto min-w-0 flex-1')}
+            >
               <SelectValue placeholder="Клиент" />
             </SelectTrigger>
             <SelectContent searchable>
@@ -440,7 +455,10 @@ export function OrdersScreen() {
           </Select>
 
           <Select value={groupId} onValueChange={setGroupFilter}>
-            <SelectTrigger aria-label="Фильтр по группе прибора" className="w-auto min-w-0 flex-1">
+            <SelectTrigger
+              aria-label="Фильтр по группе прибора"
+              className={activeFilterControlClass(groupId !== 'all', 'w-auto min-w-0 flex-1')}
+            >
               <SelectValue placeholder="Группа" />
             </SelectTrigger>
             <SelectContent searchable>
@@ -460,7 +478,10 @@ export function OrdersScreen() {
             onValueChange={setBrandFilter}
             disabled={groupId !== 'all' && brandOptions.length === 0}
           >
-            <SelectTrigger aria-label="Фильтр по бренду" className="w-auto min-w-0 flex-1">
+            <SelectTrigger
+              aria-label="Фильтр по бренду"
+              className={activeFilterControlClass(brandId !== 'all', 'w-auto min-w-0 flex-1')}
+            >
               <SelectValue placeholder="Бренд" />
             </SelectTrigger>
             <SelectContent searchable>
@@ -478,7 +499,10 @@ export function OrdersScreen() {
             onValueChange={(value) => patchFilters({ model: value, attention: null, active: null })}
             disabled={brandId !== 'all' && modelOptions.length === 0}
           >
-            <SelectTrigger aria-label="Фильтр по модели" className="w-auto min-w-0 flex-1">
+            <SelectTrigger
+              aria-label="Фильтр по модели"
+              className={activeFilterControlClass(modelId !== 'all', 'w-auto min-w-0 flex-1')}
+            >
               <SelectValue placeholder="Модель" />
             </SelectTrigger>
             <SelectContent searchable>

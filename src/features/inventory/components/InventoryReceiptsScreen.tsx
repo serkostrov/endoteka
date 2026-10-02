@@ -14,6 +14,7 @@ import { formatDate, formatDateTime } from '@/lib/utils/date'
 
 import { InventoryReceiptSheet } from './InventoryReceiptSheet'
 import { ReceiveStockSheet } from './ReceiveStockSheet'
+import { ReceiptBulkActions } from './ReceiptBulkActions'
 import { ReceiptDeleteControl } from './ReceiptDeleteControl'
 import { useInventoryReceipts } from '../hooks/use-inventory'
 import type { InventoryReceiptListItem } from '../services/inventory-service'
@@ -23,6 +24,7 @@ export function InventoryReceiptsScreen() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const receiptsQuery = useInventoryReceipts(page, pageSize)
   const receiptId = searchParams.get('receipt')
@@ -44,13 +46,14 @@ export function InventoryReceiptsScreen() {
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+    setSelectedIds([])
   }
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Приходы"
-        description="Приход добавляет остаток. Состав работ и списание уменьшают. Удаление из заказа возвращает на склад."
+        description="Документы поступления товара на склад."
         actions={
           canReceive ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
@@ -59,6 +62,10 @@ export function InventoryReceiptsScreen() {
           ) : null
         }
       />
+
+      {selectedIds.length > 0 ? (
+        <ReceiptBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
+      ) : null}
 
       <DataTable
         caption="Приходы"
@@ -69,10 +76,17 @@ export function InventoryReceiptsScreen() {
         emptyTitle="Приходов нет"
         emptyDescription="Оформите поступление, чтобы появились партии."
         onRowClick={(row) => openReceipt(row.id)}
+        selection={{
+          selectedIds,
+          onSelectedIdsChange: setSelectedIds,
+        }}
         pagination={{
           page,
           pageCount,
-          onPageChange: setPage,
+          onPageChange: (next) => {
+            setPage(next)
+            setSelectedIds([])
+          },
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -101,13 +115,14 @@ export function InventoryReceiptsScreen() {
             ? [
                 {
                   id: 'actions',
-                  header: '',
+                  header: 'Действия',
                   className: 'w-[1%] whitespace-nowrap',
                   cell: (row: InventoryReceiptListItem) => (
                     <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
                       <ReceiptDeleteControl
                         receipt={{ id: row.id, supplier: row.supplier }}
                         onDeleted={() => {
+                          setSelectedIds((ids) => ids.filter((id) => id !== row.id))
                           if (receiptId === row.id) {
                             closeReceipt()
                           }

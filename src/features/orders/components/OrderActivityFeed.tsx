@@ -109,10 +109,10 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
   const showComposer = canWrite || canCreateTask
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b px-3 py-2">
-        <p className="text-sm font-medium">История</p>
-        <p className="text-xs text-muted-foreground">События, фото, ссылки и задачи заказа</p>
+    <div className="flex h-full min-h-0 flex-col text-[13px] leading-snug text-foreground/80">
+      <div className="border-b border-border/70 px-3 py-2">
+        <p className="text-xs font-medium text-foreground/90">История</p>
+        <p className="text-[11px] text-muted-foreground">События, фото, ссылки и задачи заказа</p>
       </div>
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {events.length === 0 ? (
@@ -122,13 +122,13 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
             description="Напишите событие, прикрепите фото или создайте задачу."
           />
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {dayGroups.map((group) => (
               <section key={group.label}>
-                <h3 className="mb-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                <h3 className="mb-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                   {group.label}
                 </h3>
-                <ol className="relative space-y-4 border-l border-border pl-4">
+                <ol className="relative space-y-3 border-l border-border/70 pl-4">
                   {group.entries.map((entry) => {
                     if (entry.kind === 'attachments') {
                       const head = entry.events[0]
@@ -145,19 +145,19 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                       }
                       return (
                         <li key={entry.events.map((event) => event.id).join('-')} className="relative">
-                          <span className="absolute top-1.5 -left-5 size-2 rounded-full bg-primary" />
+                          <span className="absolute top-1.5 -left-5 size-1.5 rounded-full bg-muted-foreground/50" />
                           <div className="mb-1 flex flex-wrap items-center gap-2">
-                            <span className="rounded-md bg-info/12 px-1.5 py-0.5 text-xs font-medium text-info">
+                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                               {orderJournalEventTypeLabel(OrderJournalEventType.Attachment)}
                             </span>
-                            <span className="text-xs text-muted-foreground">
+                            <span className="text-[11px] text-muted-foreground">
                               {toDate(head.createdAt)
                                 ? format(toDate(head.createdAt) as Date, 'HH:mm')
                                 : ''}
                             </span>
                           </div>
                           {head.actorName ? (
-                            <p className="mt-0.5 text-xs text-muted-foreground">{head.actorName}</p>
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">{head.actorName}</p>
                           ) : null}
                           <JournalAttachmentBatch
                             attachments={batchAttachments}
@@ -172,12 +172,12 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                     const event = entry.event
                     return (
                       <li key={event.id} className="relative">
-                        <span className="absolute top-1.5 -left-5 size-2 rounded-full bg-primary" />
+                        <span className="absolute top-1.5 -left-5 size-1.5 rounded-full bg-muted-foreground/50" />
                         <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span className="rounded-md bg-info/12 px-1.5 py-0.5 text-xs font-medium text-info">
+                          <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
                             {orderJournalEventTypeLabel(event.eventType)}
                           </span>
-                          <span className="text-xs text-muted-foreground">
+                          <span className="text-[11px] text-muted-foreground">
                             {toDate(event.createdAt)
                               ? format(toDate(event.createdAt) as Date, 'HH:mm')
                               : ''}
@@ -187,18 +187,18 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                           <p
                             className={
                               event.eventType === OrderJournalEventType.Comment
-                                ? 'text-sm whitespace-pre-wrap'
-                                : 'text-sm'
+                                ? 'whitespace-pre-wrap'
+                                : undefined
                             }
                           >
                             {event.summary}
                           </p>
                         )}
                         {event.actorName ? (
-                          <p className="mt-0.5 text-xs text-muted-foreground">{event.actorName}</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{event.actorName}</p>
                         ) : null}
                         {event.changes.length > 0 ? (
-                          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                          <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
                             {event.changes.map((change) => (
                               <li key={`${event.id}-${change.field}`}>
                                 {change.label}: {formatJournalValue(change.from)} →{' '}
@@ -499,8 +499,8 @@ function JournalTaskPreview({
         role={canOpenSheet ? 'button' : undefined}
         tabIndex={canOpenSheet ? 0 : undefined}
         className={cn(
-          'mt-2 w-full rounded-md border bg-background px-2.5 py-2 text-left',
-          canOpenSheet && 'cursor-pointer hover:bg-accent/40',
+          'mt-2 w-full rounded-md border border-border/70 bg-background/70 px-2.5 py-2 text-left',
+          canOpenSheet && 'cursor-pointer hover:bg-background/90',
           task.completed && 'opacity-80',
         )}
         onClick={canOpenSheet ? () => onOpen(task.id) : undefined}
@@ -518,10 +518,10 @@ function JournalTaskPreview({
         <div className="flex items-start gap-2">
           <TaskCompleteControl task={task} />
           <div className="min-w-0 flex-1">
-            <p className={cn('text-sm font-medium', task.completed && 'text-muted-foreground line-through')}>
+            <p className={cn('text-[13px] font-medium', task.completed && 'text-muted-foreground line-through')}>
               {task.title}
             </p>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <User className="size-3" />
                 {task.assigneeName || 'не назначен'}
@@ -547,10 +547,10 @@ function JournalTaskPreview({
   }
 
   return (
-    <div className="mt-2 flex items-start gap-2 rounded-md border bg-muted/40 px-2.5 py-2">
+    <div className="mt-2 flex items-start gap-2 rounded-md border border-border/70 bg-background/50 px-2.5 py-2">
       <ListTodo className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
       <div className="min-w-0">
-        <p className="text-sm">{event.summary}</p>
+        <p className="text-[13px]">{event.summary}</p>
       </div>
     </div>
   )

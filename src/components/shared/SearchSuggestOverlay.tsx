@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils'
  * потомок не сжимается и overflow-y-auto не включается.
  */
 const LIST_MAX_H =
-  'max-h-[min(28rem,calc(var(--radix-popover-content-available-height,100dvh)-5rem))]'
+  'max-h-[min(16rem,calc(var(--radix-popover-content-available-height,100dvh)-5rem))]'
 
 type SearchSuggestOverlayProps = {
   open: boolean
@@ -18,6 +18,8 @@ type SearchSuggestOverlayProps = {
   children: ReactNode
   panel: ReactNode
   contentClassName?: string
+  /** Сторона выпадающего списка относительно поля. */
+  side?: 'top' | 'bottom'
 }
 
 export function SearchSuggestOverlay({
@@ -26,6 +28,7 @@ export function SearchSuggestOverlay({
   children,
   panel,
   contentClassName,
+  side = 'bottom',
 }: SearchSuggestOverlayProps) {
   const anchorRef = useRef<HTMLDivElement>(null)
 
@@ -45,7 +48,7 @@ export function SearchSuggestOverlay({
       </PopoverAnchor>
       <PopoverContent
         align="start"
-        side="bottom"
+        side={side}
         sideOffset={4}
         collisionPadding={12}
         avoidCollisions

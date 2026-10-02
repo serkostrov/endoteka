@@ -12,7 +12,7 @@ export function RolesScreen() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Роли и права" description="Матрица доступа по ролям сервисного центра." />
+      <PageHeader title="Роли и права" description="Настройка прав доступа по ролям сотрудников." />
       <DataTable
         caption="Роли"
         isLoading={rolesQuery.isLoading}

@@ -64,7 +64,7 @@ export function RoleDetailScreen() {
     <div className="space-y-4">
       <PageHeader
         title={role.name}
-        description={role.description ?? 'Матрица прав этой роли.'}
+        description={role.description ?? 'Права доступа для сотрудников с этой ролью.'}
         actions={
           canUpdate ? (
             <Button type="button" onClick={() => setConfirmOpen(true)} disabled={!isDirty || save.isPending}>

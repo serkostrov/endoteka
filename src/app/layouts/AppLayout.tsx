@@ -52,7 +52,7 @@ export function AppLayout() {
 
   return (
     <AppChromeProvider value={chromeValue}>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex h-svh overflow-hidden bg-background print:h-auto print:overflow-visible">
         <a
           href="#main-content"
           className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-3 focus:rounded-md focus:bg-card focus:px-3 focus:py-2 print:hidden"
@@ -64,8 +64,8 @@ export function AppLayout() {
           <aside
             className={
               sidebarCollapsed
-                ? 'sticky top-0 h-screen w-16 shrink-0 border-r border-sidebar-border print:hidden'
-                : 'sticky top-0 h-screen w-max max-w-[15rem] shrink-0 border-r border-sidebar-border print:hidden'
+                ? 'flex h-full w-12 shrink-0 flex-col overflow-hidden border-r border-sidebar-border print:hidden'
+                : 'flex h-full w-max max-w-[14rem] shrink-0 flex-col overflow-hidden border-r border-sidebar-border print:hidden'
             }
           >
             <AppSidebar
@@ -86,7 +86,7 @@ export function AppLayout() {
           </Sheet>
         )}
 
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overscroll-y-contain">
           <main id="main-content" className="flex-1 p-3 md:p-4 print:p-0">
             <SheetStackProvider>
               <Suspense fallback={<LoadingState />}>

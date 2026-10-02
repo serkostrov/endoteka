@@ -182,7 +182,7 @@ export function ReferenceSetScreen() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title={set.name} description={set.description ?? 'Значения этого справочника.'} />
+      <PageHeader title={set.name} description={set.description ?? 'Значения выбранного справочника.'} />
 
       <FilterBar
         end={

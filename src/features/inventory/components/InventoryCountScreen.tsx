@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Package, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
-import { DataTable } from '@/components/shared/DataTable'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
@@ -22,6 +22,14 @@ import {
   SheetTitle,
   useSheetExitPresence,
 } from '@/components/ui/sheet'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   InventoryCountLineFilter,
   InventoryCountStatus,
@@ -49,11 +57,16 @@ import {
   useSetInventoryCountLineActual,
   useStartInventoryCount,
 } from '../hooks/use-inventory'
-import type { InventoryCountDocument, InventoryCountLine } from '../services/counts-service'
+import type {
+  InventoryCountDocument,
+  InventoryCountLine,
+  InventoryCountStatementLine,
+} from '../services/counts-service'
 import { findInventoryItemsByBarcode, type InventoryItem } from '../services/inventory-service'
 
 /** Загружаем все строки документа без постраничной навигации в UI. */
 const COUNT_LINES_PAGE_SIZE = 2000
+const cellPad = 'px-2.5 py-2'
 
 export function InventoryCountSheet({
   countId,
@@ -98,7 +111,7 @@ function InventoryCountSheetContent({ countId, onClose }: { countId: string; onC
   return (
     <SheetContent
       side="right"
-      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,40rem)]"
+      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,56rem)]"
       actions={
         document ? (
           <SheetEntityToolbar onDelete={canDelete ? () => setDeleteOpen(true) : undefined} />
@@ -224,7 +237,7 @@ function CountDocumentBody({
           description={
             document.completedAt
               ? `Ответственный: ${document.actorName || '—'}. Проведена ${formatDateTime(document.completedAt)}`
-              : `Ответственный: ${document.actorName || '—'}. Факт сохраняется по строке, проведение пишет журнал.`
+              : `Ответственный: ${document.actorName || '—'}`
           }
           actions={
             <div className="flex flex-wrap gap-2">
@@ -294,7 +307,7 @@ function CountDocumentBody({
             <p className="mt-1 text-sm text-muted-foreground">
               {document.completedAt
                 ? `Ответственный: ${document.actorName || '—'}. Проведена ${formatDateTime(document.completedAt)}`
-                : `Ответственный: ${document.actorName || '—'}. Факт сохраняется по строке, проведение пишет журнал.`}
+                : `Ответственный: ${document.actorName || '—'}`}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -402,7 +415,7 @@ function CountDocumentBody({
       </div>
 
       {tab === 'count' ? (
-        <SectionCard title="Позиции" className="gap-3 py-4">
+        <SectionCard title="Позиции" flat className="gap-3">
           <div className="space-y-3">
             {editable ? (
               <ItemSearchField
@@ -413,105 +426,41 @@ function CountDocumentBody({
               />
             ) : null}
 
-            <DataTable
-              caption="Строки инвентаризации"
+            <CountLinesTable
+              lines={linesQuery.data?.items ?? []}
               isLoading={linesQuery.isLoading}
               error={linesQuery.error ? getErrorMessage(linesQuery.error) : null}
               onRetry={() => void linesQuery.refetch()}
-              data={linesQuery.data?.items ?? []}
-              getRowId={(row) => row.id}
-              emptyTitle="Позиций нет"
+              editable={editable}
               emptyDescription={editable ? 'Найдите товар выше или считайте штрихкод.' : 'В документе нет строк.'}
-              columns={[
-                { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-                {
-                  id: 'code',
-                  header: 'Код',
-                  className: 'hidden md:table-cell',
-                  cell: (row) => row.itemCode,
-                },
-                { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
-                {
-                  id: 'actual',
-                  header: 'Факт',
-                  cell: (row) =>
-                    editable ? (
-                      <CountActualInput
-                        line={row}
-                        disabled={setActual.isPending}
-                        onSave={(actual) => {
-                          setActual.mutate(
-                            { lineId: row.id, actual },
-                            { onError: (error) => toast.error(getErrorMessage(error)) },
-                          )
-                        }}
-                      />
-                    ) : (
-                      row.actualQuantity === null ? '—' : formatQuantity(row.actualQuantity)
-                    ),
-                },
-                {
-                  id: 'diff',
-                  header: 'Разница',
-                  cell: (row) => <DifferenceCell difference={row.difference} />,
-                },
-                {
-                  id: 'unit',
-                  header: 'Ед.',
-                  cell: (row) => row.unitName,
-                },
-                ...(editable
-                  ? [
-                      {
-                        id: 'remove',
-                        header: '',
-                        cell: (row: InventoryCountLine) => (
-                          <IconActionButton
-                            label="Убрать"
-                            variant="ghost"
-                            disabled={removeLine.isPending}
-                            onClick={() => {
-                              removeLine.mutate(row.id, {
-                                onError: (error) => toast.error(getErrorMessage(error)),
-                              })
-                            }}
-                          >
-                            <Trash2 />
-                          </IconActionButton>
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
+              setActualPending={setActual.isPending}
+              removePending={removeLine.isPending}
+              onSaveActual={(lineId, actual) => {
+                setActual.mutate(
+                  { lineId, actual },
+                  { onError: (error) => toast.error(getErrorMessage(error)) },
+                )
+              }}
+              onRemove={(lineId) => {
+                removeLine.mutate(lineId, {
+                  onError: (error) => toast.error(getErrorMessage(error)),
+                })
+              }}
             />
           </div>
         </SectionCard>
       ) : (
         <SectionCard
           title="Акт расхождений"
-          description="Сюда попадают только строки, где факт уже заполнен и отличается от ожидаемого остатка."
+          description="Строки, где факт отличается от ожидаемого остатка."
+          flat
         >
-          <DataTable
-            caption="Акт расхождений"
+          <CountStatementTable
+            lines={statementQuery.data?.lines ?? []}
             isLoading={statementQuery.isLoading}
             error={statementQuery.error ? getErrorMessage(statementQuery.error) : null}
             onRetry={() => void statementQuery.refetch()}
-            data={statementQuery.data?.lines ?? []}
-            getRowId={(row) => row.id}
-            emptyTitle="Расхождений нет"
-            emptyDescription="После заполнения факта здесь появятся отличия от ожидаемого остатка."
-            columns={[
-              { id: 'name', header: 'Позиция', cell: (row) => row.itemName },
-              { id: 'expected', header: 'Ожидалось', cell: (row) => formatQuantity(row.expectedQuantity) },
-              { id: 'actual', header: 'Факт', cell: (row) => formatQuantity(row.actualQuantity) },
-              {
-                id: 'diff',
-                header: 'Разница',
-                cell: (row) => <DifferenceCell difference={row.difference} />,
-              },
-              { id: 'unit', header: 'Ед.', cell: (row) => row.unitName },
-              { id: 'actor', header: 'Ответственный', cell: () => document.actorName || '—' },
-            ]}
+            actorName={document.actorName}
           />
         </SectionCard>
       )}
@@ -535,10 +484,21 @@ function DifferenceCell({ difference }: { difference: number | null }) {
     return <span className="text-muted-foreground">—</span>
   }
   if (difference === 0) {
-    return <span>{formatQuantity(0)}</span>
+    return <span className="tabular-nums">{formatQuantity(0)}</span>
   }
   const label = `${difference > 0 ? '+' : ''}${formatQuantity(difference)}`
-  return <span className={difference > 0 ? 'font-medium text-amber-700 dark:text-amber-400' : 'font-medium text-destructive'}>{label}</span>
+  return (
+    <span
+      className={cn(
+        'tabular-nums',
+        difference > 0
+          ? 'font-medium text-amber-700 dark:text-amber-400'
+          : 'font-medium text-destructive',
+      )}
+    >
+      {label}
+    </span>
+  )
 }
 
 function CountActualInput({
@@ -571,7 +531,7 @@ function CountActualInput({
       type="number"
       min={0}
       step="1"
-      className="h-8 w-24"
+      className="h-8 w-[4.75rem] text-right tabular-nums"
       disabled={disabled}
       defaultValue={line.actualQuantity === null ? '' : String(line.actualQuantity)}
       aria-label={`Факт ${line.itemName}`}
@@ -583,5 +543,278 @@ function CountActualInput({
         }
       }}
     />
+  )
+}
+
+function lineSubtitle(line: { itemCode: string; itemArticle: string; itemBarcode?: string }) {
+  return [line.itemCode, line.itemArticle, line.itemBarcode].filter(Boolean).join(' · ')
+}
+
+function CountLinesTable({
+  lines,
+  isLoading,
+  error,
+  onRetry,
+  editable,
+  emptyDescription,
+  setActualPending,
+  removePending,
+  onSaveActual,
+  onRemove,
+}: {
+  lines: InventoryCountLine[]
+  isLoading: boolean
+  error: string | null
+  onRetry: () => void
+  editable: boolean
+  emptyDescription: string
+  setActualPending: boolean
+  removePending: boolean
+  onSaveActual: (lineId: string, actual: number) => void
+  onRemove: (lineId: string) => void
+}) {
+  if (error) {
+    return <ErrorState description={error} onRetry={onRetry} />
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 overflow-hidden rounded-xl border bg-card p-3" aria-busy="true">
+        <div className="h-10 animate-pulse rounded-md bg-muted" />
+        <div className="h-11 animate-pulse rounded-md bg-muted" />
+        <div className="h-11 animate-pulse rounded-md bg-muted" />
+      </div>
+    )
+  }
+
+  if (lines.length === 0) {
+    return (
+      <EmptyState
+        title="Позиций нет"
+        description={emptyDescription}
+        className="rounded-xl border border-dashed bg-muted/20 py-10"
+      />
+    )
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <Table className="table-fixed">
+        <colgroup>
+          <col style={{ width: '2rem' }} />
+          <col />
+          <col style={{ width: '5.5rem' }} />
+          <col style={{ width: '6rem' }} />
+          <col style={{ width: '5rem' }} />
+          <col style={{ width: '3rem' }} />
+          {editable ? <col style={{ width: '2.25rem' }} /> : null}
+        </colgroup>
+        <TableHeader>
+          <TableRow className="border-b bg-muted/50 hover:bg-muted/50">
+            <TableHead className={cn(cellPad, 'h-9')} aria-hidden />
+            <TableHead className={cn(cellPad, 'h-9 text-xs font-medium text-muted-foreground')}>
+              Наименование
+            </TableHead>
+            <TableHead
+              className={cn(cellPad, 'h-9 text-right text-xs font-medium text-muted-foreground')}
+            >
+              Ожид.
+            </TableHead>
+            <TableHead
+              className={cn(cellPad, 'h-9 text-right text-xs font-medium text-muted-foreground')}
+            >
+              Факт
+            </TableHead>
+            <TableHead
+              className={cn(cellPad, 'h-9 text-right text-xs font-medium text-muted-foreground')}
+            >
+              Δ
+            </TableHead>
+            <TableHead className={cn(cellPad, 'h-9 text-xs font-medium text-muted-foreground')}>
+              Ед.
+            </TableHead>
+            {editable ? <TableHead className={cn(cellPad, 'h-9')} aria-hidden /> : null}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lines.map((line, index) => {
+            const subtitle = lineSubtitle(line)
+            return (
+              <TableRow
+                key={line.id}
+                className={cn(
+                  'group/row border-b last:border-b-0',
+                  index % 2 === 1 && 'bg-muted/25',
+                )}
+              >
+                <TableCell className={cn(cellPad, 'align-middle text-muted-foreground')}>
+                  <Package className="size-3.5 opacity-70" aria-hidden />
+                  <span className="sr-only">Позиция</span>
+                </TableCell>
+                <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal align-middle')}>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-primary">{line.itemName}</p>
+                    {subtitle ? (
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{subtitle}</p>
+                    ) : null}
+                  </div>
+                </TableCell>
+                <TableCell
+                  className={cn(cellPad, 'align-middle text-right text-sm tabular-nums')}
+                >
+                  {formatQuantity(line.expectedQuantity)}
+                </TableCell>
+                <TableCell className={cn(cellPad, 'align-middle text-right')}>
+                  {editable ? (
+                    <CountActualInput
+                      line={line}
+                      disabled={setActualPending}
+                      onSave={(actual) => onSaveActual(line.id, actual)}
+                    />
+                  ) : (
+                    <span className="text-sm tabular-nums">
+                      {line.actualQuantity === null ? '—' : formatQuantity(line.actualQuantity)}
+                    </span>
+                  )}
+                </TableCell>
+                <TableCell className={cn(cellPad, 'align-middle text-right text-sm')}>
+                  <DifferenceCell difference={line.difference} />
+                </TableCell>
+                <TableCell className={cn(cellPad, 'align-middle text-xs text-muted-foreground')}>
+                  {line.unitName}
+                </TableCell>
+                {editable ? (
+                  <TableCell className={cn(cellPad, 'align-middle')}>
+                    <IconActionButton
+                      label="Убрать"
+                      variant="ghost"
+                      size="icon-xs"
+                      className="opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100 text-destructive hover:text-destructive"
+                      disabled={removePending}
+                      onClick={() => onRemove(line.id)}
+                    >
+                      <Trash2 />
+                    </IconActionButton>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
+function CountStatementTable({
+  lines,
+  isLoading,
+  error,
+  onRetry,
+  actorName,
+}: {
+  lines: InventoryCountStatementLine[]
+  isLoading: boolean
+  error: string | null
+  onRetry: () => void
+  actorName: string
+}) {
+  if (error) {
+    return <ErrorState description={error} onRetry={onRetry} />
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 overflow-hidden rounded-xl border bg-card p-3" aria-busy="true">
+        <div className="h-10 animate-pulse rounded-md bg-muted" />
+        <div className="h-11 animate-pulse rounded-md bg-muted" />
+      </div>
+    )
+  }
+
+  if (lines.length === 0) {
+    return (
+      <EmptyState
+        title="Расхождений нет"
+        description="После заполнения факта здесь появятся отличия от ожидаемого остатка."
+        className="rounded-xl border border-dashed bg-muted/20 py-10"
+      />
+    )
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border bg-card">
+      <Table className="table-fixed">
+        <colgroup>
+          <col style={{ width: '2rem' }} />
+          <col />
+          <col style={{ width: '5.5rem' }} />
+          <col style={{ width: '5.5rem' }} />
+          <col style={{ width: '5rem' }} />
+          <col style={{ width: '3rem' }} />
+        </colgroup>
+        <TableHeader>
+          <TableRow className="border-b bg-muted/50 hover:bg-muted/50">
+            <TableHead className={cn(cellPad, 'h-9')} aria-hidden />
+            <TableHead className={cn(cellPad, 'h-9 text-xs font-medium text-muted-foreground')}>
+              Наименование
+            </TableHead>
+            <TableHead
+              className={cn(cellPad, 'h-9 text-right text-xs font-medium text-muted-foreground')}
+            >
+              Ожид.
+            </TableHead>
+            <TableHead
+              className={cn(cellPad, 'h-9 text-right text-xs font-medium text-muted-foreground')}
+            >
+              Факт
+            </TableHead>
+            <TableHead
+              className={cn(cellPad, 'h-9 text-right text-xs font-medium text-muted-foreground')}
+            >
+              Δ
+            </TableHead>
+            <TableHead className={cn(cellPad, 'h-9 text-xs font-medium text-muted-foreground')}>
+              Ед.
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lines.map((line, index) => {
+            const subtitle = [line.itemCode, line.itemArticle, actorName].filter(Boolean).join(' · ')
+            return (
+              <TableRow
+                key={line.id}
+                className={cn('border-b last:border-b-0', index % 2 === 1 && 'bg-muted/25')}
+              >
+                <TableCell className={cn(cellPad, 'align-middle text-muted-foreground')}>
+                  <Package className="size-3.5 opacity-70" aria-hidden />
+                </TableCell>
+                <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal align-middle')}>
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{line.itemName}</p>
+                    {subtitle ? (
+                      <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{subtitle}</p>
+                    ) : null}
+                  </div>
+                </TableCell>
+                <TableCell className={cn(cellPad, 'align-middle text-right text-sm tabular-nums')}>
+                  {formatQuantity(line.expectedQuantity)}
+                </TableCell>
+                <TableCell className={cn(cellPad, 'align-middle text-right text-sm tabular-nums')}>
+                  {formatQuantity(line.actualQuantity)}
+                </TableCell>
+                <TableCell className={cn(cellPad, 'align-middle text-right text-sm')}>
+                  <DifferenceCell difference={line.difference} />
+                </TableCell>
+                <TableCell className={cn(cellPad, 'align-middle text-xs text-muted-foreground')}>
+                  {line.unitName}
+                </TableCell>
+              </TableRow>
+            )
+          })}
+        </TableBody>
+      </Table>
+    </div>
   )
 }

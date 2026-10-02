@@ -113,7 +113,7 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
       <PageHeader
         className="mb-0 shrink-0 print:hidden sm:items-center"
         title={name || 'Шаблон'}
-        description="Поля подставятся при выпуске документа."
+        description="Редактирование макета. Поля подставляются при печати."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" size="sm">

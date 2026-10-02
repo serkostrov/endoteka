@@ -55,7 +55,7 @@ export function TemplatesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Шаблоны документов"
-        description="Печатные формы и этикетки. Откройте шаблон, чтобы править макет."
+        description="Макеты печатных форм для заказов и склада."
       />
 
       <FilterBar

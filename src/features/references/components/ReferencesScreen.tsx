@@ -57,7 +57,7 @@ export function ReferencesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Параметры"
-        description="Настраиваемые словари сервисного центра. Состав значений меняется без правки программы."
+        description="Общие словари статусов, брендов, моделей и других значений."
       />
       <DataTable
         caption="Справочники"

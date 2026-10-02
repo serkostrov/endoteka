@@ -43,6 +43,11 @@ import { formatDate, formatDateTime } from '@/lib/utils/date'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
 import { DeviceClassificationFields } from './DeviceClassificationFields'
+import {
+  DeviceCompatiblePartsReadonly,
+  useDeviceTypeCompatiblePartsCount,
+} from './DeviceCompatiblePartsReadonly'
+import { DeviceTypePhotosReadonly } from './DeviceTypePhotosReadonly'
 import { WarrantyBadge } from './WarrantyBadge'
 import { CLASSIFICATION_NONE, deviceSerialLine, deviceTitle, emptyToNull } from '../classification'
 import { useDeleteDevice, useDeviceCard, useUpdateDevice } from '../hooks/use-devices'
@@ -54,7 +59,7 @@ import {
   type DeviceWarranty,
 } from '../services/devices-service'
 
-type DeviceTab = 'card' | 'orders' | 'history' | 'warranties'
+type DeviceTab = 'card' | 'compatible' | 'orders' | 'history' | 'warranties'
 
 export function DeviceDetailSheet({
   deviceId,
@@ -173,6 +178,7 @@ function DeviceCardBody({
   const device = card.device
   const orders = device.repairs
   const pastRepairs = orders.filter((item) => item.statusCode === 'issued' || item.statusCode === 'cancelled')
+  const compatibleCount = useDeviceTypeCompatiblePartsCount(device.modelId, device.modificationId)
 
   async function handleDelete() {
     try {
@@ -202,6 +208,7 @@ function DeviceCardBody({
   const tabItems = [
     { id: 'card' as const, label: 'Карточка' },
     { id: 'orders' as const, label: 'Заказы', count: orders.length },
+    { id: 'compatible' as const, label: 'Подходящее', count: compatibleCount },
     { id: 'history' as const, label: 'История', count: pastRepairs.length },
     { id: 'warranties' as const, label: 'Гарантии', count: card.warranties.length },
   ]
@@ -248,6 +255,13 @@ function DeviceCardBody({
       />
 
       {tab === 'card' ? <DeviceCardView device={device} /> : null}
+
+      {tab === 'compatible' ? (
+        <DeviceCompatiblePartsReadonly
+          modelId={device.modelId}
+          modificationId={device.modificationId}
+        />
+      ) : null}
 
       {tab === 'orders' ? (
         <SectionCard title="Заказы" description="Все ремонты этого серийного номера, независимо от текущего клиента.">
@@ -326,6 +340,10 @@ function DeviceCardView({ device }: { device: DeviceLookup }) {
 
   return (
     <SectionCard title="Карточка" className="gap-4 py-4">
+      <DeviceTypePhotosReadonly
+        modelId={device.modelId}
+        modificationId={device.modificationId}
+      />
       <dl className="grid grid-cols-12 gap-x-4 gap-y-3 text-sm">
         <div className="col-span-12 sm:col-span-6">
           <dt className="text-muted-foreground">Гарантия</dt>
@@ -461,6 +479,9 @@ function DeviceCardEditor({
     />
   )
 
+  const watchedModelId = form.watch('modelId')
+  const watchedModificationId = form.watch('modificationId')
+
   return (
     <Form {...form}>
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
@@ -482,6 +503,11 @@ function DeviceCardEditor({
 
         <SectionCard title="Карточка">
           <div className="space-y-4">
+            <DeviceTypePhotosReadonly
+              modelId={watchedModelId}
+              modificationId={watchedModificationId}
+            />
+
             <div className="grid gap-3 sm:grid-cols-2">
               <DeviceClassificationFields form={form} parts="modification" />
               <FormItem>

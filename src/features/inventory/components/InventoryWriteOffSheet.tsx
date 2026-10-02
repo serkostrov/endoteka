@@ -54,7 +54,7 @@ function InventoryWriteOffSheetContent({
   return (
     <SheetContent
       side="right"
-      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,40rem)]"
+      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,56rem)]"
       actions={
         writeOff ? (
           <WriteOffDeleteControl

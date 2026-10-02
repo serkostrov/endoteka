@@ -18,7 +18,7 @@ import { ProfileAvatarEditor } from '@/features/auth/components/ProfileAvatarEdi
 import { useAuth, useHasPermission } from '@/features/auth'
 import { signOut } from '@/features/auth/services/auth-service'
 import { NotificationsButton } from '@/features/notifications'
-import { APP_NAME } from '@/lib/constants/app'
+import { AppBrandLogo } from '@/features/settings/components/AppBrandLogo'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
@@ -78,34 +78,29 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
     <div
       className={cn(
         'flex h-full flex-col bg-sidebar text-sidebar-foreground',
-        collapsed ? 'w-full' : 'w-max max-w-full',
+        collapsed ? 'w-full items-center' : 'w-max max-w-full',
       )}
     >
       <div
         className={cn(
-          'flex border-b border-sidebar-border',
-          collapsed ? 'flex-col items-center gap-1 px-1.5 py-2' : 'h-12 items-center gap-2 px-2',
+          'flex w-full border-b border-sidebar-border',
+          collapsed ? 'flex-col items-center gap-1 px-1 py-2' : 'h-12 items-center gap-2 px-2',
         )}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-          Э
-        </span>
-        {collapsed ? null : (
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{APP_NAME}</p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">Сервисный центр</p>
-          </div>
-        )}
+        <AppBrandLogo collapsed={collapsed} className={collapsed ? undefined : 'min-w-0 flex-1'} />
         {collapseButton}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <div className="min-h-0 w-full flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain">
         <nav
           aria-label="Основная навигация"
-          className={cn('w-max max-w-full space-y-4 py-3', collapsed ? 'px-2' : 'px-2')}
+          className={cn(
+            'space-y-4 py-3',
+            collapsed ? 'flex w-full flex-col items-center px-1' : 'w-max max-w-full px-2',
+          )}
         >
           {groups.map((group) => (
-            <div key={group.id}>
+            <div key={group.id} className={cn(collapsed && 'flex w-full flex-col items-center')}>
               {collapsed ? (
                 <span className="sr-only">{group.label}</span>
               ) : (
@@ -113,9 +108,9 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
                   {group.label}
                 </p>
               )}
-              <ul className="space-y-0.5">
+              <ul className={cn('space-y-0.5', collapsed && 'flex w-full flex-col items-center')}>
                 {group.items.map((item) => (
-                  <li key={item.to}>
+                  <li key={item.to} className={collapsed ? 'flex w-full justify-center' : undefined}>
                     <SidebarLink
                       item={item}
                       collapsed={collapsed}
@@ -132,8 +127,8 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
 
       <div
         className={cn(
-          'border-t border-sidebar-border',
-          collapsed ? 'flex flex-col items-center gap-1 p-1.5' : 'flex items-center gap-1 p-2',
+          'w-full border-t border-sidebar-border',
+          collapsed ? 'flex flex-col items-center gap-1 p-1' : 'flex items-center gap-1 p-2',
         )}
       >
         <DropdownMenu>
@@ -228,7 +223,7 @@ function SidebarLink({
       aria-current={isActive ? 'page' : undefined}
       className={cn(
         'flex items-center rounded-md text-sm transition-colors',
-        collapsed ? 'relative justify-center p-2' : 'gap-2 px-2 py-1.5 whitespace-nowrap',
+        collapsed ? 'relative size-8 justify-center' : 'gap-2 px-2 py-1.5 whitespace-nowrap',
         isActive
           ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
           : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
@@ -237,7 +232,7 @@ function SidebarLink({
       <Icon className="size-4 shrink-0" aria-hidden="true" />
       {collapsed ? <span className="sr-only">{item.label}</span> : <span className="whitespace-nowrap">{item.label}</span>}
       {count > 0 && collapsed ? (
-        <span className="absolute top-0.5 right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-medium text-primary-foreground">
+        <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-primary px-0.5 text-[9px] font-medium text-primary-foreground">
           {count > 99 ? '99+' : count}
         </span>
       ) : null}

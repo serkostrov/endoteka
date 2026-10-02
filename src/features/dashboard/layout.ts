@@ -12,10 +12,10 @@ export const DashboardFocus = {
 export type DashboardFocus = (typeof DashboardFocus)[keyof typeof DashboardFocus]
 
 export const dashboardFocusDescriptions: Record<DashboardFocus, string> = {
-  management: 'Сводка по заказам, задачам, складу и тому, что требует реакции.',
+  management: 'Сводка по заказам, задачам и складу — то, что требует внимания.',
   manager: 'Заказы и задачи, которые нужно взять в работу или проконтролировать.',
   engineer: 'Ваши заказы, диагностика и назначенные задачи.',
-  warehouse: 'Ремонт, остатки и позиции, которые нужно пополнить.',
+  warehouse: 'Ремонтные заказы, остатки и позиции к пополнению.',
 }
 
 export function getDashboardFocus(user: AuthUser | null): DashboardFocus {

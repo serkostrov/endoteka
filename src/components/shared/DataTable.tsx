@@ -63,7 +63,7 @@ type DataTableProps<T> = {
   selection?: DataTableSelection
   /** Tighter row padding for dense lists. */
   dense?: boolean
-  /** Draw a border around the table (default when dense/scrollable). */
+  /** Draw a card frame around the table (default: true). */
   framed?: boolean
   rowClassName?: (row: T) => string | undefined
   /** Approx. visible body rows before vertical scroll (header stays sticky). */
@@ -85,7 +85,7 @@ export function DataTable<T>({
   sort,
   selection,
   dense = false,
-  framed,
+  framed = true,
   rowClassName,
   maxVisibleRows,
 }: DataTableProps<T>) {
@@ -95,10 +95,11 @@ export function DataTable<T>({
 
   if (isLoading) {
     return (
-      <div className="space-y-2 rounded-lg border bg-card p-3" aria-busy="true">
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
-        <Skeleton className="h-9 w-full" />
+      <div className="space-y-2 overflow-hidden rounded-xl border bg-card p-3" aria-busy="true">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
+        <Skeleton className="h-12 w-full" />
       </div>
     )
   }
@@ -109,11 +110,10 @@ export function DataTable<T>({
 
   const canChangePageSize = Boolean(pagination?.pageSize != null && pagination.onPageSizeChange)
   const showPagination = Boolean(pagination) && (pagination!.pageCount > 1 || canChangePageSize)
-  const headClass = dense ? 'h-8 px-2 text-xs' : undefined
-  const cellClass = dense ? 'px-2 py-1.5 text-sm' : undefined
+  const headClass = dense ? 'h-8 px-2 text-xs' : 'h-10 px-3 text-xs font-medium text-muted-foreground'
+  const cellClass = dense ? 'px-2 py-1.5 text-sm' : 'min-w-0 px-3 py-2.5 align-middle whitespace-normal'
   const scrollable = typeof maxVisibleRows === 'number' && maxVisibleRows > 0
-  const showFrame = framed ?? (dense || scrollable)
-  const rowHeightRem = dense ? 2.25 : 2.75
+  const rowHeightRem = dense ? 2.25 : 3
   const headHeightRem = dense ? 2 : 2.5
   const scrollMaxHeight = scrollable
     ? `${headHeightRem + maxVisibleRows * rowHeightRem}rem`
@@ -152,7 +152,7 @@ export function DataTable<T>({
     <div className="space-y-3">
       <div
         className={cn(
-          showFrame && 'rounded-md border',
+          framed && 'overflow-hidden rounded-xl border bg-card',
           scrollable && 'overflow-auto',
         )}
         style={scrollMaxHeight ? { maxHeight: scrollMaxHeight } : undefined}
@@ -161,16 +161,14 @@ export function DataTable<T>({
           {caption ? <TableCaption className="sr-only">{caption}</TableCaption> : null}
           <TableHeader
             className={cn(
-              !scrollable && 'bg-muted/60',
               scrollable &&
                 'sticky top-0 z-10 bg-muted/95 shadow-[inset_0_-1px_0_0_var(--border)] backdrop-blur-sm [&_tr]:border-b-0',
             )}
           >
             <TableRow
               className={cn(
-                'hover:bg-transparent',
-                !scrollable && 'bg-muted/60',
-                scrollable && 'bg-muted/95',
+                'border-b hover:bg-transparent',
+                scrollable ? 'bg-muted/95' : 'bg-muted/50 hover:bg-muted/50',
               )}
             >
               {selection ? (
@@ -182,8 +180,16 @@ export function DataTable<T>({
                   />
                 </TableHead>
               ) : null}
-              {columns.map((column) => (
-                <TableHead key={column.id} className={cn(headClass, column.className)}>
+              {columns.map((column, index) => (
+                <TableHead
+                  key={column.id}
+                  className={cn(
+                    headClass,
+                    column.className,
+                    !selection && index === 0 && !dense && 'pl-4',
+                    index === columns.length - 1 && !dense && 'pr-4',
+                  )}
+                >
                   {column.sortable && sort ? (
                     <Button
                       type="button"
@@ -206,7 +212,7 @@ export function DataTable<T>({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.map((row) => {
+            {data.map((row, index) => {
               const rowId = getRowId(row)
               const clickable = Boolean(onRowClick)
               const selected = selectedIds.includes(rowId)
@@ -217,6 +223,7 @@ export function DataTable<T>({
                   data-state={selected ? 'selected' : undefined}
                   className={cn(
                     clickable && 'cursor-pointer',
+                    index % 2 === 1 && 'bg-muted/25',
                     selected && 'bg-primary/5',
                     rowClassName?.(row),
                   )}
@@ -247,8 +254,16 @@ export function DataTable<T>({
                       />
                     </TableCell>
                   ) : null}
-                  {columns.map((column) => (
-                    <TableCell key={column.id} className={cn(cellClass, column.className)}>
+                  {columns.map((column, columnIndex) => (
+                    <TableCell
+                      key={column.id}
+                      className={cn(
+                        cellClass,
+                        column.className,
+                        !selection && columnIndex === 0 && !dense && 'pl-4',
+                        columnIndex === columns.length - 1 && !dense && 'pr-4',
+                      )}
+                    >
                       {column.cell(row)}
                     </TableCell>
                   ))}

@@ -29,7 +29,7 @@ import type { Device } from '../services/devices-service'
 type DevicesTab = 'registry' | 'types'
 
 function parseTab(value: string | null): DevicesTab {
-  return value === 'types' ? 'types' : 'registry'
+  return value === 'registry' ? 'registry' : 'types'
 }
 
 export function DevicesScreen() {
@@ -72,7 +72,7 @@ export function DevicesScreen() {
 
   function setTab(next: DevicesTab) {
     const params = new URLSearchParams(searchParams)
-    if (next === 'registry') {
+    if (next === 'types') {
       params.delete('tab')
     } else {
       params.set('tab', next)
@@ -102,7 +102,7 @@ export function DevicesScreen() {
     >
       <PageHeader
         title="Приборы"
-        description="Реестр эндоскопов и дерево видов: группы, бренды, модели и модификации."
+        description="Реестр приборов и дерево видов: группы, бренды и модели."
       />
 
       <PageTabs
@@ -110,8 +110,8 @@ export function DevicesScreen() {
         value={tab}
         onChange={setTab}
         items={[
-          { id: 'registry', label: 'Реестр' },
           { id: 'types', label: 'Виды' },
+          { id: 'registry', label: 'Реестр' },
         ]}
       />
 

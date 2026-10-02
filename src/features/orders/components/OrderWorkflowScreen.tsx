@@ -92,7 +92,7 @@ export function OrderWorkflowScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Маршрут заказов"
-        description="Нумерация, допустимые переходы статусов и проверка сроков."
+        description="Нумерация заказов, допустимые переходы статусов и контроль сроков."
       />
 
       <SectionCard

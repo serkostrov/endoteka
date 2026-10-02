@@ -47,6 +47,10 @@ export const queryKeys = {
     serial: (serial: string) => ['devices', 'serial', serial] as const,
     detail: (id: string) => ['devices', 'detail', id] as const,
     warrantyDefaults: ['devices', 'warranty-defaults'] as const,
+    compatibleParts: (referenceItemId: string) =>
+      ['devices', 'compatible-parts', referenceItemId] as const,
+    itemPhotos: (referenceItemId: string) =>
+      ['devices', 'item-photos', referenceItemId] as const,
   },
   orders: {
     all: ['orders'] as const,
@@ -87,6 +91,7 @@ export const queryKeys = {
       ['inventory', 'count-lines', id, filters] as const,
     countStatement: (id: string) => ['inventory', 'count-statement', id] as const,
     orderUsage: (orderId: string) => ['inventory', 'order', orderId] as const,
+    compatibleTypes: (itemId: string) => ['inventory', 'compatible-types', itemId] as const,
   },
   services: {
     all: ['services'] as const,
@@ -156,5 +161,8 @@ export const queryKeys = {
     unreadCount: ['notifications', 'unread-count'] as const,
     settings: ['notifications', 'settings'] as const,
     telegram: ['notifications', 'telegram'] as const,
+  },
+  settings: {
+    companyLogo: ['settings', 'company-logo'] as const,
   },
 }

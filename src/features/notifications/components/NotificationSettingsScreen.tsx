@@ -92,7 +92,7 @@ export function NotificationSettingsScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Уведомления"
-        description="Событие выбирает получателей и каналы. Письма и Telegram уходят отдельно и не откатывают заказ."
+        description="Настройка событий, получателей и каналов доставки."
       />
 
       <SectionCard title="Ваш Telegram" description="Привязка чата к учётной записи сотрудника.">

@@ -156,7 +156,7 @@ export function OrderStatusesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Статусы заказов"
-        description="Каждая группа — колонка на доске. Порядок групп и статусов меняется перетаскиванием."
+        description="Группы и статусы для колонок доски заказов."
       />
 
       {grouped.length === 0 ? (

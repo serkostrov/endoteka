@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
@@ -9,6 +9,7 @@ import { FilterBar } from '@/components/shared/FilterBar'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
+import { SelectionBulkBar } from '@/components/shared/SelectionBulkBar'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -25,6 +26,7 @@ import {
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate } from '@/lib/utils/date'
+import { formatInteger } from '@/lib/utils/number'
 
 import { SaleDetailSheet } from './SaleDetailScreen'
 import { useCreateSale, useDeleteSale, useSales } from '../hooks/use-sales'
@@ -39,13 +41,21 @@ export function SalesScreen() {
   const canCreate = useHasPermission(Permission.SalesCreate)
   const canDelete = useHasPermission(Permission.SalesDelete)
   const [deleteTarget, setDeleteTarget] = useState<SaleListItem | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkPending, setBulkPending] = useState(false)
   const debouncedSearch = useDebouncedValue(search, SALES_SEARCH_DEBOUNCE_MS)
   const salesQuery = useSales(debouncedSearch, status, page, pageSize)
   const create = useCreateSale()
   const remove = useDeleteSale()
   const saleId = searchParams.get('sale')
+  const items = salesQuery.data?.items ?? []
   const total = salesQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const deletableSelected = useMemo(
+    () => items.filter((row) => selectedIds.includes(row.id) && row.status !== SaleStatus.Confirmed),
+    [items, selectedIds],
+  )
 
   function openSale(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -56,6 +66,7 @@ export function SalesScreen() {
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+    setSelectedIds([])
   }
 
   async function handleCreate() {
@@ -75,9 +86,33 @@ export function SalesScreen() {
     try {
       await remove.mutateAsync(deleteTarget.id)
       toast.success('Счёт удалён')
+      setSelectedIds((ids) => ids.filter((id) => id !== deleteTarget.id))
       setDeleteTarget(null)
     } catch (error) {
       toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (deletableSelected.length === 0) {
+      return
+    }
+    setBulkPending(true)
+    try {
+      for (const row of deletableSelected) {
+        await remove.mutateAsync(row.id)
+      }
+      toast.success(
+        deletableSelected.length === 1
+          ? 'Счёт удалён'
+          : `Удалено счетов: ${formatInteger(deletableSelected.length)}`,
+      )
+      setBulkDeleteOpen(false)
+      setSelectedIds([])
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setBulkPending(false)
     }
   }
 
@@ -85,7 +120,7 @@ export function SalesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Продажи"
-        description="Счета внешним клиентам. Остаток списывается только после подтверждения: сначала самые ранние поступления."
+        description="Оформление счетов и продаж внешним клиентам."
       />
 
       <FilterBar
@@ -102,6 +137,7 @@ export function SalesScreen() {
           onChange={(next) => {
             setSearch(next)
             setPage(1)
+            setSelectedIds([])
           }}
           label="Поиск продаж"
           placeholder="Номер счёта или покупатель"
@@ -111,6 +147,7 @@ export function SalesScreen() {
           onValueChange={(value) => {
             setStatus(value)
             setPage(1)
+            setSelectedIds([])
           }}
         >
           <SelectTrigger aria-label="Фильтр по статусу">
@@ -127,19 +164,48 @@ export function SalesScreen() {
         </Select>
       </FilterBar>
 
+      {selectedIds.length > 0 ? (
+        <SelectionBulkBar
+          count={selectedIds.length}
+          onClear={() => setSelectedIds([])}
+          pending={bulkPending}
+        >
+          {canDelete && deletableSelected.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              aria-label="Удалить"
+              disabled={bulkPending}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          ) : null}
+        </SelectionBulkBar>
+      ) : null}
+
       <DataTable
         caption="Продажи"
         isLoading={salesQuery.isLoading}
         error={salesQuery.error ? getErrorMessage(salesQuery.error) : null}
-        data={salesQuery.data?.items ?? []}
+        data={items}
         getRowId={(row) => row.id}
         emptyTitle="Продаж нет"
         emptyDescription="Создайте счёт, укажите покупателя и подтвердите списание."
         onRowClick={(row) => openSale(row.id)}
+        selection={{
+          selectedIds,
+          onSelectedIdsChange: setSelectedIds,
+        }}
         pagination={{
           page,
           pageCount,
-          onPageChange: setPage,
+          onPageChange: (next) => {
+            setPage(next)
+            setSelectedIds([])
+          },
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -203,6 +269,19 @@ export function SalesScreen() {
           }
         }}
         onConfirm={() => void handleDelete()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Удалить счета"
+        description={
+          deletableSelected.length === 1
+            ? `${deletableSelected[0]?.invoiceNumber} будет удалён без возможности восстановления.`
+            : `Будет удалено счетов: ${formatInteger(deletableSelected.length)}. Подтверждённые продажи не удаляются.`
+        }
+        confirmLabel="Удалить"
+        isPending={bulkPending || remove.isPending}
+        onOpenChange={setBulkDeleteOpen}
+        onConfirm={() => void handleBulkDelete()}
       />
       <SaleDetailSheet
         saleId={saleId}

@@ -54,7 +54,7 @@ export function DocumentsScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Документы"
-        description="Акты, накладные и этикетки заполняются из шаблона. Произвольный доступ к базе через поля запрещён."
+        description="Сформированные акты, накладные и этикетки."
       />
 
       <FilterBar

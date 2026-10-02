@@ -261,9 +261,9 @@ function SaleDocumentBody({
           </span>
         </div>
 
-        <SectionCard title="Реквизиты">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
+        <SectionCard title="Данные">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,9rem)]">
+            <div className="space-y-2">
               <Label>Покупатель</Label>
               {editable ? (
                 <CustomerPicker
@@ -277,7 +277,7 @@ function SaleDocumentBody({
                   }
                 />
               ) : (
-                <p className="text-sm">
+                <p className="truncate text-sm">
                   {document.customerName || '—'}
                   {document.customerInn ? ` ИНН ${document.customerInn}` : ''}
                   {document.customerPhone ? ` ${document.customerPhone}` : ''}

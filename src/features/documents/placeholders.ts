@@ -281,7 +281,7 @@ export const SAMPLE_PLACEHOLDER_VALUES: Record<string, string> = {
   'company.name': 'Эндотека',
   'document.number': 'ДОК-000001',
   'document.issuedAt': '2026-08-25T12:00:00',
-  'order.number': 'ЗК-0001',
+  'order.number': 'А0001',
   'order.createdAt': '2026-08-25',
   'order.status': 'В ремонте',
   'order.claimedMalfunction': 'Нет изображения',

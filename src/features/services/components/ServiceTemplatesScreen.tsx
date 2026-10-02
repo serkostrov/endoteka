@@ -58,7 +58,7 @@ export function ServiceTemplatesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Шаблоны услуг"
-        description="Справочник работ для состава заказа. Наименование уникально."
+        description="Типовые работы для состава заказа."
       />
 
       <FilterBar

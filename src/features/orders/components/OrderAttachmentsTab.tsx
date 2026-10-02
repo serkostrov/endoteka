@@ -155,9 +155,7 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
                   <TableHead>Название файла</TableHead>
                   <TableHead>Загружено</TableHead>
                   {canDelete ? (
-                    <TableHead className="w-12">
-                      <span className="sr-only">Действия</span>
-                    </TableHead>
+                    <TableHead className="w-[1%] whitespace-nowrap">Действия</TableHead>
                   ) : null}
                 </TableRow>
               </TableHeader>

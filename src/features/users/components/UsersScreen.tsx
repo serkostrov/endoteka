@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Pencil, Trash2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -7,6 +7,7 @@ import { FilterBar } from '@/components/shared/FilterBar'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
+import { SelectionBulkBar } from '@/components/shared/SelectionBulkBar'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -18,6 +19,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate } from '@/lib/utils/date'
+import { formatInteger } from '@/lib/utils/number'
 import { toast } from 'sonner'
 
 import { EditUserDialog } from './EditUserDialog'
@@ -38,6 +40,9 @@ export function UsersScreen() {
   const [inviteOpen, setInviteOpen] = useState(false)
   const [editTarget, setEditTarget] = useState<UserAccount | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<UserAccount | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkPending, setBulkPending] = useState(false)
   const debouncedSearch = useDebouncedValue(search, USER_SEARCH_DEBOUNCE_MS)
 
   const usersQuery = useUsers({
@@ -49,12 +54,18 @@ export function UsersScreen() {
   })
   const rolesQuery = useRoles()
   const deleteAccount = useDeleteUserAccount()
+  const items = usersQuery.data?.items ?? []
   const total = usersQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const deletableSelected = useMemo(
+    () => items.filter((row) => selectedIds.includes(row.id) && row.id !== user?.id),
+    [items, selectedIds, user?.id],
+  )
 
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+    setSelectedIds([])
   }
 
   async function handleDelete() {
@@ -65,9 +76,33 @@ export function UsersScreen() {
     try {
       await deleteAccount.mutateAsync(deleteTarget.id)
       toast.success('Сотрудник удалён')
+      setSelectedIds((ids) => ids.filter((id) => id !== deleteTarget.id))
       setDeleteTarget(null)
     } catch (error) {
       toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (deletableSelected.length === 0) {
+      return
+    }
+    setBulkPending(true)
+    try {
+      for (const row of deletableSelected) {
+        await deleteAccount.mutateAsync(row.id)
+      }
+      toast.success(
+        deletableSelected.length === 1
+          ? 'Сотрудник удалён'
+          : `Удалено сотрудников: ${formatInteger(deletableSelected.length)}`,
+      )
+      setBulkDeleteOpen(false)
+      setSelectedIds([])
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setBulkPending(false)
     }
   }
 
@@ -75,7 +110,7 @@ export function UsersScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Пользователи"
-        description="Сотрудники сервисного центра, роли и статус доступа."
+        description="Учётные записи сотрудников, роли и статус доступа."
       />
 
       <FilterBar
@@ -92,6 +127,7 @@ export function UsersScreen() {
           onChange={(next) => {
             setSearch(next)
             setPage(1)
+            setSelectedIds([])
           }}
           label="Поиск сотрудников"
           placeholder="Имя или email"
@@ -101,6 +137,7 @@ export function UsersScreen() {
           onValueChange={(value) => {
             setRoleId(value)
             setPage(1)
+            setSelectedIds([])
           }}
         >
           <SelectTrigger aria-label="Фильтр по роли">
@@ -120,6 +157,7 @@ export function UsersScreen() {
           onValueChange={(value) => {
             setStatus(value as typeof status)
             setPage(1)
+            setSelectedIds([])
           }}
         >
           <SelectTrigger aria-label="Фильтр по статусу">
@@ -133,18 +171,47 @@ export function UsersScreen() {
         </Select>
       </FilterBar>
 
+      {selectedIds.length > 0 ? (
+        <SelectionBulkBar
+          count={selectedIds.length}
+          onClear={() => setSelectedIds([])}
+          pending={bulkPending}
+        >
+          {canUpdate && deletableSelected.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              aria-label="Удалить"
+              disabled={bulkPending}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          ) : null}
+        </SelectionBulkBar>
+      ) : null}
+
       <DataTable
         caption="Сотрудники"
         isLoading={usersQuery.isLoading}
         error={usersQuery.error ? getErrorMessage(usersQuery.error) : null}
-        data={usersQuery.data?.items ?? []}
+        data={items}
         getRowId={(row) => row.id}
         emptyTitle="Сотрудники не найдены"
         emptyDescription="Измените фильтры или пригласите первого сотрудника."
+        selection={{
+          selectedIds,
+          onSelectedIdsChange: setSelectedIds,
+        }}
         pagination={{
           page,
           pageCount,
-          onPageChange: setPage,
+          onPageChange: (next) => {
+            setPage(next)
+            setSelectedIds([])
+          },
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -219,6 +286,19 @@ export function UsersScreen() {
           }
         }}
         onConfirm={() => void handleDelete()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Удалить сотрудников"
+        description={
+          deletableSelected.length === 1
+            ? `Учётная запись ${deletableSelected[0]?.fullName || deletableSelected[0]?.email} будет удалена без возможности восстановления.`
+            : `Будет удалено сотрудников: ${formatInteger(deletableSelected.length)}. Собственную учётную запись удалить нельзя.`
+        }
+        confirmLabel="Удалить"
+        isPending={bulkPending || deleteAccount.isPending}
+        onOpenChange={setBulkDeleteOpen}
+        onConfirm={() => void handleBulkDelete()}
       />
     </div>
   )

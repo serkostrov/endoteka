@@ -188,7 +188,7 @@ export function EntityFieldsScreen() {
     <div className="space-y-4">
       <PageHeader
         title={entityRow.name}
-        description={entityRow.description ?? 'Дополнительные поля этого раздела.'}
+        description={entityRow.description ?? 'Дополнительные поля карточек этого раздела.'}
       />
 
       {previewFields.length > 0 ? (

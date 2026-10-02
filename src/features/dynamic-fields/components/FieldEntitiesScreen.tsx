@@ -14,7 +14,7 @@ export function FieldEntitiesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Поля карточек"
-        description="Дополнительные поля по разделам. Определения хранятся отдельно от значений записей."
+        description="Настройка дополнительных полей для карточек по разделам."
       />
       <DataTable
         caption="Разделы"

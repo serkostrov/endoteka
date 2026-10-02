@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
@@ -8,6 +8,7 @@ import { DataTable } from '@/components/shared/DataTable'
 import { FilterBar } from '@/components/shared/FilterBar'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { SelectionBulkBar } from '@/components/shared/SelectionBulkBar'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,6 +31,7 @@ import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
 import { formatDateTime } from '@/lib/utils/date'
+import { formatInteger } from '@/lib/utils/number'
 
 import { useCreateInventoryCount, useDeleteInventoryCount, useInventoryCounts } from '../hooks/use-inventory'
 import type { InventoryCountListItem } from '../services/counts-service'
@@ -42,12 +44,23 @@ export function InventoryCountsScreen() {
   const [status, setStatus] = useState('all')
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<InventoryCountListItem | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkPending, setBulkPending] = useState(false)
   const canCount = useHasPermission(Permission.InventoryCount)
   const countsQuery = useInventoryCounts(status, page, pageSize)
   const remove = useDeleteInventoryCount()
   const countId = searchParams.get('count')
+  const items = countsQuery.data?.items ?? []
   const total = countsQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const deletableSelected = useMemo(
+    () =>
+      items.filter(
+        (row) => selectedIds.includes(row.id) && row.status !== InventoryCountStatus.Completed,
+      ),
+    [items, selectedIds],
+  )
 
   function openCount(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -58,6 +71,7 @@ export function InventoryCountsScreen() {
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+    setSelectedIds([])
   }
 
   async function handleDelete() {
@@ -67,9 +81,33 @@ export function InventoryCountsScreen() {
     try {
       await remove.mutateAsync(deleteTarget.id)
       toast.success('Документ удалён')
+      setSelectedIds((ids) => ids.filter((id) => id !== deleteTarget.id))
       setDeleteTarget(null)
     } catch (error) {
       toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (deletableSelected.length === 0) {
+      return
+    }
+    setBulkPending(true)
+    try {
+      for (const row of deletableSelected) {
+        await remove.mutateAsync(row.id)
+      }
+      toast.success(
+        deletableSelected.length === 1
+          ? 'Документ удалён'
+          : `Удалено документов: ${formatInteger(deletableSelected.length)}`,
+      )
+      setBulkDeleteOpen(false)
+      setSelectedIds([])
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setBulkPending(false)
     }
   }
 
@@ -77,7 +115,7 @@ export function InventoryCountsScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Инвентаризация"
-        description="Документ пересчёта. Расхождения проводятся журналом движений, остаток вручную не перезаписывается."
+        description="Пересчёт фактических остатков и фиксация расхождений."
       />
 
       <FilterBar
@@ -94,6 +132,7 @@ export function InventoryCountsScreen() {
           onValueChange={(value) => {
             setStatus(value)
             setPage(1)
+            setSelectedIds([])
           }}
         >
           <SelectTrigger aria-label="Фильтр по статусу">
@@ -110,19 +149,48 @@ export function InventoryCountsScreen() {
         </Select>
       </FilterBar>
 
+      {selectedIds.length > 0 ? (
+        <SelectionBulkBar
+          count={selectedIds.length}
+          onClear={() => setSelectedIds([])}
+          pending={bulkPending}
+        >
+          {canCount && deletableSelected.length > 0 ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              aria-label="Удалить"
+              disabled={bulkPending}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          ) : null}
+        </SelectionBulkBar>
+      ) : null}
+
       <DataTable
         caption="Документы инвентаризации"
         isLoading={countsQuery.isLoading}
         error={countsQuery.error ? getErrorMessage(countsQuery.error) : null}
-        data={countsQuery.data?.items ?? []}
+        data={items}
         getRowId={(row) => row.id}
         emptyTitle="Документов нет"
         emptyDescription="Создайте пересчёт и заполните факт сканером или вручную."
         onRowClick={(row) => openCount(row.id)}
+        selection={{
+          selectedIds,
+          onSelectedIdsChange: setSelectedIds,
+        }}
         pagination={{
           page,
           pageCount,
-          onPageChange: setPage,
+          onPageChange: (next) => {
+            setPage(next)
+            setSelectedIds([])
+          },
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -154,7 +222,7 @@ export function InventoryCountsScreen() {
           {
             id: 'created',
             header: 'Создан',
-            className: 'hidden w-[1%] md:table-cell',
+            className: 'hidden w-[1%] whitespace-nowrap md:table-cell',
             cell: (row) => formatDateTime(row.createdAt),
           },
           ...(canCount
@@ -206,6 +274,19 @@ export function InventoryCountsScreen() {
           }
         }}
         onConfirm={() => void handleDelete()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title="Удалить инвентаризации"
+        description={
+          deletableSelected.length === 1
+            ? `${deletableSelected[0]?.number} будет удалена без возможности восстановления.`
+            : `Будет удалено документов: ${formatInteger(deletableSelected.length)}. Проведённые не удаляются.`
+        }
+        confirmLabel="Удалить"
+        isPending={bulkPending || remove.isPending}
+        onOpenChange={setBulkDeleteOpen}
+        onConfirm={() => void handleBulkDelete()}
       />
       <InventoryCountSheet
         countId={countId}

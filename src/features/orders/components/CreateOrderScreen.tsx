@@ -123,7 +123,7 @@ export function CreateOrderScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Новый заказ"
-        description="Приём прибора. Номер будет выдан системой при сохранении."
+        description="Оформление приёма прибора в ремонт."
       />
 
       <Form {...form}>
@@ -137,12 +137,12 @@ export function CreateOrderScreen() {
           >
           <SectionCard
             title="Клиент и прибор"
-            description="Номер ЗК-НННН выдаётся при сохранении. История ремонтов прибора не зависит от клиента этого заказа."
+            description="Номер вида А0001 выдаётся при сохранении. История ремонтов прибора не зависит от клиента этого заказа."
           >
             <div className="grid gap-6">
               <div>
                 <p className="text-sm text-muted-foreground">Номер заказа</p>
-                <p className="text-lg font-semibold tracking-tight">{previewQuery.data || 'ЗК-…'}</p>
+                <p className="text-lg font-semibold tracking-tight">{previewQuery.data || 'А…'}</p>
               </div>
 
               <div className="grid gap-4">

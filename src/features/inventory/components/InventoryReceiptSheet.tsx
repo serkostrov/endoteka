@@ -1,5 +1,7 @@
 import { Briefcase } from 'lucide-react'
 
+import { useOpenEntitySheet } from '@/app/sheet-stack'
+import { DataTable } from '@/components/shared/DataTable'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
@@ -12,25 +14,13 @@ import {
   SheetTitle,
   useSheetExitPresence,
 } from '@/components/ui/sheet'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDate } from '@/lib/utils/date'
-import { cn } from '@/lib/utils'
 
 import { ReceiptDeleteControl } from './ReceiptDeleteControl'
 import { useInventoryReceipt } from '../hooks/use-inventory'
 import type { InventoryReceiptLine } from '../services/inventory-service'
-
-const cellPad = 'px-2 py-1.5'
 
 export function InventoryReceiptSheet({
   receiptId,
@@ -55,6 +45,7 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
   const receiptQuery = useInventoryReceipt(receiptId)
   const receipt = receiptQuery.data
   const total = receipt?.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0) ?? 0
+  const openSheet = useOpenEntitySheet()
 
   return (
     <SheetContent
@@ -103,7 +94,38 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
                 className="border-0 bg-transparent py-8"
               />
             ) : (
-              <ReceiptLinesTable lines={receipt.lines} />
+              <DataTable
+                caption="Строки прихода"
+                data={receipt.lines}
+                getRowId={(row) => row.id}
+                onRowClick={(row) => openSheet('item', row.itemId)}
+                columns={[
+                  {
+                    id: 'name',
+                    header: 'Наименование',
+                    className: 'min-w-[12rem]',
+                    cell: (row) => <ReceiptLineName line={row} />,
+                  },
+                  {
+                    id: 'price',
+                    header: 'Цена, ₽',
+                    className: 'w-[1%] text-right tabular-nums',
+                    cell: (row) => formatMoney(row.unitPrice),
+                  },
+                  {
+                    id: 'qty',
+                    header: 'Кол-во',
+                    className: 'w-[1%] text-right tabular-nums',
+                    cell: (row) => formatQuantity(row.quantity),
+                  },
+                  {
+                    id: 'amount',
+                    header: 'Сумма, ₽',
+                    className: 'w-[1%] text-right tabular-nums',
+                    cell: (row) => formatMoney(row.quantity * row.unitPrice),
+                  },
+                ]}
+              />
             )}
           </div>
         )}
@@ -112,87 +134,23 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
   )
 }
 
-function ReceiptLinesTable({ lines }: { lines: InventoryReceiptLine[] }) {
-  const openSheet = useOpenEntitySheet()
+function ReceiptLineName({ line }: { line: InventoryReceiptLine }) {
+  const meta = [line.itemCode, line.itemArticle].filter(Boolean).join(' ')
+  const usageHint =
+    line.remainingQuantity <= 0
+      ? 'израсходовано'
+      : line.remainingQuantity < line.quantity
+        ? `осталось ${formatQuantity(line.remainingQuantity)}`
+        : null
+  const subtitle = [meta, usageHint].filter(Boolean).join(' ')
 
   return (
-    <div className="overflow-x-auto">
-      <Table className="table-fixed">
-        <colgroup>
-          <col style={{ width: '2rem' }} />
-          <col />
-          <col style={{ width: '5.5rem' }} />
-          <col style={{ width: '5.75rem' }} />
-          <col style={{ width: '5.5rem' }} />
-        </colgroup>
-        <TableHeader>
-          <TableRow className="border-b hover:bg-transparent">
-            <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
-            <TableHead className={cn(cellPad, 'h-8 text-xs font-medium text-muted-foreground')}>
-              Наименование
-            </TableHead>
-            <TableHead className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}>
-              Цена, ₽
-            </TableHead>
-            <TableHead
-              className={cn(cellPad, 'h-8 pr-5 text-right text-xs font-medium text-muted-foreground')}
-            >
-              Кол-во
-            </TableHead>
-            <TableHead className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}>
-              Сумма, ₽
-            </TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {lines.map((line) => {
-            const amount = line.quantity * line.unitPrice
-            const meta = [line.itemCode, line.itemArticle].filter(Boolean).join(' ')
-            const usageHint =
-              line.remainingQuantity <= 0
-                ? 'израсходовано'
-                : line.remainingQuantity < line.quantity
-                  ? `осталось ${formatQuantity(line.remainingQuantity)}`
-                  : null
-            const subtitle = [meta, usageHint].filter(Boolean).join(' ')
-
-            return (
-              <TableRow
-                key={line.id}
-                className="cursor-pointer border-b last:border-b-0 hover:bg-muted/20"
-                onClick={() => openSheet('item', line.itemId)}
-              >
-                <TableCell className={cn(cellPad, 'w-8 text-muted-foreground')}>
-                  <Briefcase className="size-3.5 opacity-70" aria-hidden />
-                  <span className="sr-only">Товар</span>
-                </TableCell>
-                <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal')}>
-                  <div className="flex min-w-0 max-w-full items-baseline gap-2">
-                    <span className="truncate text-sm font-medium text-primary">{line.itemName}</span>
-                    {subtitle ? (
-                      <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground sm:inline">
-                        {subtitle}
-                      </span>
-                    ) : null}
-                  </div>
-                  {subtitle ? (
-                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground sm:hidden">{subtitle}</p>
-                  ) : null}
-                </TableCell>
-                <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>
-                  {formatMoney(line.unitPrice)}
-                </TableCell>
-                <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>
-                  {formatQuantity(line.quantity)}
-                </TableCell>
-                <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>
-                  {formatMoney(amount)}
-                </TableCell>
-              </TableRow>
-            )
-          })}
-        </TableBody>
-      </Table>
+    <div className="flex min-w-0 items-start gap-2.5">
+      <Briefcase className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-70" aria-hidden />
+      <div className="min-w-0">
+        <p className="truncate font-medium text-primary">{line.itemName}</p>
+        {subtitle ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p> : null}
+      </div>
     </div>
   )
 }

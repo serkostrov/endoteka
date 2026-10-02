@@ -138,7 +138,6 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const groups = useMemo(() => groupLines(parts, services), [parts, services])
   const hasLines = groups.length > 0
   const hasFields = activeFields.length > 0
-  const isEmpty = !hasLines && !hasFields
 
   if (error) {
     return (
@@ -164,16 +163,6 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
     )
   }
 
-  if (isEmpty) {
-    return (
-      <EmptyState
-        title="Состав работы пуст"
-        description="Добавьте запчасть или услугу — они появятся в таблице."
-        className="border-0 bg-transparent py-8"
-      />
-    )
-  }
-
   return (
     <>
       <div className="space-y-4">
@@ -183,9 +172,9 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
               <colgroup>
                 <col style={{ width: '2rem' }} />
                 <col />
-                <col style={{ width: '5.5rem' }} />
-                <col style={{ width: '5.75rem' }} />
-                <col style={{ width: '5.5rem' }} />
+                <col style={{ width: '7.5rem' }} />
+                <col style={{ width: '6.5rem' }} />
+                <col style={{ width: '7.5rem' }} />
                 <col style={{ width: '2rem' }} />
               </colgroup>
               <TableHeader>
@@ -232,7 +221,13 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
               </TableBody>
             </Table>
           </div>
-        ) : null}
+        ) : (
+          <EmptyState
+            title="Состав работ пока пуст"
+            description="Добавьте работу, услугу или товар через поиск выше."
+            className="border-dashed bg-muted/20 py-10"
+          />
+        )}
 
         {hasFields ? (
           <WorkCompositionFields
@@ -509,10 +504,10 @@ function WorkLineRow({
           </p>
         ) : null}
       </TableCell>
-      <TableCell className={cn(cellPad, 'text-right')} data-row-ignore-click>
+      <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')} data-row-ignore-click>
         <InlineNumberField line={line} orderId={orderId} field="unitPrice" disabled={!canEdit} />
       </TableCell>
-      <TableCell className={cn(cellPad, 'text-right')} data-row-ignore-click>
+      <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')} data-row-ignore-click>
         <InlineNumberField
           line={line}
           orderId={orderId}
@@ -521,7 +516,7 @@ function WorkLineRow({
           suffix={line.unitName}
         />
       </TableCell>
-      <TableCell className={cn(cellPad, 'text-right text-sm tabular-nums')}>
+      <TableCell className={cn(cellPad, 'whitespace-nowrap text-right text-sm tabular-nums')}>
         {formatMoney(amount)}
       </TableCell>
       <TableCell className={cellPad} data-row-ignore-click>
@@ -1031,7 +1026,11 @@ function InlineNumberField({
   }
 
   if (disabled) {
-    return <span className="block text-right text-sm tabular-nums text-foreground">{formatMoney(current)}</span>
+    return (
+      <span className="block whitespace-nowrap text-right text-sm tabular-nums text-foreground">
+        {formatMoney(current)}
+      </span>
+    )
   }
 
   return (
@@ -1043,7 +1042,7 @@ function InlineNumberField({
       aria-label="Цена"
       className={cn(
         spinless,
-        'ml-auto h-7 w-[4.75rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
+        'ml-auto h-7 w-full min-w-[6.5rem] max-w-[8rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
         'hover:border-border hover:bg-background',
         'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
       )}

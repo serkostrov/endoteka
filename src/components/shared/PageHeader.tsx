@@ -15,7 +15,7 @@ export function PageHeader({ title, description, titleExtra, actions, className 
   return (
     <header
       className={cn(
-        'mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between',
+        'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between',
         className,
       )}
     >

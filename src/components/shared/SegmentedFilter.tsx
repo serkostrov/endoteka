@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils'
 
+import { activeFilterControlClassName } from './active-filter-style'
+
 export type SegmentedFilterOption<T extends string> = {
   value: T
   label: string
@@ -10,6 +12,11 @@ type SegmentedFilterProps<T extends string> = {
   options: readonly SegmentedFilterOption<T>[]
   onChange: (value: T) => void
   'aria-label': string
+  /**
+   * Значения без «активной» синей подсветки (обычно дефолт вроде «all»).
+   * Если не задано — выбранный сегмент остаётся нейтральным (bg-muted).
+   */
+  inactiveValues?: readonly T[]
 }
 
 export function SegmentedFilter<T extends string>({
@@ -17,6 +24,7 @@ export function SegmentedFilter<T extends string>({
   options,
   onChange,
   'aria-label': ariaLabel,
+  inactiveValues,
 }: SegmentedFilterProps<T>) {
   return (
     <div
@@ -26,6 +34,8 @@ export function SegmentedFilter<T extends string>({
     >
       {options.map((option) => {
         const selected = option.value === value
+        const accent =
+          selected && inactiveValues != null && !inactiveValues.includes(option.value)
         return (
           <button
             key={option.value}
@@ -34,9 +44,11 @@ export function SegmentedFilter<T extends string>({
             className={cn(
               'h-full px-3 text-sm whitespace-nowrap transition-colors',
               'border-r border-input last:border-r-0',
-              selected
-                ? 'bg-muted font-medium text-foreground'
-                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+              accent
+                ? cn(activeFilterControlClassName, 'border-transparent')
+                : selected
+                  ? 'bg-muted font-medium text-foreground'
+                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
             )}
             onClick={() => onChange(option.value)}
           >

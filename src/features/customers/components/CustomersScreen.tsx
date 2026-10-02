@@ -10,6 +10,7 @@ import { IconActionButton } from '@/components/shared/IconActionButton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PageTabs } from '@/components/shared/PageTabs'
 import { SearchInput } from '@/components/shared/SearchInput'
+import { SelectionBulkBar } from '@/components/shared/SelectionBulkBar'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
 import { CUSTOMER_SEARCH_DEBOUNCE_MS, CustomerKind } from '@/lib/constants/customers'
@@ -17,6 +18,7 @@ import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
+import { formatInteger } from '@/lib/utils/number'
 
 import { CreateCustomerDialog } from './CreateCustomerDialog'
 import { CustomerDetailSheet } from './CustomerDetailScreen'
@@ -41,6 +43,9 @@ export function CustomersScreen() {
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkPending, setBulkPending] = useState(false)
   const canCreate = useHasPermission(Permission.CustomersCreate)
   const canDelete = useHasPermission(Permission.CustomersDelete)
   const tab = parseTab(searchParams.get('tab'))
@@ -56,6 +61,7 @@ export function CustomersScreen() {
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+    setSelectedIds([])
   }
 
   function openCustomer(id: string) {
@@ -74,6 +80,7 @@ export function CustomersScreen() {
     }
     setSearchParams(params, { replace: true })
     setPage(1)
+    setSelectedIds([])
   }
 
   async function handleDelete() {
@@ -83,9 +90,37 @@ export function CustomersScreen() {
     try {
       await remove.mutateAsync(deleteTarget.id)
       toast.success(isPeople ? 'Контакт удалён' : 'Организация удалена')
+      setSelectedIds((ids) => ids.filter((id) => id !== deleteTarget.id))
       setDeleteTarget(null)
     } catch (error) {
       toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function handleBulkDelete() {
+    if (selectedIds.length === 0) {
+      return
+    }
+    setBulkPending(true)
+    try {
+      for (const id of selectedIds) {
+        await remove.mutateAsync(id)
+      }
+      toast.success(
+        selectedIds.length === 1
+          ? isPeople
+            ? 'Контакт удалён'
+            : 'Организация удалена'
+          : isPeople
+            ? `Удалено контактов: ${formatInteger(selectedIds.length)}`
+            : `Удалено организаций: ${formatInteger(selectedIds.length)}`,
+      )
+      setBulkDeleteOpen(false)
+      setSelectedIds([])
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setBulkPending(false)
     }
   }
 
@@ -144,11 +179,10 @@ export function CustomersScreen() {
 
   return (
     <div className="space-y-4">
-      <div>
+      <div className="space-y-2">
         <PageHeader
-          className="mb-3"
           title="Контакты"
-          description="Люди и организации. Поиск по имени, телефону, email и реквизитам."
+          description="Карточки клиентов и организаций для заказов и продаж."
         />
         <PageTabs aria-label="Тип контактов" value={tab} onChange={setTab} items={tabItems} />
       </div>
@@ -168,6 +202,7 @@ export function CustomersScreen() {
           onChange={(next) => {
             setSearch(next)
             setPage(1)
+            setSelectedIds([])
           }}
           className="max-w-xl"
           label={isPeople ? 'Поиск людей' : 'Поиск организаций'}
@@ -178,6 +213,28 @@ export function CustomersScreen() {
           }
         />
       </FilterBar>
+
+      {selectedIds.length > 0 ? (
+        <SelectionBulkBar
+          count={selectedIds.length}
+          onClear={() => setSelectedIds([])}
+          pending={bulkPending}
+        >
+          {canDelete ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              className="text-destructive hover:text-destructive"
+              aria-label="Удалить"
+              disabled={bulkPending}
+              onClick={() => setBulkDeleteOpen(true)}
+            >
+              <Trash2 className="size-4" />
+            </Button>
+          ) : null}
+        </SelectionBulkBar>
+      ) : null}
 
       <DataTable
         caption="Контакты"
@@ -194,10 +251,17 @@ export function CustomersScreen() {
               : 'Добавьте первую организацию в справочник.'
         }
         onRowClick={(row) => openCustomer(row.id)}
+        selection={{
+          selectedIds,
+          onSelectedIdsChange: setSelectedIds,
+        }}
         pagination={{
           page,
           pageCount,
-          onPageChange: setPage,
+          onPageChange: (next) => {
+            setPage(next)
+            setSelectedIds([])
+          },
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -234,6 +298,23 @@ export function CustomersScreen() {
           }
         }}
         onConfirm={() => void handleDelete()}
+      />
+      <ConfirmDialog
+        open={bulkDeleteOpen}
+        title={isPeople ? 'Удалить контакты' : 'Удалить организации'}
+        description={
+          selectedIds.length === 1
+            ? isPeople
+              ? 'Выбранный контакт будет удалён. Если есть заказы или продажи, удаление не пройдёт.'
+              : 'Выбранная организация будет удалена. Если есть заказы или продажи, удаление не пройдёт.'
+            : isPeople
+              ? `Будет удалено контактов: ${formatInteger(selectedIds.length)}. Записи с заказами или продажами не удалятся.`
+              : `Будет удалено организаций: ${formatInteger(selectedIds.length)}. Записи с заказами или продажами не удалятся.`
+        }
+        confirmLabel="Удалить"
+        isPending={bulkPending || remove.isPending}
+        onOpenChange={setBulkDeleteOpen}
+        onConfirm={() => void handleBulkDelete()}
       />
       <CustomerDetailSheet
         customerId={customerId}

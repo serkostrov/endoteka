@@ -7,7 +7,7 @@ import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { toast } from 'sonner'
 import { useQueryClient } from '@tanstack/react-query'
-import { Trash2 } from 'lucide-react'
+import { ClipboardList, ShoppingCart, Trash2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
@@ -54,6 +54,9 @@ import { queryKeys } from '@/lib/query-keys'
 import { formatDate } from '@/lib/utils/date'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
+import { useInventoryItemCompatibleTypes } from '@/features/devices/hooks/use-compatible-parts'
+
+import { ItemCompatibleTypesTab } from './ItemCompatibleTypesTab'
 import { ItemFields } from './ItemFields'
 import { ItemHistorySection } from './ItemHistorySection'
 import { ItemLabelPrintButton } from './ItemLabelPrintButton'
@@ -73,7 +76,7 @@ import {
   type InventoryMovement,
 } from '../services/inventory-service'
 
-type ItemTab = 'card' | 'batches' | 'history'
+type ItemTab = 'card' | 'batches' | 'compatible' | 'history'
 
 export function InventoryItemSheet({
   itemId,
@@ -108,7 +111,12 @@ function InventoryItemSheetContent({
   onClose: () => void
 }) {
   const cardQuery = useInventoryItemCard(itemId)
+  const openSheet = useOpenEntitySheet()
   const canReceive = useHasPermission(Permission.InventoryReceive)
+  const canCreateSale = useHasPermission(Permission.SalesCreate)
+  const canCount = useHasPermission(Permission.InventoryCount)
+  const createSale = useCreateSale()
+  const createCount = useCreateInventoryCount()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const remove = useDeleteInventoryItem()
 
@@ -125,6 +133,50 @@ function InventoryItemSheetContent({
 
   const item = cardQuery.data?.item
 
+  const toolbarExtra =
+    item && (canCreateSale || canCount) ? (
+      <div className="mt-2 flex flex-col items-center gap-0.5">
+        {canCreateSale ? (
+          <IconActionButton
+            label="Продажа"
+            variant="ghost"
+            size="icon-sm"
+            disabled={createSale.isPending}
+            onClick={() => {
+              createSale.mutate(
+                { seedItemId: item.id },
+                {
+                  onSuccess: (saleId) => openSheet('sale', saleId),
+                  onError: (error) => toast.error(getErrorMessage(error)),
+                },
+              )
+            }}
+          >
+            <ShoppingCart />
+          </IconActionButton>
+        ) : null}
+        {canCount ? (
+          <IconActionButton
+            label="Инвентаризация"
+            variant="ghost"
+            size="icon-sm"
+            disabled={createCount.isPending}
+            onClick={() => {
+              createCount.mutate(
+                { seedMode: InventoryCountSeedMode.Empty, seedItemId: item.id },
+                {
+                  onSuccess: (countId) => openSheet('count', countId),
+                  onError: (error) => toast.error(getErrorMessage(error)),
+                },
+              )
+            }}
+          >
+            <ClipboardList />
+          </IconActionButton>
+        ) : null}
+      </div>
+    ) : null
+
   return (
     <SheetContent
       side="right"
@@ -135,6 +187,7 @@ function InventoryItemSheetContent({
           <SheetEntityToolbar
             leading={<ItemLabelPrintButton itemId={item.id} />}
             onDelete={canReceive ? () => setDeleteOpen(true) : undefined}
+            extra={toolbarExtra}
           />
         ) : null
       }
@@ -205,6 +258,8 @@ function ItemCardBody({
   const remove = useDeleteInventoryItem()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [tab, setTab] = useState<ItemTab>('card')
+  const compatibleTypesQuery = useInventoryItemCompatibleTypes(item.id)
+  const compatibleCount = compatibleTypesQuery.data?.length ?? 0
 
   const sortedBatches = useMemo(
     () =>
@@ -222,9 +277,10 @@ function ItemCardBody({
     () => [
       { id: 'card' as const, label: 'Карточка' },
       { id: 'batches' as const, label: 'Партии', count: sortedBatches.length },
+      { id: 'compatible' as const, label: 'Подходящее', count: compatibleCount },
       { id: 'history' as const, label: 'История', count: movements.length },
     ],
-    [movements.length, sortedBatches.length],
+    [compatibleCount, movements.length, sortedBatches.length],
   )
 
   async function handleDelete() {
@@ -243,16 +299,29 @@ function ItemCardBody({
   }
 
   const codeArticleLine = [
-    item.code ? `С/Н: ${item.code}` : null,
+    item.code ? `Код: ${item.code}` : null,
     item.article ? `Артикул: ${item.article}` : null,
   ]
     .filter(Boolean)
-    .join(' ')
+    .join(' · ')
   const stockEmpty = item.stockQuantity <= 0
   const stockShortage = item.stockQuantity < 0
   const stockLine = stockShortage
     ? `недостача ${formatQuantity(-item.stockQuantity)} ${item.unitName}`
     : `остаток ${formatQuantity(item.stockQuantity)} ${item.unitName}`
+
+  const stockBadge = (
+    <span
+      aria-label={stockLine}
+      className={
+        stockEmpty || stockShortage
+          ? 'inline-flex h-6 shrink-0 items-center rounded-md border border-destructive/30 bg-destructive/10 px-2 text-xs font-medium tabular-nums text-destructive'
+          : 'inline-flex h-6 shrink-0 items-center rounded-md border border-border bg-secondary px-2 text-xs font-medium tabular-nums text-secondary-foreground'
+      }
+    >
+      {stockLine}
+    </span>
+  )
 
   const actionButtons = (
     <>
@@ -295,32 +364,25 @@ function ItemCardBody({
     </>
   )
 
-  const actionsRow = (
-    <div className="flex flex-wrap items-center gap-2">
-      <span
-        aria-label={stockLine}
-        className={
-          stockEmpty || stockShortage
-            ? 'inline-flex h-9 items-center rounded-md border border-destructive/30 bg-destructive/10 px-3 text-sm font-medium tabular-nums text-destructive'
-            : 'inline-flex h-9 items-center rounded-md border border-border bg-secondary px-3 text-sm font-medium tabular-nums text-secondary-foreground'
-        }
-      >
-        {stockLine}
-      </span>
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        {actionButtons}
-        {variant === 'page' && canReceive && !hideChromeDelete ? (
-          <IconActionButton
-            label="Удалить"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 />
-          </IconActionButton>
-        ) : null}
+  /** На странице — остаток и кнопки; в sheet кнопки в тулбаре, остаток у кода. */
+  const actionsRow =
+    variant === 'page' ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {stockBadge}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {actionButtons}
+          {canReceive && !hideChromeDelete ? (
+            <IconActionButton
+              label="Удалить"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 />
+            </IconActionButton>
+          ) : null}
+        </div>
       </div>
-    </div>
-  )
+    ) : null
 
   const deleteDialog =
     variant === 'page' ? (
@@ -341,6 +403,7 @@ function ItemCardBody({
         <ItemCardEditor
           item={item}
           variant={variant}
+          stockBadge={stockBadge}
           actionsRow={actionsRow}
           tabItems={tabItems}
           onTabChange={setTab}
@@ -359,12 +422,12 @@ function ItemCardBody({
           {actionsRow}
         </div>
       ) : (
-        <div className="space-y-3 pr-2">
-          <div className="min-w-0">
-            <h2 className="text-lg font-semibold tracking-tight">{item.name}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">{codeArticleLine}</p>
+        <div className="space-y-1 pr-2">
+          <h2 className="text-lg font-semibold tracking-tight">{item.name}</h2>
+          <div className="flex items-center justify-between gap-3">
+            <p className="min-w-0 text-sm text-muted-foreground">{codeArticleLine || '—'}</p>
+            {stockBadge}
           </div>
-          {actionsRow}
         </div>
       )}
 
@@ -384,6 +447,8 @@ function ItemCardBody({
 
       {tab === 'batches' ? <ItemBatchesSection batches={sortedBatches} /> : null}
 
+      {tab === 'compatible' ? <ItemCompatibleTypesTab itemId={item.id} /> : null}
+
       {tab === 'history' ? <ItemHistorySection movements={movements} /> : null}
 
       {deleteDialog}
@@ -394,12 +459,14 @@ function ItemCardBody({
 function ItemCardEditor({
   item,
   variant,
+  stockBadge,
   actionsRow,
   tabItems,
   onTabChange,
 }: {
   item: InventoryItem
   variant: 'page' | 'sheet'
+  stockBadge: ReactNode
   actionsRow: ReactNode
   tabItems: { id: ItemTab; label: string; count?: number }[]
   onTabChange: (tab: ItemTab) => void
@@ -469,40 +536,37 @@ function ItemCardEditor({
   )
 
   const codeArticleFields = (
-    <div className="flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1 text-sm text-muted-foreground">
       <FormField
         control={form.control}
         name="code"
         render={({ field }) => (
-          <FormItem className="!flex max-w-full flex-row flex-wrap items-baseline gap-1 space-y-0">
-            <span className="shrink-0 select-none">SN:</span>
+          <FormItem className="!flex max-w-full flex-row flex-wrap items-center gap-1.5 space-y-0">
+            <span className="shrink-0 select-none">Код:</span>
             <FormControl>
               <InlineTextInput
                 {...field}
                 aria-label="Код"
                 placeholder="—"
-                className="text-sm text-muted-foreground md:text-sm"
+                className="min-w-[15ch] text-sm text-muted-foreground md:text-sm"
               />
             </FormControl>
             <FormMessage className="basis-full" />
           </FormItem>
         )}
       />
-      <span className="shrink-0 select-none" aria-hidden>
-        ·
-      </span>
       <FormField
         control={form.control}
         name="article"
         render={({ field }) => (
-          <FormItem className="!flex max-w-full flex-row flex-wrap items-baseline gap-1 space-y-0">
+          <FormItem className="!flex max-w-full flex-row flex-wrap items-center gap-1.5 space-y-0">
             <span className="shrink-0 select-none">Артикул:</span>
             <FormControl>
               <InlineTextInput
                 {...field}
                 aria-label="Артикул"
                 placeholder="—"
-                className="text-sm text-muted-foreground md:text-sm"
+                className="min-w-[15ch] text-sm text-muted-foreground md:text-sm"
               />
             </FormControl>
             <FormMessage className="basis-full" />
@@ -513,12 +577,12 @@ function ItemCardEditor({
   )
 
   const headerBlock = (
-    <div className="space-y-3 pr-2">
-      <div className="min-w-0 space-y-1">
-        {titleField}
-        {codeArticleFields}
+    <div className="space-y-1 pr-2">
+      <div className="min-w-0">{titleField}</div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0 flex-1">{codeArticleFields}</div>
+        {stockBadge}
       </div>
-      {actionsRow}
     </div>
   )
 
@@ -560,7 +624,7 @@ function ItemCardEditor({
           </Alert>
         ) : null}
 
-        <SectionCard title="Карточка">
+        <SectionCard>
           <div className="space-y-4">
             <ItemMediaLabel item={item} form={form} canEdit />
             <FormField
@@ -667,7 +731,7 @@ function ItemBatchesSection({ batches }: { batches: InventoryBatch[] }) {
 
 function ItemDataSection({ item }: { item: InventoryItem }) {
   return (
-    <SectionCard title="Карточка">
+    <SectionCard>
       <div className="space-y-4">
         <ItemMediaLabelReadonly item={item} />
         {item.description ? (

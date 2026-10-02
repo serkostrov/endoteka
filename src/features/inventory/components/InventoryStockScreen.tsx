@@ -89,7 +89,7 @@ export function InventoryStockScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Склад"
-        description="Остаток = приходы − списания в заказы − складские списания. Отрицательным быть не может."
+        description="Текущие остатки запчастей и расходников на складе."
       />
 
       <FilterBar>
@@ -165,61 +165,84 @@ export function InventoryStockScreen() {
         }}
         columns={[
           {
-            id: 'photo',
-            header: '',
-            className: 'w-14',
+            id: 'name',
+            header: 'Наименование',
+            className: 'min-w-[14rem]',
             cell: (row) => (
-              <InventoryItemCoverThumb src={row.coverUrl} alt={row.name} />
+              <div className="flex min-w-0 items-center gap-3">
+                <InventoryItemCoverThumb src={row.coverUrl} alt={row.name} />
+                <div className="min-w-0">
+                  <p className="truncate font-medium leading-snug">{row.name}</p>
+                  {row.barcode ? (
+                    <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground">
+                      {row.barcode}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
             ),
           },
-          { id: 'name', header: 'Наименование', className: 'min-w-[12rem]', cell: (row) => row.name },
           {
-            id: 'article',
-            header: 'Артикул',
-            className: 'hidden w-[1%] md:table-cell',
-            cell: (row) => row.article || '—',
-          },
-          {
-            id: 'barcode',
-            header: 'Штрихкод',
-            className: 'hidden w-[1%] lg:table-cell',
-            cell: (row) => row.barcode || '—',
-          },
-          {
-            id: 'category',
-            header: 'Категория',
-            className: 'hidden w-[1%] md:table-cell',
-            cell: (row) => row.categoryName || '—',
-          },
-          {
-            id: 'stock',
-            header: 'Остаток',
-            className: 'w-[1%]',
+            id: 'code',
+            header: 'Код',
+            className: 'hidden w-[10.5rem] md:table-cell',
             cell: (row) => (
-              <span className={row.stockQuantity < 0 ? 'font-medium text-destructive' : 'font-medium'}>
-                {formatQuantity(row.stockQuantity)} {row.unitName}
+              <span className="block max-w-[15ch] truncate font-mono text-xs tabular-nums text-muted-foreground">
+                {row.code || '—'}
               </span>
             ),
           },
           {
-            id: 'status',
-            header: '',
-            className: 'hidden w-[1%] sm:table-cell',
-            cell: (row) =>
-              row.stockQuantity < 0 ? (
-                <StatusBadge tone="warning">Недостача</StatusBadge>
-              ) : row.stockQuantity <= 0 ? (
-                <StatusBadge tone="warning">Нет остатка</StatusBadge>
-              ) : (
-                <StatusBadge tone="success">В наличии</StatusBadge>
-              ),
+            id: 'article',
+            header: 'Артикул',
+            className: 'hidden w-[10.5rem] md:table-cell',
+            cell: (row) => (
+              <span className="block max-w-[15ch] truncate font-mono text-xs tabular-nums text-muted-foreground">
+                {row.article || '—'}
+              </span>
+            ),
+          },
+          {
+            id: 'category',
+            header: 'Категория',
+            className: 'hidden w-[8rem] lg:table-cell',
+            cell: (row) => (
+              <span className="block truncate text-sm text-muted-foreground">
+                {row.categoryName || '—'}
+              </span>
+            ),
+          },
+          {
+            id: 'stock',
+            header: 'Остаток',
+            className: 'w-[1%] whitespace-nowrap text-right',
+            cell: (row) => (
+              <div className="inline-flex flex-col items-end gap-0.5">
+                {row.stockQuantity < 0 ? (
+                  <StatusBadge tone="warning">Недостача</StatusBadge>
+                ) : row.stockQuantity <= 0 ? (
+                  <StatusBadge tone="warning">Нет остатка</StatusBadge>
+                ) : (
+                  <StatusBadge tone="success">В наличии</StatusBadge>
+                )}
+                <span
+                  className={
+                    row.stockQuantity < 0
+                      ? 'text-xs font-medium tabular-nums text-destructive'
+                      : 'text-xs tabular-nums text-muted-foreground'
+                  }
+                >
+                  {formatQuantity(row.stockQuantity)} {row.unitName}
+                </span>
+              </div>
+            ),
           },
           ...(canReceive
             ? [
                 {
                   id: 'actions',
                   header: 'Действия',
-                  className: 'w-[1%] whitespace-nowrap',
+                  className: 'w-[1%] whitespace-nowrap text-right',
                   cell: (row: InventoryItem) => (
                     <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
                       <IconActionButton

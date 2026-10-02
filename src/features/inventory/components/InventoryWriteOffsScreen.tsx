@@ -12,6 +12,7 @@ import { usePageSize } from '@/hooks/use-page-size'
 import { formatDate, formatDateTime } from '@/lib/utils/date'
 
 import { InventoryWriteOffSheet } from './InventoryWriteOffSheet'
+import { WriteOffBulkActions } from './WriteOffBulkActions'
 import { WriteOffDeleteControl } from './WriteOffDeleteControl'
 import { WriteOffStockSheet } from './WriteOffStockSheet'
 import { useInventoryWriteOffs } from '../hooks/use-inventory'
@@ -22,6 +23,7 @@ export function InventoryWriteOffsScreen() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
   const canWriteOff = useHasPermission(Permission.InventoryWriteOff)
   const writeOffsQuery = useInventoryWriteOffs(page, pageSize)
   const writeOffId = searchParams.get('writeOff')
@@ -43,13 +45,14 @@ export function InventoryWriteOffsScreen() {
   function handlePageSizeChange(size: number) {
     setPageSize(size)
     setPage(1)
+    setSelectedIds([])
   }
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Списания"
-        description="Списание со склада по FIFO. Удаление возвращает остаток на партии."
+        description="Документы списания товара со склада."
         actions={
           canWriteOff ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
@@ -58,6 +61,10 @@ export function InventoryWriteOffsScreen() {
           ) : null
         }
       />
+
+      {selectedIds.length > 0 ? (
+        <WriteOffBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
+      ) : null}
 
       <DataTable
         caption="Списания"
@@ -68,10 +75,17 @@ export function InventoryWriteOffsScreen() {
         emptyTitle="Списаний нет"
         emptyDescription="Оформите списание, чтобы уменьшить остаток на складе."
         onRowClick={(row) => openWriteOff(row.id)}
+        selection={{
+          selectedIds,
+          onSelectedIdsChange: setSelectedIds,
+        }}
         pagination={{
           page,
           pageCount,
-          onPageChange: setPage,
+          onPageChange: (next) => {
+            setPage(next)
+            setSelectedIds([])
+          },
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -113,13 +127,14 @@ export function InventoryWriteOffsScreen() {
             ? [
                 {
                   id: 'actions',
-                  header: '',
+                  header: 'Действия',
                   className: 'w-[1%] whitespace-nowrap',
                   cell: (row: InventoryWriteOffListItem) => (
                     <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
                       <WriteOffDeleteControl
                         writeOff={{ id: row.id, reason: row.reason }}
                         onDeleted={() => {
+                          setSelectedIds((ids) => ids.filter((id) => id !== row.id))
                           if (writeOffId === row.id) {
                             closeWriteOff()
                           }

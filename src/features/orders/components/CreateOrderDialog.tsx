@@ -279,7 +279,7 @@ function CreateOrderForm({ onOpenChange }: { onOpenChange: (open: boolean) => vo
             <div className="grid gap-4">
               <div className="rounded-xl border bg-muted/30 px-3 py-2.5">
                 <p className="text-xs text-muted-foreground">Номер заказа</p>
-                <p className="mt-1 text-base font-semibold tracking-tight">{previewQuery.data || 'ЗК-…'}</p>
+                <p className="mt-1 text-base font-semibold tracking-tight">{previewQuery.data || 'А…'}</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">Присвоится при создании</p>
               </div>
             </div>

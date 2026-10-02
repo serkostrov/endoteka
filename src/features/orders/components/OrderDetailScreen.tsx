@@ -7,7 +7,6 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
-import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import {
   Sheet,
   SheetContent,
@@ -65,36 +64,13 @@ export function OrderDetailSheet({
 }
 
 function OrderDetailSheetContent({ orderId, onClose }: { orderId: string; onClose: () => void }) {
-  const [tab, setTab] = useState<TabId>('overview')
+  const [tab, setTab] = useState<TabId>('work')
   const orderQuery = useOrder(orderId)
-  const canDelete = useHasPermission(Permission.OrdersDelete)
-  const remove = useDeleteOrder()
-  const [deleteOpen, setDeleteOpen] = useState(false)
-  const order = orderQuery.data
-
-  async function handleDelete() {
-    if (!order) {
-      return
-    }
-    try {
-      await remove.mutateAsync(order.id)
-      toast.success(`Заказ ${order.number} удалён`)
-      setDeleteOpen(false)
-      onClose()
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
-  }
 
   return (
     <SheetContent
       side="right"
       className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,72rem)]"
-      actions={
-        order ? (
-          <SheetEntityToolbar onDelete={canDelete ? () => setDeleteOpen(true) : undefined} />
-        ) : null
-      }
     >
       <SheetHeader className="sr-only">
         <SheetTitle>Карточка заказа</SheetTitle>
@@ -104,31 +80,17 @@ function OrderDetailSheetContent({ orderId, onClose }: { orderId: string; onClos
         <LoadingState label="Загрузка заказа" className="min-h-64" />
       ) : orderQuery.error ? (
         <ErrorState description={getErrorMessage(orderQuery.error)} />
-      ) : !order ? (
+      ) : !orderQuery.data ? (
         <ErrorState description="Заказ не найден." />
       ) : (
         <OrderDetailCard
-          order={order}
+          order={orderQuery.data}
           layout="sheet"
           tab={tab}
           onTabChange={setTab}
-          hideChromeDelete
           onDeleted={onClose}
         />
       )}
-      <ConfirmDialog
-        open={deleteOpen}
-        title="Удалить заказ"
-        description={
-          order
-            ? `Заказ ${order.number} будет удалён безвозвратно. Списания со склада останутся в журнале.`
-            : ''
-        }
-        confirmLabel="Удалить"
-        isPending={remove.isPending}
-        onOpenChange={setDeleteOpen}
-        onConfirm={() => void handleDelete()}
-      />
     </SheetContent>
   )
 }
@@ -180,7 +142,7 @@ function OrderDetailCard({
     >
       <div className={cn('flex flex-col lg:flex-row', inSheet && 'h-full min-h-0')}>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className={cn('border-b px-4 py-2.5', inSheet && 'pr-14')}>
+          <header className="border-b px-4 py-2.5">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
               <h1 className="truncate text-lg font-semibold tracking-tight">Заказ {order.number}</h1>
               <OrderStatusMenu
@@ -235,7 +197,7 @@ function OrderDetailCard({
 
         <aside
           className={cn(
-            'border-t lg:w-80 lg:shrink-0 lg:border-t-0 lg:border-l xl:w-96',
+            'border-t bg-secondary/80 lg:w-80 lg:shrink-0 lg:border-t-0 lg:border-l xl:w-96',
             inSheet && 'flex min-h-72 flex-col lg:h-auto',
           )}
         >

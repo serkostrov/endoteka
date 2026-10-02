@@ -1,14 +1,40 @@
 import { useMemo, useState } from 'react'
-import { ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { LoadingState } from '@/components/shared/LoadingState'
+import { PageTabs } from '@/components/shared/PageTabs'
+import { SectionCard } from '@/components/shared/SectionCard'
+import { SheetEntityToolbar } from '@/components/shared/SheetEntityToolbar'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  useSheetDirty,
+} from '@/components/ui/sheet'
+import { Textarea } from '@/components/ui/textarea'
 import { useHasPermission } from '@/features/auth'
+import { ReferenceItemPhotos } from '@/features/devices/components/ReferenceItemPhotos'
+import {
+  useAddDeviceCompatiblePart,
+  useDeviceCompatibleParts,
+  useRemoveDeviceCompatiblePart,
+} from '@/features/devices/hooks/use-compatible-parts'
+import type { CompatiblePart } from '@/features/devices/services/compatible-parts-service'
+import { InventoryItemCoverThumb } from '@/features/inventory/components/InventoryItemCoverThumb'
+import { ItemSearchField } from '@/features/inventory/components/ItemSearchField'
+import type { InventoryItem } from '@/features/inventory/services/inventory-service'
 import { ReferenceItemDialog } from '@/features/references/components/ReferenceItemDialog'
 import {
   useDeleteReferenceItem,
@@ -18,6 +44,7 @@ import {
 } from '@/features/references/hooks/use-references'
 import type { ReferenceItemFormValues } from '@/features/references/schemas'
 import type { ReferenceItem, ReferenceSetSummary } from '@/features/references/services/references-service'
+import { formatQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { ReferenceSetCode } from '@/lib/constants/references'
 import { getErrorMessage } from '@/lib/errors'
@@ -73,6 +100,7 @@ export function DeviceTypesBrowser() {
   const [deleteTarget, setDeleteTarget] = useState<{ column: ColumnKey; item: ReferenceItem } | null>(
     null,
   )
+  const [detail, setDetail] = useState<{ column: ColumnKey; item: ReferenceItem } | null>(null)
 
   const setsByCode = useMemo(() => {
     const map = new Map<string, ReferenceSetSummary>()
@@ -260,10 +288,6 @@ export function DeviceTypesBrowser() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
-      <p className="shrink-0 text-sm text-muted-foreground">
-        Дерево: в группе — свои бренды, в бренде — модели, в модели — модификации.
-      </p>
-
       <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-4">
         {COLUMNS.map((column) => {
           const items = columnItems[column.key]
@@ -304,19 +328,98 @@ export function DeviceTypesBrowser() {
               addLabel={column.addLabel}
               items={items}
               selectedId={selectedId}
+              previewId={detail?.column === column.key ? detail.item.id : null}
               canUpdate={canUpdate}
               canAdd={canAdd}
               addDisabledHint={addDisabledHint}
               emptyHint={emptyHint}
               showCascadeHint={column.key !== 'modification'}
+              openDetailOnBody={column.key === 'model' || column.key === 'modification'}
               onAdd={() => openCreate(column.key)}
               onSelect={(id) => select(column.key, id)}
+              onOpenDetail={(item) => setDetail({ column: column.key, item })}
               onEdit={(item) => openEdit(column.key, item)}
               onDelete={(item) => setDeleteTarget({ column: column.key, item })}
             />
           )
         })}
       </div>
+
+      <TypeDetailSheet
+        detail={detail}
+        set={detail ? setForColumn(detail.column) : null}
+        groups={groups}
+        brands={allBrands}
+        models={modelsQuery.data ?? []}
+        parentLabel={
+          detail?.column === 'brand'
+            ? 'Группа'
+            : detail?.column === 'model'
+              ? 'Бренд'
+              : detail?.column === 'modification'
+                ? 'Модель'
+                : null
+        }
+        parentOptions={
+          detail?.column === 'brand'
+            ? groups.filter((item) => item.isActive || item.id === detail.item.parentId)
+            : detail?.column === 'model'
+              ? (brandsQuery.data ?? []).filter((item) => {
+                  if (!(item.isActive || item.id === detail.item.parentId)) {
+                    return false
+                  }
+                  const groupId =
+                    (brandsQuery.data ?? []).find((brand) => brand.id === detail.item.parentId)
+                      ?.parentId ?? selectedGroupId
+                  if (item.id === detail.item.parentId || item.id === selectedBrandId) {
+                    return true
+                  }
+                  return groupId ? item.parentId === groupId : false
+                })
+              : detail?.column === 'modification'
+                ? (modelsQuery.data ?? []).filter((item) => {
+                    if (!(item.isActive || item.id === detail.item.parentId)) {
+                      return false
+                    }
+                    if (item.id === detail.item.parentId || item.id === selectedModelId) {
+                      return true
+                    }
+                    return selectedBrandId ? item.parentId === selectedBrandId : false
+                  })
+                : []
+        }
+        siblingItems={
+          detail?.column === 'group'
+            ? groups
+            : detail?.column === 'brand'
+              ? (brandsQuery.data ?? [])
+              : detail?.column === 'model'
+                ? (modelsQuery.data ?? [])
+                : detail?.column === 'modification'
+                  ? (modsQuery.data ?? [])
+                  : []
+        }
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetail(null)
+          }
+        }}
+        onItemChange={(item) => {
+          if (!detail) {
+            return
+          }
+          setDetail({ ...detail, item })
+        }}
+        onDelete={() => {
+          if (!detail) {
+            return
+          }
+          const { column, item } = detail
+          setDetail(null)
+          setDeleteTarget({ column, item })
+        }}
+        canUpdate={canUpdate}
+      />
 
       {editor && editorSet ? (
         <ColumnEditor
@@ -373,46 +476,61 @@ export function DeviceTypesBrowser() {
 function MillerColumnRow({
   item,
   selected,
+  previewed,
   showCascadeHint,
+  openDetailOnBody,
   canUpdate,
   onSelect,
+  onOpenDetail,
   onEdit,
   onDelete,
 }: {
   item: ReferenceItem
   selected: boolean
+  previewed: boolean
   showCascadeHint?: boolean
+  openDetailOnBody?: boolean
   canUpdate: boolean
   onSelect: (id: string) => void
+  onOpenDetail: (item: ReferenceItem) => void
   onEdit: (item: ReferenceItem) => void
   onDelete: (item: ReferenceItem) => void
 }) {
+  const highlighted = selected || previewed
+
   return (
     <li>
       <div
         className={cn(
-          'group flex w-full items-center gap-1 px-1 py-0.5 text-sm transition-colors',
-          selected ? 'bg-accent' : 'hover:bg-accent/60',
+          'group relative flex w-full items-center gap-0.5 px-1 py-0.5 text-sm transition-colors',
+          highlighted ? 'bg-accent' : 'hover:bg-accent/60',
           !item.isActive && 'opacity-60',
         )}
       >
         <button
           type="button"
-          className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
-          onClick={() => onSelect(item.id)}
+          className={cn(
+            'min-w-0 flex-1 truncate py-1.5 pl-2 text-left font-medium',
+            showCascadeHint ? 'pr-10' : 'pr-2',
+            canUpdate && 'group-hover:pr-20',
+          )}
+          onClick={() => {
+            if (openDetailOnBody) {
+              onOpenDetail(item)
+              return
+            }
+            onSelect(item.id)
+          }}
         >
-          <span className="min-w-0 flex-1 truncate font-medium">{item.name}</span>
-          {showCascadeHint ? (
-            <ChevronRight
-              className={cn(
-                'size-3.5 shrink-0 text-muted-foreground',
-                !selected && 'opacity-0 group-hover:opacity-40',
-              )}
-            />
-          ) : null}
+          {item.name}
         </button>
         {canUpdate ? (
-          <div className="flex shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <div
+            className={cn(
+              'absolute top-1/2 flex -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100',
+              showCascadeHint ? 'right-9' : 'right-1',
+            )}
+          >
             <IconActionButton label="Изменить" size="icon-sm" onClick={() => onEdit(item)}>
               <Pencil />
             </IconActionButton>
@@ -426,6 +544,19 @@ function MillerColumnRow({
             </IconActionButton>
           </div>
         ) : null}
+        {showCascadeHint ? (
+          <button
+            type="button"
+            className={cn(
+              'absolute right-1 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground',
+              !highlighted && 'opacity-50 group-hover:opacity-100',
+            )}
+            aria-label={`Открыть «${item.name}»`}
+            onClick={() => onSelect(item.id)}
+          >
+            <ChevronRight className="size-3.5" />
+          </button>
+        ) : null}
       </div>
     </li>
   )
@@ -436,13 +567,16 @@ function MillerColumn({
   addLabel,
   items,
   selectedId,
+  previewId,
   canUpdate,
   canAdd,
   addDisabledHint,
   emptyHint,
   showCascadeHint,
+  openDetailOnBody,
   onAdd,
   onSelect,
+  onOpenDetail,
   onEdit,
   onDelete,
 }: {
@@ -450,13 +584,16 @@ function MillerColumn({
   addLabel: string
   items: ReferenceItem[]
   selectedId: string | null
+  previewId: string | null
   canUpdate: boolean
   canAdd: boolean
   addDisabledHint?: string
   emptyHint: string
   showCascadeHint?: boolean
+  openDetailOnBody?: boolean
   onAdd: () => void
   onSelect: (id: string) => void
+  onOpenDetail: (item: ReferenceItem) => void
   onEdit: (item: ReferenceItem) => void
   onDelete: (item: ReferenceItem) => void
 }) {
@@ -495,9 +632,12 @@ function MillerColumn({
                 key={item.id}
                 item={item}
                 selected={item.id === selectedId}
+                previewed={item.id === previewId}
                 showCascadeHint={showCascadeHint}
+                openDetailOnBody={openDetailOnBody}
                 canUpdate={canUpdate}
                 onSelect={onSelect}
+                onOpenDetail={onOpenDetail}
                 onEdit={onEdit}
                 onDelete={onDelete}
               />
@@ -510,6 +650,459 @@ function MillerColumn({
         Всего — {formatInteger(items.length)}
       </p>
     </section>
+  )
+}
+
+function buildClassificationPath(
+  column: ColumnKey,
+  item: ReferenceItem,
+  groups: ReferenceItem[],
+  brands: ReferenceItem[],
+  models: ReferenceItem[],
+): { label: string; value: string }[] {
+  if (column === 'group') {
+    return [{ label: 'Группа', value: item.name }]
+  }
+
+  if (column === 'brand') {
+    const group = groups.find((row) => row.id === item.parentId)
+    return [
+      ...(group ? [{ label: 'Группа', value: group.name }] : []),
+      { label: 'Бренд', value: item.name },
+    ]
+  }
+
+  if (column === 'model') {
+    const brand = brands.find((row) => row.id === item.parentId)
+    const group = brand ? groups.find((row) => row.id === brand.parentId) : undefined
+    return [
+      ...(group ? [{ label: 'Группа', value: group.name }] : []),
+      ...(brand ? [{ label: 'Бренд', value: brand.name }] : []),
+      { label: 'Модель', value: item.name },
+    ]
+  }
+
+  const model = models.find((row) => row.id === item.parentId)
+  const brand = model ? brands.find((row) => row.id === model.parentId) : undefined
+  const group = brand ? groups.find((row) => row.id === brand.parentId) : undefined
+  return [
+    ...(group ? [{ label: 'Группа', value: group.name }] : []),
+    ...(brand ? [{ label: 'Бренд', value: brand.name }] : []),
+    ...(model ? [{ label: 'Модель', value: model.name }] : []),
+    { label: 'Модификация', value: item.name },
+  ]
+}
+
+function TypeDetailSheet({
+  detail,
+  set,
+  groups,
+  brands,
+  models,
+  parentLabel,
+  parentOptions,
+  siblingItems,
+  canUpdate,
+  onOpenChange,
+  onItemChange,
+  onDelete,
+}: {
+  detail: { column: ColumnKey; item: ReferenceItem } | null
+  set: ReferenceSetSummary | null | undefined
+  groups: ReferenceItem[]
+  brands: ReferenceItem[]
+  models: ReferenceItem[]
+  parentLabel: string | null
+  parentOptions: ReferenceItem[]
+  siblingItems: ReferenceItem[]
+  canUpdate: boolean
+  onOpenChange: (open: boolean) => void
+  onItemChange: (item: ReferenceItem) => void
+  onDelete: () => void
+}) {
+  const open = Boolean(detail)
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      {detail && set ? (
+        <TypeDetailSheetContent
+          key={detail.item.id}
+          column={detail.column}
+          item={detail.item}
+          set={set}
+          groups={groups}
+          brands={brands}
+          models={models}
+          parentLabel={parentLabel}
+          parentOptions={parentOptions}
+          siblingItems={siblingItems}
+          canUpdate={canUpdate}
+          onItemChange={onItemChange}
+          onDelete={onDelete}
+        />
+      ) : null}
+    </Sheet>
+  )
+}
+
+function TypeDetailSheetContent({
+  column,
+  item,
+  set,
+  groups,
+  brands,
+  models,
+  parentLabel,
+  parentOptions,
+  siblingItems,
+  canUpdate,
+  onItemChange,
+  onDelete,
+}: {
+  column: ColumnKey
+  item: ReferenceItem
+  set: ReferenceSetSummary
+  groups: ReferenceItem[]
+  brands: ReferenceItem[]
+  models: ReferenceItem[]
+  parentLabel: string | null
+  parentOptions: ReferenceItem[]
+  siblingItems: ReferenceItem[]
+  canUpdate: boolean
+  onItemChange: (item: ReferenceItem) => void
+  onDelete: () => void
+}) {
+  const save = useUpsertReferenceItem(set.id)
+  const [tab, setTab] = useState<'card' | 'compatible'>('card')
+  const [name, setName] = useState(item.name)
+  const [description, setDescription] = useState(item.description)
+  const [parentId, setParentId] = useState(item.parentId ?? '')
+  const partsQuery = useDeviceCompatibleParts(item.id)
+  const compatibleCount = partsQuery.data?.length ?? 0
+  const dirty =
+    name.trim() !== item.name.trim() ||
+    description.trim() !== item.description.trim() ||
+    parentId !== (item.parentId ?? '')
+
+  useSheetDirty(dirty && canUpdate)
+
+  const path = buildClassificationPath(
+    column,
+    { ...item, name: name.trim() || item.name, parentId: parentId || item.parentId },
+    groups,
+    brands,
+    models,
+  )
+  const requiresParent = Boolean(parentLabel)
+  const pathTitle = path.map((step) => step.value).join(' · ')
+  const tabItems = useMemo(
+    () => [
+      { id: 'card' as const, label: 'Карточка' },
+      { id: 'compatible' as const, label: 'Подходящее', count: compatibleCount },
+    ],
+    [compatibleCount],
+  )
+
+  async function persist(next: { name: string; description: string; parentId: string }) {
+    const trimmedName = next.name.trim()
+    if (!trimmedName) {
+      toast.error('Укажите название')
+      setName(item.name)
+      return
+    }
+    if (requiresParent && !next.parentId) {
+      toast.error(`Выберите ${parentLabel}`)
+      return
+    }
+    const effectiveParentId = requiresParent ? next.parentId || null : null
+    const nameTaken = siblingItems.some(
+      (row) =>
+        row.id !== item.id &&
+        (row.parentId ?? null) === effectiveParentId &&
+        row.name.trim().toLowerCase() === trimmedName.toLowerCase(),
+    )
+    if (nameTaken) {
+      toast.error('Запись с таким названием уже есть на этом уровне.')
+      return
+    }
+
+    try {
+      await save.mutateAsync({
+        id: item.id,
+        setId: set.id,
+        code: item.code,
+        name: trimmedName,
+        description: next.description.trim(),
+        parentId: effectiveParentId,
+      })
+      const parent = parentOptions.find((row) => row.id === effectiveParentId)
+      onItemChange({
+        ...item,
+        name: trimmedName,
+        description: next.description.trim(),
+        parentId: effectiveParentId,
+        parentName: parent?.name ?? item.parentName,
+        parentCode: parent?.code ?? item.parentCode,
+      })
+      toast.success('Сохранено')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      setName(item.name)
+      setDescription(item.description)
+      setParentId(item.parentId ?? '')
+    }
+  }
+
+  return (
+    <SheetContent
+      side="right"
+      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,40rem)]"
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      actions={canUpdate ? <SheetEntityToolbar onDelete={onDelete} /> : null}
+    >
+      <SheetHeader className="sr-only">
+        <SheetTitle>{pathTitle}</SheetTitle>
+        <SheetDescription>Карточка вида прибора: {pathTitle}.</SheetDescription>
+      </SheetHeader>
+
+      <div className="flex flex-1 flex-col gap-3 p-5 pr-14">
+        <h2 className="text-xl font-semibold leading-snug tracking-tight">{pathTitle}</h2>
+
+        <PageTabs
+          aria-label="Разделы вида прибора"
+          value={tab}
+          onChange={setTab}
+          items={tabItems}
+        />
+
+        {tab === 'card' ? (
+          <SectionCard className="gap-4 py-4">
+            <div className="space-y-4">
+              <ReferenceItemPhotos referenceItemId={item.id} canEdit={canUpdate} />
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`type-name-${item.id}`}>Название</Label>
+                  <Input
+                    id={`type-name-${item.id}`}
+                    value={name}
+                    placeholder="Название"
+                    disabled={!canUpdate || save.isPending}
+                    readOnly={!canUpdate}
+                    onChange={(event) => setName(event.target.value)}
+                    onBlur={() => {
+                      if (!canUpdate || name.trim() === item.name.trim()) {
+                        return
+                      }
+                      void persist({ name, description, parentId })
+                    }}
+                  />
+                </div>
+                {requiresParent && parentLabel ? (
+                  <div className="space-y-2">
+                    <Label>{parentLabel}</Label>
+                    {canUpdate ? (
+                      <Select
+                        value={parentId}
+                        disabled={save.isPending}
+                        onValueChange={(value) => {
+                          setParentId(value)
+                          void persist({ name, description, parentId: value })
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={`Выберите ${parentLabel.toLowerCase()}`} />
+                        </SelectTrigger>
+                        <SelectContent searchable>
+                          {parentOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.name}
+                              {option.isActive ? '' : ' (скрыт)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={parentOptions.find((row) => row.id === parentId)?.name ?? '—'}
+                        readOnly
+                        disabled
+                      />
+                    )}
+                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor={`type-code-${item.id}`}>Код</Label>
+                  <Input id={`type-code-${item.id}`} value={item.code} readOnly disabled />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`type-desc-${item.id}`}>Описание</Label>
+                  <Textarea
+                    id={`type-desc-${item.id}`}
+                    value={description}
+                    disabled={!canUpdate || save.isPending}
+                    placeholder="Необязательно"
+                    className="min-h-24 resize-y"
+                    onChange={(event) => setDescription(event.target.value)}
+                    onBlur={() => {
+                      if (!canUpdate || description.trim() === item.description.trim()) {
+                        return
+                      }
+                      void persist({ name, description, parentId })
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+        ) : null}
+
+        {tab === 'compatible' ? (
+          <CompatiblePartsBlock referenceItemId={item.id} canUpdate={canUpdate} />
+        ) : null}
+      </div>
+    </SheetContent>
+  )
+}
+
+function CompatiblePartsBlock({
+  referenceItemId,
+  canUpdate,
+}: {
+  referenceItemId: string
+  canUpdate: boolean
+}) {
+  const openSheet = useOpenEntitySheet()
+  const partsQuery = useDeviceCompatibleParts(referenceItemId)
+  const addPart = useAddDeviceCompatiblePart(referenceItemId)
+  const removePart = useRemoveDeviceCompatiblePart(referenceItemId)
+  const [adding, setAdding] = useState(false)
+  const linkedIds = useMemo(
+    () => new Set((partsQuery.data ?? []).map((part) => part.id)),
+    [partsQuery.data],
+  )
+
+  async function handleAdd(item: InventoryItem) {
+    if (linkedIds.has(item.id)) {
+      toast.message('Эта деталь уже в списке')
+      return
+    }
+    try {
+      await addPart.mutateAsync(item.id)
+      toast.success('Деталь добавлена')
+      setAdding(false)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  async function handleRemove(part: CompatiblePart) {
+    try {
+      await removePart.mutateAsync(part.id)
+      toast.success('Деталь убрана')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  const parts = partsQuery.data ?? []
+
+  return (
+    <SectionCard
+      title="Подходящее"
+      description="Запчасти из номенклатуры."
+      actions={
+        canUpdate ? (
+          <Button
+            type="button"
+            variant={adding ? 'secondary' : 'outline'}
+            size="sm"
+            className="shrink-0"
+            onClick={() => setAdding((value) => !value)}
+          >
+            {adding ? <X className="size-3.5" /> : <Plus className="size-3.5" />}
+            {adding ? 'Закрыть' : 'Добавить'}
+          </Button>
+        ) : null
+      }
+    >
+      <div className="space-y-3">
+        {adding ? (
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <ItemSearchField
+              searchPlaceholder="Найти деталь в номенклатуре"
+              showScan={false}
+              suggestSide="bottom"
+              onSelect={(item) => {
+                void handleAdd(item)
+              }}
+            />
+          </div>
+        ) : null}
+
+        {partsQuery.isLoading ? (
+          <LoadingState label="Загрузка деталей" className="min-h-24 py-6" />
+        ) : partsQuery.error ? (
+          <ErrorState description={getErrorMessage(partsQuery.error)} />
+        ) : parts.length === 0 ? (
+          <EmptyState
+            title="Подходящих деталей нет"
+            description="Добавьте запчасти из номенклатуры."
+            className="py-12"
+          />
+        ) : (
+          <ul className="overflow-hidden rounded-lg border divide-y">
+            {parts.map((part) => (
+              <li key={part.id} className="group relative">
+                <button
+                  type="button"
+                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/60"
+                  onClick={() => openSheet('item', part.id)}
+                >
+                  <InventoryItemCoverThumb src={part.coverUrl} alt={part.name} className="size-11" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{part.name}</span>
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+                      {part.article ? <span>арт. {part.article}</span> : null}
+                      {part.code ? <span className="font-mono">{part.code}</span> : null}
+                      {part.categoryName ? <span>{part.categoryName}</span> : null}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <span
+                      className={cn(
+                        'block text-sm font-medium tabular-nums',
+                        part.stockQuantity <= 0 && 'text-muted-foreground',
+                      )}
+                    >
+                      {formatQuantity(part.stockQuantity)}
+                      {part.unitName ? ` ${part.unitName}` : ''}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">на складе</span>
+                  </span>
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground opacity-40" />
+                </button>
+                {canUpdate ? (
+                  <div className="absolute top-1/2 right-9 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                    <IconActionButton
+                      label="Убрать"
+                      size="icon-sm"
+                      className="bg-card text-destructive shadow-sm hover:text-destructive"
+                      disabled={removePart.isPending}
+                      onClick={() => {
+                        void handleRemove(part)
+                      }}
+                    >
+                      <Trash2 />
+                    </IconActionButton>
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </SectionCard>
   )
 }
 

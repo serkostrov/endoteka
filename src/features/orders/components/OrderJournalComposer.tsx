@@ -138,7 +138,7 @@ export function OrderJournalComposer({
   }
 
   return (
-    <div className="border-t bg-background px-3 py-2">
+    <div className="border-t border-border/70 bg-secondary/50 px-3 py-2">
       {files.length > 0 ? (
         <ul className="mb-2 flex flex-wrap gap-1.5">
           {files.map((file, index) => (

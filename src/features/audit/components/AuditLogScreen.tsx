@@ -71,7 +71,7 @@ export function AuditLogScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Журнал действий"
-        description="История операций только для просмотра. Записи нельзя изменить или удалить."
+        description="Журнал операций в системе. Записи доступны только для просмотра."
       />
 
       <FilterBar>

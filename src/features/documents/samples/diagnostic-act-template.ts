@@ -39,7 +39,7 @@ export const DIAGNOSTIC_ACT_TEMPLATE_HTML = `<div style="text-align: center;">
 </tbody>
 </table>
 </div>
-<p style="text-align: center; margin: 18pt 0 4pt;"><strong><span style="font-size: 14pt; font-family: 'Times New Roman', Times, serif;">АКТ ДИАГНОСТИКИ №${field('order.number', 'ЗК-0001')}</span></strong></p>
+<p style="text-align: center; margin: 18pt 0 4pt;"><strong><span style="font-size: 14pt; font-family: 'Times New Roman', Times, serif;">АКТ ДИАГНОСТИКИ №${field('order.number', 'А0001')}</span></strong></p>
 <p style="margin: 0 0 12pt; font-family: 'Times New Roman', Times, serif; font-size: 12pt;">
 <span>г. Москва</span>
 <span style="float: right;">${field('order.createdAt', '25.08.26')}</span>

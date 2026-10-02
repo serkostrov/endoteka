@@ -66,7 +66,7 @@ export function InventoryItemsScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Номенклатура"
-        description="Справочник запчастей и расходников. Наименование уникально."
+        description="Каталог запчастей и расходников для склада и заказов."
       />
 
       <FilterBar
