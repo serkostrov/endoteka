@@ -16,6 +16,13 @@
     "format:check": "prettier --check .",
     "preview": "vite preview",
     "import": "tsx import/src/cli.ts",
+    "import:roapp": "tsx import/src/roapp-export.ts",
+    "import:roapp-categories": "tsx import/src/sync-roapp-categories.ts",
+    "import:roapp-order-items": "tsx import/src/roapp-order-items.ts",
+    "import:roapp-order-items-sync": "tsx import/src/sync-roapp-order-items.ts",
+    "import:roapp-receipts-convert": "tsx import/src/convert-roapp-receipts.ts",
+    "import:roapp-receipts-sync": "tsx import/src/sync-roapp-receipts.ts",
+    "import:roapp-receipts": "tsx import/src/run-roapp-receipts.ts",
     "import:test": "tsx --test import/tests/duplicate.test.ts import/tests/partial-failure.test.ts import/tests/interrupted.test.ts"
   },
   "dependencies": {

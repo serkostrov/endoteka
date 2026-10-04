@@ -41,8 +41,13 @@ export const queryKeys = {
   },
   devices: {
     all: ['devices'] as const,
-    list: (filters: { search: string; page: number; pageSize: number }) =>
+    list: (filters: { search: string; page: number; pageSize: number | 'all' }) =>
       ['devices', 'list', filters] as const,
+    registryGroups: (search: string) => ['devices', 'registry-groups', search] as const,
+    registryBrands: (search: string, groupKey: string) =>
+      ['devices', 'registry-brands', search, groupKey] as const,
+    registryDevices: (search: string, groupKey: string, brandKey: string) =>
+      ['devices', 'registry-devices', search, groupKey, brandKey] as const,
     search: (query: string) => ['devices', 'search', query] as const,
     serial: (serial: string) => ['devices', 'serial', serial] as const,
     detail: (id: string) => ['devices', 'detail', id] as const,
@@ -74,6 +79,9 @@ export const queryKeys = {
       ['inventory', 'stock', filters] as const,
     items: (filters: { search: string; page: number; pageSize: number }) =>
       ['inventory', 'items', filters] as const,
+    registryCategories: (search: string) => ['inventory', 'registry-categories', search] as const,
+    registryItems: (search: string, categoryKey: string) =>
+      ['inventory', 'registry-items', search, categoryKey] as const,
     item: (id: string) => ['inventory', 'item', id] as const,
     itemPhotos: (id: string) => ['inventory', 'item-photos', id] as const,
     name: (name: string) => ['inventory', 'name', name] as const,

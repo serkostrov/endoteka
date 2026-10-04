@@ -24,6 +24,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Import reports
+# Import reports and exported dumps (may contain PII)
 import/reports
+import/data
 

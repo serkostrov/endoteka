@@ -1,12 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
-import { EmptyState } from '@/components/shared/EmptyState'
-import { ErrorState } from '@/components/shared/ErrorState'
 import { FilterBar } from '@/components/shared/FilterBar'
-import { FolderTree, FolderTreeItemButton, nestByFolderKeys } from '@/components/shared/FolderTree'
-import { ListPagination } from '@/components/shared/ListPagination'
-import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PageTabs } from '@/components/shared/PageTabs'
 import { SearchInput } from '@/components/shared/SearchInput'
@@ -14,17 +9,12 @@ import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
 import { SERIAL_LOOKUP_DEBOUNCE_MS } from '@/lib/constants/devices'
 import { Permission } from '@/lib/constants/permissions'
-import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-import { usePageSize } from '@/hooks/use-page-size'
-import { formatDate } from '@/lib/utils/date'
 
 import { CreateDeviceDialog } from './CreateDeviceDialog'
 import { DeviceDetailSheet } from './DeviceDetailScreen'
+import { DeviceRegistryTree } from './DeviceRegistryTree'
 import { DeviceTypesBrowser } from './DeviceTypesBrowser'
-import { WarrantyBadge } from './WarrantyBadge'
-import { useDevices } from '../hooks/use-devices'
-import type { Device } from '../services/devices-service'
 
 type DevicesTab = 'registry' | 'types'
 
@@ -35,40 +25,11 @@ function parseTab(value: string | null): DevicesTab {
 export function DevicesScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
   const debouncedSearch = useDebouncedValue(search, SERIAL_LOOKUP_DEBOUNCE_MS)
   const canCreate = useHasPermission(Permission.DevicesCreate)
-  const devicesQuery = useDevices(debouncedSearch, page, pageSize)
   const deviceId = searchParams.get('device')
   const tab = parseTab(searchParams.get('tab'))
-  const devices = devicesQuery.data?.items ?? []
-  const total = devicesQuery.data?.total ?? 0
-  const pageCount = Math.max(1, Math.ceil(total / pageSize))
-
-  const groups = useMemo(
-    () =>
-      nestByFolderKeys(devices, [
-        (device) => ({
-          id: `group:${device.groupId || device.groupName || 'none'}`,
-          name: device.groupName.trim() || 'Без типа',
-        }),
-        (device) => ({
-          id: `brand:${device.brandId || device.brandName || 'none'}`,
-          name: device.brandName.trim() || 'Без бренда',
-        }),
-      ]),
-    [devices],
-  )
-
-  function deviceSubtitle(device: Device) {
-    const serial = device.serialNumber.trim().toLocaleLowerCase('ru')
-    return [device.modelName, device.modificationName]
-      .map((value) => value.trim())
-      .filter((value) => value && !serial.includes(value.toLocaleLowerCase('ru')))
-      .join(' ')
-  }
 
   function setTab(next: DevicesTab) {
     const params = new URLSearchParams(searchParams)
@@ -85,11 +46,6 @@ export function DevicesScreen() {
     next.set('device', id)
     next.delete('edit')
     setSearchParams(next, { replace: true })
-  }
-
-  function handlePageSizeChange(size: number) {
-    setPageSize(size)
-    setPage(1)
   }
 
   return (
@@ -132,66 +88,13 @@ export function DevicesScreen() {
           >
             <SearchInput
               value={search}
-              onChange={(next) => {
-                setSearch(next)
-                setPage(1)
-              }}
+              onChange={setSearch}
               label="Поиск приборов"
               placeholder="Серийный номер, бренд или модель"
             />
           </FilterBar>
 
-          {devicesQuery.isLoading ? (
-            <LoadingState label="Загрузка приборов" className="min-h-40" />
-          ) : devicesQuery.error ? (
-            <ErrorState description={getErrorMessage(devicesQuery.error)} />
-          ) : (
-            <FolderTree
-              groups={groups}
-              expandAll={Boolean(debouncedSearch.trim())}
-              getItemId={(device) => device.id}
-              empty={
-                <EmptyState
-                  title="Приборы не найдены"
-                  description="Измените запрос или добавьте прибор."
-                  className="rounded-md border py-12"
-                />
-              }
-              renderItem={(device: Device) => {
-                const subtitle = deviceSubtitle(device)
-                return (
-                  <FolderTreeItemButton depth={2} onClick={() => openDevice(device.id)}>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium text-foreground">
-                        {device.serialNumber.trim() || 'Без серийного номера'}
-                      </span>
-                      {subtitle ? (
-                        <span className="mt-0.5 block truncate text-xs text-muted-foreground">
-                          {subtitle}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="hidden shrink-0 sm:block">
-                      <WarrantyBadge warranty={device.warranty} />
-                    </span>
-                    <span className="hidden w-[5.5rem] shrink-0 text-right text-xs tabular-nums text-muted-foreground lg:block">
-                      {formatDate(device.updatedAt)}
-                    </span>
-                  </FolderTreeItemButton>
-                )
-              }}
-            />
-          )}
-
-          {pageCount > 1 || Boolean(pageSize) ? (
-            <ListPagination
-              page={page}
-              pageCount={pageCount}
-              onPageChange={setPage}
-              pageSize={pageSize}
-              onPageSizeChange={handlePageSizeChange}
-            />
-          ) : null}
+          <DeviceRegistryTree search={debouncedSearch} onOpenDevice={openDevice} />
         </>
       )}
 

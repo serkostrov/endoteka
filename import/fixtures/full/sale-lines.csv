@@ -1,0 +1,2 @@
+source_id,sale_source_id,item_source_id,item_code,quantity,unit_price,cost,sort_order
+sale-line-1,sale-1,item-1,,2,150,100,0

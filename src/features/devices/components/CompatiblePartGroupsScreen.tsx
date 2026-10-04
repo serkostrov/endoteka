@@ -33,7 +33,16 @@ import {
 } from '../hooks/use-compatible-parts'
 import type { CompatiblePartGroup } from '../services/compatible-parts-service'
 
-const GROUP_COLORS = ['#2563eb', '#0891b2', '#059669', '#d97706', '#dc2626', '#7c3aed', '#db2777']
+const DEFAULT_GROUP_COLOR = '#2563eb'
+const GROUP_COLORS = [
+  DEFAULT_GROUP_COLOR,
+  '#0891b2',
+  '#059669',
+  '#d97706',
+  '#dc2626',
+  '#7c3aed',
+  '#db2777',
+] as const
 
 export function CompatiblePartGroupsScreen() {
   const canUpdate = useHasPermission(Permission.SettingsUpdate)
@@ -45,7 +54,7 @@ export function CompatiblePartGroupsScreen() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<CompatiblePartGroup | null>(null)
   const [name, setName] = useState('')
-  const [color, setColor] = useState(GROUP_COLORS[0])
+  const [color, setColor] = useState(DEFAULT_GROUP_COLOR)
   const [deleteTarget, setDeleteTarget] = useState<CompatiblePartGroup | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
 
@@ -54,7 +63,7 @@ export function CompatiblePartGroupsScreen() {
   function openCreate() {
     setEditing(null)
     setName('')
-    setColor(GROUP_COLORS[groups.length % GROUP_COLORS.length] ?? GROUP_COLORS[0])
+    setColor(GROUP_COLORS[groups.length % GROUP_COLORS.length] ?? DEFAULT_GROUP_COLOR)
     setDialogOpen(true)
   }
 

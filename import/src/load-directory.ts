@@ -1,12 +1,18 @@
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { DATASET_FILES, DATASET_ORDER, type DatasetId, type CsvRow } from './types.ts'
+import {
+  DATASET_FILES,
+  DATASET_ORDER,
+  SATELLITE_DATASETS,
+  type DatasetId,
+  type CsvRow,
+} from './types.ts'
 import { parseCsv } from './csv.ts'
 
 export async function loadDatasetDirectory(directory: string): Promise<Partial<Record<DatasetId, CsvRow[]>>> {
   const rows: Partial<Record<DatasetId, CsvRow[]>> = {}
-  for (const dataset of DATASET_ORDER) {
+  for (const dataset of [...DATASET_ORDER, ...SATELLITE_DATASETS]) {
     const filePath = path.join(directory, DATASET_FILES[dataset])
     try {
       const text = await readFile(filePath, 'utf8')

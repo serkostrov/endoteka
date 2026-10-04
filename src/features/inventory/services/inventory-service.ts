@@ -361,24 +361,11 @@ export async function searchInventoryItems(
   }
 
   const rows = data ?? []
-  const coverPaths = [
-    ...new Set(
-      rows
-        .map((row) => ('cover_file_path' in row ? row.cover_file_path : null))
-        .filter((path): path is string => Boolean(path)),
-    ),
-  ]
-  const signedByPath = new Map<string, string>()
-  if (coverPaths.length > 0) {
-    const { data: signed } = await getSupabase()
-      .storage.from(ITEM_PHOTOS_BUCKET)
-      .createSignedUrls(coverPaths, 3600)
-    for (const entry of signed ?? []) {
-      if (entry.path && entry.signedUrl && !entry.error) {
-        signedByPath.set(entry.path, entry.signedUrl)
-      }
-    }
-  }
+  const signedByPath = await signCoverPaths(
+    rows
+      .map((row) => ('cover_file_path' in row ? row.cover_file_path : null))
+      .filter((path): path is string => Boolean(path)),
+  )
 
   return {
     items: rows.map((row) => {
@@ -390,6 +377,221 @@ export async function searchInventoryItems(
     }),
     total: Number(rows[0]?.total_count ?? 0),
   }
+}
+
+export type InventoryRegistryFolder = {
+  key: string
+  id: string | null
+  name: string
+  count: number
+}
+
+function sanitizeInventorySearch(value: string) {
+  return value.replace(/[%_,]/g, '').trim()
+}
+
+function folderKey(id: string | null | undefined) {
+  return id?.trim() || 'none'
+}
+
+function applyInventoryItemSearch<T extends { or: (filter: string) => T }>(query: T, search: string) {
+  const term = sanitizeInventorySearch(search)
+  if (!term) {
+    return query
+  }
+  return query.or(
+    `name.ilike.%${term}%,code.ilike.%${term}%,article.ilike.%${term}%,barcode.ilike.%${term}%`,
+  )
+}
+
+async function signCoverPaths(paths: string[]) {
+  const unique = [...new Set(paths.filter(Boolean))]
+  const signedByPath = new Map<string, string>()
+  if (unique.length === 0) {
+    return signedByPath
+  }
+  const { data: signed } = await getSupabase()
+    .storage.from(ITEM_PHOTOS_BUCKET)
+    .createSignedUrls(unique, 3600)
+  for (const entry of signed ?? []) {
+    if (entry.path && entry.signedUrl && !entry.error) {
+      signedByPath.set(entry.path, entry.signedUrl)
+    }
+  }
+  return signedByPath
+}
+
+async function loadReferenceNames(ids: string[]) {
+  const unique = [...new Set(ids.filter(Boolean))]
+  const names = new Map<string, string>()
+  if (unique.length === 0) {
+    return names
+  }
+  const { data, error } = await getSupabase()
+    .from('reference_items')
+    .select('id, name')
+    .in('id', unique)
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить справочник.')
+  }
+  for (const row of data ?? []) {
+    names.set(row.id, row.name)
+  }
+  return names
+}
+
+const REGISTRY_PAGE_SIZE = 1000
+
+async function loadCoverPathsByItem(itemIds: string[]) {
+  const covers = new Map<string, string>()
+  if (itemIds.length === 0) {
+    return covers
+  }
+  for (let offset = 0; offset < itemIds.length; offset += REGISTRY_PAGE_SIZE) {
+    const chunk = itemIds.slice(offset, offset + REGISTRY_PAGE_SIZE)
+    const { data, error } = await getSupabase()
+      .from('inventory_item_photos')
+      .select('item_id, file_path, sort_order, created_at')
+      .in('item_id', chunk)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true })
+    if (error) {
+      throw toAppError(error, 'Не удалось загрузить обложки.')
+    }
+    for (const row of data ?? []) {
+      if (!covers.has(row.item_id)) {
+        covers.set(row.item_id, row.file_path)
+      }
+    }
+  }
+  return covers
+}
+
+async function fetchAllInventoryRows<T>(
+  build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>,
+): Promise<T[]> {
+  const rows: T[] = []
+  for (let from = 0; ; from += REGISTRY_PAGE_SIZE) {
+    const to = from + REGISTRY_PAGE_SIZE - 1
+    const { data, error } = await build(from, to)
+    if (error) {
+      throw error
+    }
+    const chunk = data ?? []
+    rows.push(...chunk)
+    if (chunk.length < REGISTRY_PAGE_SIZE) {
+      break
+    }
+  }
+  return rows
+}
+
+/** Категории номенклатуры для дерева (лёгкая выборка + агрегация). */
+export async function listInventoryRegistryCategories(
+  search: string,
+): Promise<InventoryRegistryFolder[]> {
+  type CategoryRow = { category_id: string }
+  let rows: CategoryRow[]
+  try {
+    rows = await fetchAllInventoryRows<CategoryRow>(async (from, to) => {
+      let query = getSupabase().from('inventory_items').select('category_id')
+      query = applyInventoryItemSearch(query, search)
+      return query.range(from, to)
+    })
+  } catch (error) {
+    throw toAppError(error, 'Не удалось загрузить категории.')
+  }
+
+  const counts = new Map<string, number>()
+  for (const row of rows) {
+    const key = folderKey(row.category_id)
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+  }
+
+  const names = await loadReferenceNames(
+    [...counts.keys()].filter((key) => key !== 'none'),
+  )
+
+  return [...counts.entries()]
+    .map(([key, count]) => ({
+      key,
+      id: key === 'none' ? null : key,
+      name: (key === 'none' ? '' : names.get(key) ?? '').trim() || 'Без категории',
+      count,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+}
+
+/** Позиции внутри категории. */
+export async function listInventoryRegistryItems(
+  search: string,
+  categoryKey: string,
+): Promise<InventoryItem[]> {
+  type ItemRow = {
+    id: string
+    code: string
+    article: string
+    barcode: string
+    barcode_type: string
+    name: string
+    category_id: string
+    unit_id: string
+    purchase_price: number
+    repair_price: number
+    retail_price: number
+    created_at: string
+    updated_at: string
+  }
+
+  let rows: ItemRow[]
+  try {
+    rows = await fetchAllInventoryRows<ItemRow>(async (from, to) => {
+      let query = getSupabase()
+        .from('inventory_items')
+        .select(
+          'id, code, article, barcode, barcode_type, name, category_id, unit_id, purchase_price, repair_price, retail_price, created_at, updated_at',
+        )
+        .order('name', { ascending: true })
+      query = applyInventoryItemSearch(query, search)
+      query =
+        categoryKey === 'none' ? query.is('category_id', null) : query.eq('category_id', categoryKey)
+      return query.range(from, to)
+    })
+  } catch (error) {
+    throw toAppError(error, 'Не удалось загрузить номенклатуру.')
+  }
+
+  const refNames = await loadReferenceNames([
+    ...rows.map((row) => row.category_id),
+    ...rows.map((row) => row.unit_id),
+  ])
+  // Обложки в дереве только для небольших папок — иначе подпись URL тормозит UI.
+  const coverPaths =
+    rows.length <= 80 ? await loadCoverPathsByItem(rows.map((row) => row.id)) : new Map<string, string>()
+  const signedByPath = await signCoverPaths([...coverPaths.values()])
+
+  return rows.map((row) => {
+    const path = coverPaths.get(row.id) ?? null
+    return mapItem({
+      id: row.id,
+      code: row.code,
+      article: row.article,
+      barcode: row.barcode,
+      barcode_type: row.barcode_type,
+      name: row.name,
+      category_id: row.category_id,
+      category_name: refNames.get(row.category_id) ?? '',
+      unit_id: row.unit_id,
+      unit_name: refNames.get(row.unit_id) ?? '',
+      purchase_price: row.purchase_price,
+      repair_price: row.repair_price,
+      retail_price: row.retail_price,
+      stock_quantity: 0,
+      cover_url: path ? (signedByPath.get(path) ?? null) : null,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    })
+  })
 }
 
 export async function findInventoryItemByName(name: string, excludeId?: string): Promise<InventoryNameMatch[]> {

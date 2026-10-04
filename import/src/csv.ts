@@ -28,15 +28,51 @@ function splitCsvLine(line: string): string[] {
   return cells
 }
 
+/** Split CSV text into physical records, keeping newlines inside quoted fields. */
+function splitCsvRecords(text: string): string[] {
+  const records: string[] = []
+  let current = ''
+  let inQuotes = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (char === '"') {
+      current += char
+      if (inQuotes && text[index + 1] === '"') {
+        current += '"'
+        index += 1
+      } else {
+        inQuotes = !inQuotes
+      }
+      continue
+    }
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && text[index + 1] === '\n') {
+        index += 1
+      }
+      if (current.trim() !== '') {
+        records.push(current)
+      }
+      current = ''
+      continue
+    }
+    current += char
+  }
+  if (current.trim() !== '') {
+    records.push(current)
+  }
+  return records
+}
+
 export function parseCsv(text: string): { headers: string[]; rows: CsvRow[] } {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter((line) => line.trim() !== '')
-  const headerLine = lines[0]
+  const records = splitCsvRecords(text.replace(/^\uFEFF/, ''))
+  const headerLine = records[0]
   if (!headerLine) {
     return { headers: [], rows: [] }
   }
 
   const headers = splitCsvLine(headerLine).map((header) => header.trim())
-  const rows = lines.slice(1).map((line) => {
+  const rows = records.slice(1).map((line) => {
     const cells = splitCsvLine(line)
     const row: CsvRow = {}
     headers.forEach((header, index) => {

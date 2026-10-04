@@ -13,11 +13,26 @@ export const DatasetId = {
   Barcodes: 'barcodes',
   Prices: 'prices',
   WarehouseStock: 'warehouse_stock',
+  Receipts: 'receipts',
+  ReceiptLines: 'receipt_lines',
+  WriteOffs: 'write_offs',
+  WriteOffLines: 'write_off_lines',
+  Sales: 'sales',
+  SaleLines: 'sale_lines',
   Orders: 'orders',
+  OrderServiceLines: 'order_service_lines',
+  OrderPartLines: 'order_part_lines',
   OrderConsumption: 'order_consumption',
 } as const
 
 export type DatasetId = (typeof DatasetId)[keyof typeof DatasetId]
+
+/** Строки документов — спутники, обрабатываются вместе с заголовком. */
+export const SATELLITE_DATASETS: DatasetId[] = [
+  DatasetId.ReceiptLines,
+  DatasetId.SaleLines,
+  DatasetId.WriteOffLines,
+]
 
 export const DATASET_ORDER: DatasetId[] = [
   DatasetId.Employees,
@@ -27,7 +42,12 @@ export const DATASET_ORDER: DatasetId[] = [
   DatasetId.Barcodes,
   DatasetId.Prices,
   DatasetId.WarehouseStock,
+  DatasetId.Receipts,
+  DatasetId.WriteOffs,
+  DatasetId.Sales,
   DatasetId.Orders,
+  DatasetId.OrderServiceLines,
+  DatasetId.OrderPartLines,
   DatasetId.OrderConsumption,
 ]
 
@@ -39,7 +59,15 @@ export const DATASET_FILES: Record<DatasetId, string> = {
   barcodes: 'barcodes.csv',
   prices: 'prices.csv',
   warehouse_stock: 'warehouse-stock.csv',
+  receipts: 'receipts.csv',
+  receipt_lines: 'receipt-lines.csv',
+  write_offs: 'write-offs.csv',
+  write_off_lines: 'write-off-lines.csv',
+  sales: 'sales.csv',
+  sale_lines: 'sale-lines.csv',
   orders: 'orders.csv',
+  order_service_lines: 'order-service-lines.csv',
+  order_part_lines: 'order-part-lines.csv',
   order_consumption: 'order-consumption.csv',
 }
 

@@ -8,6 +8,7 @@ import {
   DATASET_ORDER,
   DatasetId,
   ImportPhase,
+  SATELLITE_DATASETS,
   type CsvRow,
   type DatasetId as DatasetIdType,
   type ImportReport,
@@ -63,12 +64,19 @@ export async function runImport(input: RunImportInput): Promise<ImportReport> {
         }
       }
     } else {
+      const relatedRows: Partial<Record<DatasetIdType, CsvRow[]>> = {}
+      for (const satellite of SATELLITE_DATASETS) {
+        relatedRows[satellite] = (input.rows[satellite] ?? []).map((raw) =>
+          mapRow(raw, HEADER_ALIASES[satellite]),
+        )
+      }
+
       for (const dataset of DATASET_ORDER) {
         const datasetRows = input.rows[dataset] ?? []
         for (const [index, raw] of datasetRows.entries()) {
           const mapped = mapRow(raw, HEADER_ALIASES[dataset])
           const outcome = await handlers[dataset](
-            { store: input.store, runId: run.id, dryRun },
+            { store: input.store, runId: run.id, dryRun, relatedRows },
             mapped,
             index + 2,
           )

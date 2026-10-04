@@ -10,6 +10,7 @@ export type HandlerContext = {
   store: ImportStore
   runId: string
   dryRun: boolean
+  relatedRows?: Partial<Record<DatasetId, CsvRow[]>>
 }
 
 function fail(dataset: DatasetId, rowNumber: number, row: CsvRow, message: string, extra?: Partial<RowOutcome>): RowOutcome {
@@ -264,7 +265,18 @@ export async function handleDeviceModels(ctx: HandlerContext, row: CsvRow, rowNu
     source_id: pick(row, 'source_id'),
     modification_name: modificationName,
   })
-  const hash = payloadHash({ groupCode, brandCode, modelCode, modificationCode, groupName, brandName, modelName, modificationName })
+  // v2: upsert matches by (parent, name) so the same brand can live under many groups.
+  const hash = payloadHash({
+    groupCode,
+    brandCode,
+    modelCode,
+    modificationCode,
+    groupName,
+    brandName,
+    modelName,
+    modificationName,
+    linkByParentName: true,
+  })
   const existingKey = await ctx.store.getSourceKey(Dataset.DeviceModels, identity.key)
   if (existingKey?.payloadHash === hash) {
     return ok(Dataset.DeviceModels, rowNumber, row, 'skipped', {
@@ -292,7 +304,7 @@ export async function handleDeviceModels(ctx: HandlerContext, row: CsvRow, rowNu
     setCode: 'device_brands',
     code: brandCode,
     name: brandName,
-    parentId: null,
+    parentId: group.record.id,
   })
   const model = await ctx.store.upsertReference({
     setCode: 'device_models',
@@ -336,16 +348,16 @@ export async function handleWarehouseItems(ctx: HandlerContext, row: CsvRow, row
     return fail(Dataset.WarehouseItems, rowNumber, row, 'Укажите название номенклатуры.', { sourceKey: identity.key })
   }
   const categoryCode = slugCode(pick(row, 'category_code'))
+  const categoryName = pick(row, 'category_name') || pick(row, 'category_code') || categoryCode
   const unitCode = slugCode(pick(row, 'unit_code'))
   if (!categoryCode || !unitCode) {
     return fail(Dataset.WarehouseItems, rowNumber, row, 'Укажите категорию и единицу измерения.', {
       sourceKey: identity.key,
     })
   }
-  const category = await ctx.store.findReference('inventory_categories', categoryCode)
   const unit = await ctx.store.findReference('units_of_measure', unitCode)
-  if (!category || !unit) {
-    return fail(Dataset.WarehouseItems, rowNumber, row, 'Категория или единица измерения не найдены в справочнике.', {
+  if (!unit) {
+    return fail(Dataset.WarehouseItems, rowNumber, row, 'Единица измерения не найдена в справочнике.', {
       sourceKey: identity.key,
     })
   }
@@ -357,26 +369,27 @@ export async function handleWarehouseItems(ctx: HandlerContext, row: CsvRow, row
     return fail(Dataset.WarehouseItems, rowNumber, row, 'Цена не может быть отрицательной.', { sourceKey: identity.key })
   }
 
-  const record = {
-    code,
-    name,
-    article: pick(row, 'article'),
-    barcode: pick(row, 'barcode'),
-    categoryId: category.id,
-    unitId: unit.id,
-    purchasePrice,
-    repairPrice,
-    retailPrice,
-  }
   const missingFields = missingIfEmpty({
     source_id: pick(row, 'source_id'),
-    article: record.article,
-    barcode: record.barcode,
+    article: pick(row, 'article'),
+    barcode: pick(row, 'barcode'),
+    category_name: pick(row, 'category_name'),
     purchase_price: pick(row, 'purchase_price'),
     repair_price: pick(row, 'repair_price'),
     retail_price: pick(row, 'retail_price'),
   })
-  const hash = payloadHash(record)
+  const hash = payloadHash({
+    code,
+    name,
+    article: pick(row, 'article'),
+    barcode: pick(row, 'barcode'),
+    categoryCode,
+    categoryName,
+    unitCode,
+    purchasePrice,
+    repairPrice,
+    retailPrice,
+  })
   const existingKey = await ctx.store.getSourceKey(Dataset.WarehouseItems, identity.key)
   if (existingKey?.payloadHash === hash) {
     return ok(Dataset.WarehouseItems, rowNumber, row, 'skipped', {
@@ -394,6 +407,23 @@ export async function handleWarehouseItems(ctx: HandlerContext, row: CsvRow, row
     })
   }
   try {
+    const category = await ctx.store.upsertReference({
+      setCode: 'inventory_categories',
+      code: categoryCode,
+      name: categoryName,
+      parentId: null,
+    })
+    const record = {
+      code,
+      name,
+      article: pick(row, 'article'),
+      barcode: pick(row, 'barcode'),
+      categoryId: category.record.id,
+      unitId: unit.id,
+      purchasePrice,
+      repairPrice,
+      retailPrice,
+    }
     const result = await ctx.store.upsertItem({ id: existingKey?.entityId, ...record })
     await persistKey(ctx, {
       dataset: Dataset.WarehouseItems,
@@ -630,7 +660,7 @@ export async function handleOrders(ctx: HandlerContext, row: CsvRow, rowNumber: 
     }
   }
 
-  const groupId: string | null = null
+  let groupId: string | null = null
   let brandId: string | null = null
   let modelId: string | null = null
   let modificationId: string | null = null
@@ -643,10 +673,14 @@ export async function handleOrders(ctx: HandlerContext, row: CsvRow, rowNumber: 
     if (ref.setCode === 'device_modifications') {
       modificationId = ref.id
       modelId = ref.parentId
+      const model = modelId ? await ctx.store.findReferenceById(modelId) : null
+      brandId = model?.parentId ?? null
     } else if (ref.setCode === 'device_models') {
       modelId = ref.id
       brandId = ref.parentId
     }
+    const brand = brandId ? await ctx.store.findReferenceById(brandId) : null
+    groupId = brand?.parentId ?? null
   }
 
   const deviceResult = ctx.dryRun
@@ -815,6 +849,489 @@ export async function handleOrderConsumption(ctx: HandlerContext, row: CsvRow, r
   }
 }
 
+function linesForParent(
+  ctx: HandlerContext,
+  satellite: DatasetId,
+  parentField: string,
+  parentSourceId: string,
+): CsvRow[] {
+  const rows = ctx.relatedRows?.[satellite] ?? []
+  return rows.filter((row) => pick(row, parentField) === parentSourceId)
+}
+
+export async function handleReceipts(ctx: HandlerContext, row: CsvRow, rowNumber: number): Promise<RowOutcome> {
+  const sourceId = pick(row, 'source_id')
+  const identity = resolveIdentity(Dataset.Receipts, sourceId, [
+    { label: 'receipt_date', value: pick(row, 'receipt_date') },
+    { label: 'supplier', value: pick(row, 'supplier') },
+  ])
+  if ('error' in identity) {
+    return fail(Dataset.Receipts, rowNumber, row, identity.error, { errorCode: 'no_identity' })
+  }
+  const receiptDate = parseDate(pick(row, 'receipt_date'))
+  if (!receiptDate) {
+    return fail(Dataset.Receipts, rowNumber, row, 'Укажите дату прихода.', { sourceKey: identity.key })
+  }
+  const supplier = pick(row, 'supplier') || 'Поставщик RO App'
+  const notes = pick(row, 'notes')
+  const supplierId =
+    (await resolveMapped(ctx.store, Dataset.Customers, pick(row, 'supplier_source_id'))) ?? null
+  const lineRows = linesForParent(ctx, Dataset.ReceiptLines, 'receipt_source_id', sourceId)
+  if (lineRows.length === 0) {
+    return fail(Dataset.Receipts, rowNumber, row, 'Нет строк прихода.', { sourceKey: identity.key })
+  }
+
+  const lines: Array<{ itemId: string; quantity: number; purchasePrice: number }> = []
+  for (const [index, line] of lineRows.entries()) {
+    const quantity = parseNumber(pick(line, 'quantity'))
+    if (quantity === null || quantity <= 0) {
+      return fail(Dataset.Receipts, rowNumber, row, `Строка ${index + 1}: количество должно быть больше нуля.`, {
+        sourceKey: identity.key,
+      })
+    }
+    const item = await resolveItem(ctx.store, line)
+    if (!item) {
+      return fail(
+        Dataset.Receipts,
+        rowNumber,
+        row,
+        `Строка ${index + 1}: номенклатура не найдена (${pick(line, 'item_source_id') || pick(line, 'item_code') || '—'}).`,
+        { sourceKey: identity.key },
+      )
+    }
+    const purchasePrice = parseNumber(pick(line, 'purchase_price')) ?? item.purchasePrice
+    if (purchasePrice < 0) {
+      return fail(Dataset.Receipts, rowNumber, row, `Строка ${index + 1}: цена закупки не может быть отрицательной.`, {
+        sourceKey: identity.key,
+      })
+    }
+    lines.push({ itemId: item.id, quantity, purchasePrice })
+  }
+
+  const hash = payloadHash({ supplier, supplierId, receiptDate, notes, lines })
+  const existingKey = await ctx.store.getSourceKey(Dataset.Receipts, identity.key)
+  if (existingKey) {
+    return ok(Dataset.Receipts, rowNumber, row, 'skipped', {
+      sourceKey: identity.key,
+      entityType: 'inventory_receipt',
+      entityId: existingKey.entityId,
+      missingFields: [],
+    })
+  }
+  if (ctx.dryRun) {
+    return ok(Dataset.Receipts, rowNumber, row, 'created', { sourceKey: identity.key, missingFields: [] })
+  }
+  try {
+    const created = await ctx.store.createImportedReceipt({
+      supplier,
+      supplierId,
+      receiptDate,
+      notes: notes || 'Импорт прихода RO App',
+      lines,
+    })
+    await persistKey(ctx, {
+      dataset: Dataset.Receipts,
+      sourceKey: identity.key,
+      entityType: 'inventory_receipt',
+      entityId: created.receiptId,
+      payloadHash: hash,
+    })
+    return ok(Dataset.Receipts, rowNumber, row, 'created', {
+      sourceKey: identity.key,
+      entityType: 'inventory_receipt',
+      entityId: created.receiptId,
+      missingFields: [],
+    })
+  } catch (error) {
+    return fail(Dataset.Receipts, rowNumber, row, error instanceof Error ? error.message : 'Ошибка прихода.', {
+      sourceKey: identity.key,
+    })
+  }
+}
+
+export async function handleWriteOffs(ctx: HandlerContext, row: CsvRow, rowNumber: number): Promise<RowOutcome> {
+  const sourceId = pick(row, 'source_id')
+  const identity = resolveIdentity(Dataset.WriteOffs, sourceId, [
+    { label: 'write_off_date', value: pick(row, 'write_off_date') },
+    { label: 'reason', value: pick(row, 'reason') },
+  ])
+  if ('error' in identity) {
+    return fail(Dataset.WriteOffs, rowNumber, row, identity.error, { errorCode: 'no_identity' })
+  }
+  const writeOffDate = parseDate(pick(row, 'write_off_date'))
+  if (!writeOffDate) {
+    return fail(Dataset.WriteOffs, rowNumber, row, 'Укажите дату списания.', { sourceKey: identity.key })
+  }
+  const reason = pick(row, 'reason') || 'Списание RO App'
+  const notes = pick(row, 'notes')
+  const lineRows = linesForParent(ctx, Dataset.WriteOffLines, 'write_off_source_id', sourceId)
+  if (lineRows.length === 0) {
+    return fail(Dataset.WriteOffs, rowNumber, row, 'Нет строк списания.', { sourceKey: identity.key })
+  }
+
+  const lines: Array<{ itemId: string; quantity: number; unitCost: number }> = []
+  for (const line of lineRows) {
+    const quantity = parseNumber(pick(line, 'quantity'))
+    if (quantity === null || quantity <= 0) {
+      return fail(Dataset.WriteOffs, rowNumber, row, 'В строке списания количество должно быть больше нуля.', {
+        sourceKey: identity.key,
+      })
+    }
+    const item = await resolveItem(ctx.store, line)
+    if (!item) {
+      return fail(Dataset.WriteOffs, rowNumber, row, 'Номенклатура строки списания не найдена.', {
+        sourceKey: identity.key,
+      })
+    }
+    lines.push({ itemId: item.id, quantity, unitCost: item.purchasePrice })
+  }
+
+  const hash = payloadHash({ writeOffDate, reason, notes, lines })
+  const existingKey = await ctx.store.getSourceKey(Dataset.WriteOffs, identity.key)
+  if (existingKey) {
+    return ok(Dataset.WriteOffs, rowNumber, row, 'skipped', {
+      sourceKey: identity.key,
+      entityType: 'inventory_write_off',
+      entityId: existingKey.entityId,
+      missingFields: [],
+    })
+  }
+  if (ctx.dryRun) {
+    return ok(Dataset.WriteOffs, rowNumber, row, 'created', { sourceKey: identity.key, missingFields: [] })
+  }
+  try {
+    const created = await ctx.store.createImportedWriteOff({ writeOffDate, reason, notes, lines })
+    await persistKey(ctx, {
+      dataset: Dataset.WriteOffs,
+      sourceKey: identity.key,
+      entityType: 'inventory_write_off',
+      entityId: created.writeOffId,
+      payloadHash: hash,
+    })
+    return ok(Dataset.WriteOffs, rowNumber, row, 'created', {
+      sourceKey: identity.key,
+      entityType: 'inventory_write_off',
+      entityId: created.writeOffId,
+      missingFields: [],
+    })
+  } catch (error) {
+    return fail(Dataset.WriteOffs, rowNumber, row, error instanceof Error ? error.message : 'Ошибка списания.', {
+      sourceKey: identity.key,
+    })
+  }
+}
+
+export async function handleSales(ctx: HandlerContext, row: CsvRow, rowNumber: number): Promise<RowOutcome> {
+  const sourceId = pick(row, 'source_id')
+  const number = pick(row, 'number')
+  const identity = resolveIdentity(Dataset.Sales, sourceId, [{ label: 'number', value: number }])
+  if ('error' in identity) {
+    return fail(Dataset.Sales, rowNumber, row, identity.error, { errorCode: 'no_identity' })
+  }
+  if (!number) {
+    return fail(Dataset.Sales, rowNumber, row, 'Укажите номер продажи.', { sourceKey: identity.key })
+  }
+  const saleDate = parseDate(pick(row, 'sale_date'))
+  if (!saleDate) {
+    return fail(Dataset.Sales, rowNumber, row, 'Укажите дату продажи.', { sourceKey: identity.key })
+  }
+
+  let customerId = await resolveMapped(ctx.store, Dataset.Customers, pick(row, 'customer_source_id'))
+  if (!customerId) {
+    const retail = await ctx.store.findCustomerByEmail('roapp-retail@import.local')
+    if (retail) {
+      customerId = retail.id
+    } else if (!ctx.dryRun) {
+      const created = await ctx.store.upsertCustomer({
+        name: 'Розничный покупатель (RO App)',
+        kind: 'individual',
+        inn: '',
+        kpp: '',
+        ogrn: '',
+        phone: '',
+        email: 'roapp-retail@import.local',
+        city: '',
+        contactName: '',
+        notes: 'Служебный клиент для продаж RO App без контрагента.',
+      })
+      customerId = created.record.id
+    } else {
+      customerId = 'dry-run-retail'
+    }
+  }
+
+  const lineRows = linesForParent(ctx, Dataset.SaleLines, 'sale_source_id', sourceId)
+  if (lineRows.length === 0) {
+    return fail(Dataset.Sales, rowNumber, row, 'Нет строк продажи.', { sourceKey: identity.key })
+  }
+
+  const merged = new Map<string, { itemId: string; quantity: number; unitPrice: number; unitCost: number }>()
+  for (const [index, line] of lineRows.entries()) {
+    const quantity = parseNumber(pick(line, 'quantity'))
+    const unitPrice = parseNumber(pick(line, 'unit_price'))
+    if (quantity === null || quantity <= 0) {
+      return fail(Dataset.Sales, rowNumber, row, `Строка ${index + 1}: количество должно быть больше нуля.`, {
+        sourceKey: identity.key,
+      })
+    }
+    if (unitPrice === null || unitPrice < 0) {
+      return fail(Dataset.Sales, rowNumber, row, `Строка ${index + 1}: укажите цену.`, { sourceKey: identity.key })
+    }
+    const item = await resolveItem(ctx.store, line)
+    if (!item) {
+      return fail(
+        Dataset.Sales,
+        rowNumber,
+        row,
+        `Строка ${index + 1}: номенклатура не найдена (${pick(line, 'item_source_id') || pick(line, 'item_code') || '—'}).`,
+        { sourceKey: identity.key },
+      )
+    }
+    const unitCost = parseNumber(pick(line, 'cost')) ?? item.purchasePrice
+    const current = merged.get(item.id)
+    if (current) {
+      const totalQty = current.quantity + quantity
+      current.unitPrice = (current.unitPrice * current.quantity + unitPrice * quantity) / totalQty
+      current.unitCost = (current.unitCost * current.quantity + unitCost * quantity) / totalQty
+      current.quantity = totalQty
+    } else {
+      merged.set(item.id, { itemId: item.id, quantity, unitPrice, unitCost })
+    }
+  }
+
+  const lines = [...merged.values()]
+  const invoiceNumber = number.startsWith('RO-') ? number : `RO-${number}`
+  const hash = payloadHash({ invoiceNumber, customerId, saleDate, lines })
+  const existingKey = await ctx.store.getSourceKey(Dataset.Sales, identity.key)
+  if (existingKey) {
+    return ok(Dataset.Sales, rowNumber, row, 'skipped', {
+      sourceKey: identity.key,
+      entityType: 'sale',
+      entityId: existingKey.entityId,
+      missingFields: [],
+    })
+  }
+  if (ctx.dryRun) {
+    return ok(Dataset.Sales, rowNumber, row, 'created', { sourceKey: identity.key, missingFields: [] })
+  }
+  try {
+    const created = await ctx.store.createImportedSale({
+      invoiceNumber,
+      customerId,
+      saleDate,
+      lines,
+    })
+    await persistKey(ctx, {
+      dataset: Dataset.Sales,
+      sourceKey: identity.key,
+      entityType: 'sale',
+      entityId: created.saleId,
+      payloadHash: hash,
+    })
+    return ok(Dataset.Sales, rowNumber, row, 'created', {
+      sourceKey: identity.key,
+      entityType: 'sale',
+      entityId: created.saleId,
+      missingFields: [],
+    })
+  } catch (error) {
+    return fail(Dataset.Sales, rowNumber, row, error instanceof Error ? error.message : 'Ошибка продажи.', {
+      sourceKey: identity.key,
+    })
+  }
+}
+
+async function handleSatelliteStub(
+  dataset: DatasetId,
+  _ctx: HandlerContext,
+  row: CsvRow,
+  rowNumber: number,
+): Promise<RowOutcome> {
+  return ok(dataset, rowNumber, row, 'skipped', {
+    sourceKey: pick(row, 'source_id') || null,
+    missingFields: [],
+    errorMessage: 'Строки обрабатываются вместе с документом.',
+  })
+}
+
+async function resolveOrderId(store: ImportStore, row: CsvRow): Promise<string | null> {
+  const mapped = await resolveMapped(store, Dataset.Orders, pick(row, 'order_source_id'))
+  if (mapped) {
+    return mapped
+  }
+  const number = pick(row, 'order_number')
+  if (!number) {
+    return null
+  }
+  return (await store.findOrderByNumber(number))?.id ?? null
+}
+
+export async function handleOrderServiceLines(
+  ctx: HandlerContext,
+  row: CsvRow,
+  rowNumber: number,
+): Promise<RowOutcome> {
+  const identity = resolveIdentity(Dataset.OrderServiceLines, pick(row, 'source_id'), [
+    { label: 'order_source_id|order_number', value: pick(row, 'order_source_id') || pick(row, 'order_number') },
+    { label: 'name', value: pick(row, 'name') },
+    { label: 'quantity', value: pick(row, 'quantity') },
+    { label: 'unit_price', value: pick(row, 'unit_price') },
+  ])
+  if ('error' in identity) {
+    return fail(Dataset.OrderServiceLines, rowNumber, row, identity.error, { errorCode: 'no_identity' })
+  }
+  const name = pick(row, 'name')
+  if (!name) {
+    return fail(Dataset.OrderServiceLines, rowNumber, row, 'Укажите наименование услуги.', {
+      sourceKey: identity.key,
+    })
+  }
+  const quantity = parseNumber(pick(row, 'quantity'))
+  const unitPrice = parseNumber(pick(row, 'unit_price')) ?? 0
+  if (quantity === null || quantity <= 0) {
+    return fail(Dataset.OrderServiceLines, rowNumber, row, 'Количество должно быть больше нуля.', {
+      sourceKey: identity.key,
+    })
+  }
+  const orderId = await resolveOrderId(ctx.store, row)
+  if (!orderId) {
+    return fail(Dataset.OrderServiceLines, rowNumber, row, 'Заказ для услуги не найден.', {
+      sourceKey: identity.key,
+    })
+  }
+  const description = pick(row, 'description')
+  const hash = payloadHash({ orderId, name, description, quantity, unitPrice })
+  const existingKey = await ctx.store.getSourceKey(Dataset.OrderServiceLines, identity.key)
+  if (existingKey) {
+    return ok(Dataset.OrderServiceLines, rowNumber, row, 'skipped', {
+      sourceKey: identity.key,
+      entityType: 'order_service_line',
+      entityId: existingKey.entityId,
+      missingFields: [],
+    })
+  }
+  if (ctx.dryRun) {
+    return ok(Dataset.OrderServiceLines, rowNumber, row, 'created', { sourceKey: identity.key, missingFields: [] })
+  }
+  try {
+    const created = await ctx.store.addImportedOrderServiceLine({
+      orderId,
+      name,
+      description,
+      quantity,
+      unitPrice,
+    })
+    await persistKey(ctx, {
+      dataset: Dataset.OrderServiceLines,
+      sourceKey: identity.key,
+      entityType: 'order_service_line',
+      entityId: created.lineId,
+      payloadHash: hash,
+    })
+    return ok(Dataset.OrderServiceLines, rowNumber, row, 'created', {
+      sourceKey: identity.key,
+      entityType: 'order_service_line',
+      entityId: created.lineId,
+      missingFields: [],
+    })
+  } catch (error) {
+    return fail(
+      Dataset.OrderServiceLines,
+      rowNumber,
+      row,
+      error instanceof Error ? error.message : 'Ошибка услуги заказа.',
+      { sourceKey: identity.key },
+    )
+  }
+}
+
+export async function handleOrderPartLines(
+  ctx: HandlerContext,
+  row: CsvRow,
+  rowNumber: number,
+): Promise<RowOutcome> {
+  const identity = resolveIdentity(Dataset.OrderPartLines, pick(row, 'source_id'), [
+    { label: 'order_source_id|order_number', value: pick(row, 'order_source_id') || pick(row, 'order_number') },
+    { label: 'item_source_id|item_code|name', value: pick(row, 'item_source_id') || pick(row, 'item_code') || pick(row, 'name') },
+    { label: 'quantity', value: pick(row, 'quantity') },
+  ])
+  if ('error' in identity) {
+    return fail(Dataset.OrderPartLines, rowNumber, row, identity.error, { errorCode: 'no_identity' })
+  }
+  const quantity = parseNumber(pick(row, 'quantity'))
+  const unitPrice = parseNumber(pick(row, 'unit_price')) ?? 0
+  if (quantity === null || quantity <= 0) {
+    return fail(Dataset.OrderPartLines, rowNumber, row, 'Количество должно быть больше нуля.', {
+      sourceKey: identity.key,
+    })
+  }
+  const orderId = await resolveOrderId(ctx.store, row)
+  if (!orderId) {
+    return fail(Dataset.OrderPartLines, rowNumber, row, 'Заказ для запчасти не найден.', {
+      sourceKey: identity.key,
+    })
+  }
+  const item = await resolveItem(ctx.store, row)
+  const name = pick(row, 'name') || item?.name || ''
+  if (!item && !name) {
+    return fail(Dataset.OrderPartLines, rowNumber, row, 'Укажите запчасть или наименование.', {
+      sourceKey: identity.key,
+    })
+  }
+  const consumeStock = parseBoolean(pick(row, 'consume_stock')) === true
+  const hash = payloadHash({
+    orderId,
+    itemId: item?.id ?? null,
+    name,
+    quantity,
+    unitPrice,
+    consumeStock,
+  })
+  const existingKey = await ctx.store.getSourceKey(Dataset.OrderPartLines, identity.key)
+  if (existingKey) {
+    return ok(Dataset.OrderPartLines, rowNumber, row, 'skipped', {
+      sourceKey: identity.key,
+      entityType: 'order_part_line',
+      entityId: existingKey.entityId,
+      missingFields: [],
+    })
+  }
+  if (ctx.dryRun) {
+    return ok(Dataset.OrderPartLines, rowNumber, row, 'created', { sourceKey: identity.key, missingFields: [] })
+  }
+  try {
+    const created = await ctx.store.addImportedOrderPartLine({
+      orderId,
+      itemId: item?.id ?? null,
+      name,
+      quantity,
+      unitPrice,
+      consumeStock: Boolean(consumeStock && item),
+    })
+    await persistKey(ctx, {
+      dataset: Dataset.OrderPartLines,
+      sourceKey: identity.key,
+      entityType: 'order_part_line',
+      entityId: created.lineId,
+      payloadHash: hash,
+    })
+    return ok(Dataset.OrderPartLines, rowNumber, row, 'created', {
+      sourceKey: identity.key,
+      entityType: 'order_part_line',
+      entityId: created.lineId,
+      missingFields: [],
+    })
+  } catch (error) {
+    return fail(
+      Dataset.OrderPartLines,
+      rowNumber,
+      row,
+      error instanceof Error ? error.message : 'Ошибка запчасти заказа.',
+      { sourceKey: identity.key },
+    )
+  }
+}
+
 export const handlers: Record<
   DatasetId,
   (ctx: HandlerContext, row: CsvRow, rowNumber: number) => Promise<RowOutcome>
@@ -826,6 +1343,14 @@ export const handlers: Record<
   barcodes: handleBarcodes,
   prices: handlePrices,
   warehouse_stock: handleWarehouseStock,
+  receipts: handleReceipts,
+  receipt_lines: (ctx, row, rowNumber) => handleSatelliteStub(Dataset.ReceiptLines, ctx, row, rowNumber),
+  write_offs: handleWriteOffs,
+  write_off_lines: (ctx, row, rowNumber) => handleSatelliteStub(Dataset.WriteOffLines, ctx, row, rowNumber),
+  sales: handleSales,
+  sale_lines: (ctx, row, rowNumber) => handleSatelliteStub(Dataset.SaleLines, ctx, row, rowNumber),
   orders: handleOrders,
+  order_service_lines: handleOrderServiceLines,
+  order_part_lines: handleOrderPartLines,
   order_consumption: handleOrderConsumption,
 }

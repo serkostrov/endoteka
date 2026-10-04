@@ -294,6 +294,101 @@ export async function listDevices(search: string, page: number, pageSize: number
   }
 }
 
+export type DeviceRegistryFolder = {
+  key: string
+  id: string | null
+  name: string
+  count: number
+}
+
+function applyDeviceSearch<T extends { or: (filter: string) => T }>(query: T, search: string) {
+  const term = sanitizeSearch(search)
+  if (!term) {
+    return query
+  }
+  return query.or(
+    `serial_number.ilike.%${term}%,label.ilike.%${term}%,brand_name.ilike.%${term}%,model_name.ilike.%${term}%`,
+  )
+}
+
+function folderKey(id: string | null | undefined) {
+  return id?.trim() || 'none'
+}
+
+function aggregateFolders(
+  rows: Array<{ id: string | null; name: string | null }>,
+  emptyName: string,
+): DeviceRegistryFolder[] {
+  const map = new Map<string, DeviceRegistryFolder>()
+  for (const row of rows) {
+    const key = folderKey(row.id)
+    const current = map.get(key)
+    if (current) {
+      current.count += 1
+      continue
+    }
+    map.set(key, {
+      key,
+      id: row.id,
+      name: (row.name ?? '').trim() || emptyName,
+      count: 1,
+    })
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+}
+
+/** Группы типов для реестра (лёгкая выборка + агрегация на клиенте). */
+export async function listDeviceRegistryGroups(search: string): Promise<DeviceRegistryFolder[]> {
+  let query = getSupabase().from('device_list_items').select('group_id, group_name')
+  query = applyDeviceSearch(query, search)
+  const { data, error } = await query
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить группы приборов.')
+  }
+  return aggregateFolders(
+    (data ?? []).map((row) => ({ id: row.group_id, name: row.group_name })),
+    'Без типа',
+  )
+}
+
+/** Бренды внутри группы. */
+export async function listDeviceRegistryBrands(
+  search: string,
+  groupKey: string,
+): Promise<DeviceRegistryFolder[]> {
+  let query = getSupabase().from('device_list_items').select('brand_id, brand_name')
+  query = applyDeviceSearch(query, search)
+  query = groupKey === 'none' ? query.is('group_id', null) : query.eq('group_id', groupKey)
+  const { data, error } = await query
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить бренды.')
+  }
+  return aggregateFolders(
+    (data ?? []).map((row) => ({ id: row.brand_id, name: row.brand_name })),
+    'Без бренда',
+  )
+}
+
+/** Приборы внутри группы + бренда. */
+export async function listDeviceRegistryDevices(
+  search: string,
+  groupKey: string,
+  brandKey: string,
+): Promise<Device[]> {
+  let query = getSupabase()
+    .from('device_list_items')
+    .select('*')
+    .order('updated_at', { ascending: false })
+  query = applyDeviceSearch(query, search)
+  query = groupKey === 'none' ? query.is('group_id', null) : query.eq('group_id', groupKey)
+  query = brandKey === 'none' ? query.is('brand_id', null) : query.eq('brand_id', brandKey)
+  const { data, error } = await query
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить приборы.')
+  }
+  return (data ?? []).map(mapListItem)
+}
+
 export async function searchDeviceSerial(queryText: string): Promise<SerialSearchResult> {
   const term = queryText.trim()
   if (term.length < SERIAL_LOOKUP_MIN_LENGTH) {

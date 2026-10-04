@@ -138,17 +138,33 @@ export function createMemoryStore(): ImportStore & { snapshot(): MemorySnapshot;
     },
 
     async upsertReference(input) {
-      const existing = references.find((row) => row.setCode === input.setCode && row.code === input.code)
-      if (existing) {
-        existing.name = input.name
-        existing.parentId = input.parentId
-        return { record: existing, created: false }
+      const peers = references.filter(
+        (row) =>
+          row.setCode === input.setCode && (row.parentId ?? null) === (input.parentId ?? null),
+      )
+      const nameKey = input.name.trim().toLocaleLowerCase('ru')
+      const byName = peers.find((row) => row.name.trim().toLocaleLowerCase('ru') === nameKey)
+      if (byName) {
+        return { record: byName, created: false }
+      }
+      const byCode = peers.find((row) => row.code === input.code)
+      if (byCode) {
+        byCode.name = input.name.trim()
+        return { record: byCode, created: false }
+      }
+      const base = input.code.replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'item'
+      const safeBase = (/^[a-z]/.test(base) ? base : `item_${base}`).slice(0, 64)
+      const taken = new Set(peers.map((row) => row.code))
+      let code = safeBase
+      for (let suffix = 2; taken.has(code); suffix += 1) {
+        const tail = `_${suffix}`
+        code = `${safeBase.slice(0, 64 - tail.length)}${tail}`
       }
       const record: ReferenceItemRecord = {
         id: nextId('ref'),
         setCode: input.setCode,
-        code: input.code,
-        name: input.name,
+        code,
+        name: input.name.trim(),
         parentId: input.parentId,
       }
       references.push(record)
@@ -324,6 +340,28 @@ export function createMemoryStore(): ImportStore & { snapshot(): MemorySnapshot;
       return { receiptId, batchId: batch.id }
     },
 
+    async createImportedReceipt(input) {
+      const receiptId = nextId('rcp')
+      for (const line of input.lines) {
+        const batch: BatchRecord = {
+          id: nextId('bat'),
+          itemId: line.itemId,
+          remainingQuantity: line.quantity,
+          purchasePrice: line.purchasePrice,
+          receiptDate: input.receiptDate,
+        }
+        batches.push(batch)
+        movements.push({
+          id: nextId('mov'),
+          itemId: line.itemId,
+          batchId: batch.id,
+          orderId: null,
+          quantity: line.quantity,
+        })
+      }
+      return { receiptId }
+    },
+
     async consumeForOrder(input) {
       let remaining = input.quantity
       const movementIds: string[] = []
@@ -352,6 +390,67 @@ export function createMemoryStore(): ImportStore & { snapshot(): MemorySnapshot;
         remaining -= take
       }
       return { movementIds }
+    },
+
+    async createImportedWriteOff(input) {
+      for (const line of input.lines) {
+        await store.createStockReceipt({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          purchasePrice: line.unitCost,
+          supplier: input.reason,
+          receiptDate: input.writeOffDate,
+        })
+        await store.consumeForOrder({
+          orderId: 'write-off',
+          itemId: line.itemId,
+          quantity: line.quantity,
+          unitPrice: line.unitCost,
+        })
+      }
+      return { writeOffId: nextId('wro') }
+    },
+
+    async createImportedSale(input) {
+      for (const line of input.lines) {
+        await store.createStockReceipt({
+          itemId: line.itemId,
+          quantity: line.quantity,
+          purchasePrice: line.unitCost,
+          supplier: input.invoiceNumber,
+          receiptDate: input.saleDate,
+        })
+        await store.consumeForOrder({
+          orderId: 'sale',
+          itemId: line.itemId,
+          quantity: line.quantity,
+          unitPrice: line.unitPrice,
+        })
+      }
+      return { saleId: nextId('sale') }
+    },
+
+    async addImportedOrderServiceLine() {
+      return { lineId: nextId('osl') }
+    },
+
+    async addImportedOrderPartLine(input) {
+      if (input.consumeStock && input.itemId) {
+        await store.createStockReceipt({
+          itemId: input.itemId,
+          quantity: input.quantity,
+          purchasePrice: input.unitPrice,
+          supplier: 'import',
+          receiptDate: '2024-01-01',
+        })
+        await store.consumeForOrder({
+          orderId: 'order',
+          itemId: input.itemId,
+          quantity: input.quantity,
+          unitPrice: input.unitPrice,
+        })
+      }
+      return { lineId: nextId('opl') }
     },
   }
 

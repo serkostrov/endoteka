@@ -45,6 +45,8 @@ import {
   receiveInventory,
   createInventoryWriteOff,
   removeOrderPartLine,
+  listInventoryRegistryCategories,
+  listInventoryRegistryItems,
   searchInventoryItems,
   setInventoryItemLabel,
   setInventoryItemPhotoCover,
@@ -65,6 +67,23 @@ export function useInventoryStock(search: string, page: number, pageSize: number
   return useQuery({
     queryKey: queryKeys.inventory.stock({ search, page, pageSize, stock: stockFilter }),
     queryFn: () => searchInventoryItems(search, page, pageSize, stockFilter),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useInventoryRegistryCategories(search: string) {
+  return useQuery({
+    queryKey: queryKeys.inventory.registryCategories(search),
+    queryFn: () => listInventoryRegistryCategories(search),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useInventoryRegistryItems(search: string, categoryKey: string | null) {
+  return useQuery({
+    queryKey: queryKeys.inventory.registryItems(search, categoryKey ?? ''),
+    queryFn: () => listInventoryRegistryItems(search, categoryKey!),
+    enabled: Boolean(categoryKey),
     placeholderData: keepPreviousData,
   })
 }

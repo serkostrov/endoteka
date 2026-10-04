@@ -8,6 +8,8 @@ export type FolderTreeGroup<T> = {
   name: string
   items: T[]
   children?: FolderTreeGroup<T>[]
+  /** Если задан — показывается в бейдже вместо подсчёта листьев на экране. */
+  count?: number
 }
 
 type FolderTreeProps<T> = {
@@ -84,7 +86,8 @@ function FolderNode<T>({
 }) {
   const open = isOpen(group.id)
   const children = group.children ?? []
-  const count = children.length > 0 ? countLeaves(group) : group.items.length
+  const count =
+    group.count ?? (children.length > 0 ? countLeaves(group) : group.items.length)
 
   return (
     <FolderBlock
@@ -243,6 +246,28 @@ export function nestByFolderKeys<T>(
       id,
       items: [],
       children: nestByFolderKeys(group.items, rest, id),
+    }
+  })
+}
+
+/** Оставляет структуру и счётчики полного дерева, а листья — только с текущей страницы. */
+export function projectFolderTreePage<T extends { id: string }>(
+  groups: FolderTreeGroup<T>[],
+  pageItemIds: Set<string>,
+): FolderTreeGroup<T>[] {
+  return groups.map((group) => {
+    if (group.children?.length) {
+      return {
+        ...group,
+        items: [],
+        count: countLeaves(group),
+        children: projectFolderTreePage(group.children, pageItemIds),
+      }
+    }
+    return {
+      ...group,
+      count: group.items.length,
+      items: group.items.filter((item) => pageItemIds.has(item.id)),
     }
   })
 }

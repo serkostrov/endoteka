@@ -205,24 +205,65 @@ export function createSupabaseStore(client: AnyClient): ImportStore {
     },
 
     async upsertReference(input) {
-      const existing = await this.findReference(input.setCode, input.code)
-      if (existing) {
+      const sid = await setId(input.setCode)
+      const mapRow = (row: { id: string; code: string; name: string; parent_id: string | null }) => ({
+        id: row.id,
+        setCode: input.setCode,
+        code: row.code,
+        name: row.name,
+        parentId: row.parent_id,
+      })
+
+      // Codes/names are unique among siblings (same set + parent), case-insensitive for names.
+      let siblingsQuery = client
+        .from('reference_items')
+        .select('id, code, name, parent_id')
+        .eq('set_id', sid)
+      siblingsQuery =
+        input.parentId == null
+          ? siblingsQuery.is('parent_id', null)
+          : siblingsQuery.eq('parent_id', input.parentId)
+      const { data: siblings, error: siblingsError } = await siblingsQuery
+      if (siblingsError) {
+        throw new Error(siblingsError.message)
+      }
+      const peers = siblings ?? []
+      const nameKey = input.name.trim().toLocaleLowerCase('ru')
+      const byName = peers.find((row) => row.name.trim().toLocaleLowerCase('ru') === nameKey)
+      if (byName) {
+        return { record: mapRow(byName), created: false }
+      }
+      const byCode = peers.find((row) => row.code === input.code)
+      if (byCode) {
         const { error } = await client
           .from('reference_items')
-          .update({ name: input.name, parent_id: input.parentId })
-          .eq('id', existing.id)
+          .update({ name: input.name.trim() })
+          .eq('id', byCode.id)
         if (error) {
           throw new Error(error.message)
         }
-        return { record: { ...existing, name: input.name, parentId: input.parentId }, created: false }
+        return { record: { ...mapRow(byCode), name: input.name.trim() }, created: false }
       }
-      const sid = await setId(input.setCode)
+
+      const base = input.code.replace(/[^a-z0-9_]/g, '_').replace(/^_+|_+$/g, '') || 'item'
+      const safeBase = (/^[a-z]/.test(base) ? base : `item_${base}`).slice(0, 64)
+      const taken = new Set(peers.map((row) => row.code))
+      let code = safeBase
+      for (let suffix = 2; taken.has(code); suffix += 1) {
+        const tail = `_${suffix}`
+        code = `${safeBase.slice(0, 64 - tail.length)}${tail}`
+        if (suffix > 1000) {
+          code = `item_${Date.now().toString(36)}`.slice(0, 64)
+          break
+        }
+      }
+
       const { data, error } = await client
         .from('reference_items')
         .insert({
           set_id: sid,
-          code: input.code,
-          name: input.name,
+          code,
+          name: input.name.trim(),
           parent_id: input.parentId,
           is_system: false,
         })
@@ -231,10 +272,7 @@ export function createSupabaseStore(client: AnyClient): ImportStore {
       if (error || !data) {
         throw new Error(error?.message ?? 'Не удалось создать запись справочника.')
       }
-      return {
-        record: { id: data.id, setCode: input.setCode, code: data.code, name: data.name, parentId: data.parent_id },
-        created: true,
-      }
+      return { record: mapRow(data), created: true }
     },
 
     async findEmployeeByEmail(email) {
@@ -555,6 +593,58 @@ export function createSupabaseStore(client: AnyClient): ImportStore {
       return { receiptId: receipt.data.id, batchId: batch.data.id }
     },
 
+    async createImportedReceipt(input) {
+      if (input.lines.length === 0) {
+        throw new Error('Добавьте хотя бы одну позицию прихода.')
+      }
+      const receipt = await client
+        .from('inventory_receipts')
+        .insert({
+          supplier: input.supplier,
+          supplier_id: input.supplierId,
+          receipt_date: input.receiptDate,
+          notes: input.notes || 'Импорт прихода RO App',
+        })
+        .select('id')
+        .single()
+      if (receipt.error || !receipt.data) {
+        throw new Error(receipt.error?.message ?? 'Не удалось создать приход.')
+      }
+
+      for (const line of input.lines) {
+        const batch = await client
+          .from('inventory_batches')
+          .insert({
+            item_id: line.itemId,
+            receipt_id: receipt.data.id,
+            supplier: input.supplier,
+            receipt_date: input.receiptDate,
+            purchase_price: line.purchasePrice,
+            quantity: line.quantity,
+            remaining_quantity: 0,
+          })
+          .select('id')
+          .single()
+        if (batch.error || !batch.data) {
+          throw new Error(batch.error?.message ?? 'Не удалось создать партию прихода.')
+        }
+        const movement = await client.from('inventory_movements').insert({
+          item_id: line.itemId,
+          batch_id: batch.data.id,
+          quantity: line.quantity,
+          unit_price: line.purchasePrice,
+          movement_type: 'receipt',
+          reference_type: 'receipt',
+          reference_id: receipt.data.id,
+        })
+        if (movement.error) {
+          throw new Error(movement.error.message)
+        }
+      }
+
+      return { receiptId: receipt.data.id }
+    },
+
     async consumeForOrder(input) {
       const { data, error } = await client.rpc('consume_inventory_fifo', {
         target_item_id: input.itemId,
@@ -569,6 +659,257 @@ export function createSupabaseStore(client: AnyClient): ImportStore {
       const lines = (data as { lines?: Array<{ movement_id: string }> } | null)?.lines ?? []
       return { movementIds: lines.map((line) => line.movement_id) }
     },
+
+    async createImportedWriteOff(input) {
+      const writeOff = await client
+        .from('inventory_write_offs')
+        .insert({
+          write_off_date: input.writeOffDate,
+          reason: input.reason,
+          notes: input.notes || 'Импорт RO App',
+        })
+        .select('id')
+        .single()
+      if (writeOff.error || !writeOff.data) {
+        throw new Error(writeOff.error?.message ?? 'Не удалось создать списание.')
+      }
+
+      for (const line of input.lines) {
+        await ensureStockForConsume(client, {
+          itemId: line.itemId,
+          quantity: line.quantity,
+          unitCost: line.unitCost,
+          receiptDate: input.writeOffDate,
+          supplier: `Импорт RO App / ${input.reason}`,
+        })
+        const { error } = await client.rpc('consume_inventory_fifo', {
+          target_item_id: line.itemId,
+          consume_quantity: line.quantity,
+          target_movement_type: 'write_off',
+          target_reference_type: 'inventory_write_off',
+          target_reference_id: writeOff.data.id,
+        })
+        if (error) {
+          throw new Error(error.message)
+        }
+      }
+      return { writeOffId: writeOff.data.id }
+    },
+
+    async createImportedSale(input) {
+      const sale = await client
+        .from('sales')
+        .insert({
+          invoice_number: input.invoiceNumber,
+          customer_id: input.customerId,
+          sale_date: input.saleDate,
+          status: 'draft',
+          total: 0,
+        })
+        .select('id')
+        .single()
+      if (sale.error || !sale.data) {
+        throw new Error(sale.error?.message ?? 'Не удалось создать продажу.')
+      }
+
+      let sortOrder = 0
+      const lineIds: Array<{ id: string; itemId: string; quantity: number; unitCost: number }> = []
+      for (const line of input.lines) {
+        const inserted = await client
+          .from('sale_lines')
+          .insert({
+            sale_id: sale.data.id,
+            item_id: line.itemId,
+            quantity: line.quantity,
+            unit_price: line.unitPrice,
+            sort_order: sortOrder,
+          })
+          .select('id')
+          .single()
+        if (inserted.error || !inserted.data) {
+          throw new Error(inserted.error?.message ?? 'Не удалось добавить строку продажи.')
+        }
+        lineIds.push({
+          id: inserted.data.id,
+          itemId: line.itemId,
+          quantity: line.quantity,
+          unitCost: line.unitCost,
+        })
+        sortOrder += 1
+      }
+
+      const total = input.lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0)
+      await client
+        .from('sales')
+        .update({ total: Math.round(total * 100) / 100 })
+        .eq('id', sale.data.id)
+
+      for (const line of lineIds) {
+        await ensureStockForConsume(client, {
+          itemId: line.itemId,
+          quantity: line.quantity,
+          unitCost: line.unitCost,
+          receiptDate: input.saleDate,
+          supplier: `Импорт RO App / ${input.invoiceNumber}`,
+        })
+        const { data, error } = await client.rpc('consume_inventory_fifo', {
+          target_item_id: line.itemId,
+          consume_quantity: line.quantity,
+          target_movement_type: 'sale',
+          target_reference_type: 'sale',
+          target_reference_id: sale.data.id,
+        })
+        if (error) {
+          throw new Error(error.message)
+        }
+        const fifoLines =
+          (data as { lines?: Array<{ batch_id: string; movement_id: string; quantity: number; unit_price: number }> } | null)
+            ?.lines ?? []
+        for (const alloc of fifoLines) {
+          const allocation = await client.from('sale_allocations').insert({
+            sale_id: sale.data.id,
+            line_id: line.id,
+            batch_id: alloc.batch_id,
+            movement_id: alloc.movement_id,
+            quantity: alloc.quantity,
+            unit_cost: alloc.unit_price,
+          })
+          if (allocation.error) {
+            throw new Error(allocation.error.message)
+          }
+        }
+      }
+
+      const confirmed = await client
+        .from('sales')
+        .update({ status: 'confirmed', confirmed_at: new Date().toISOString() })
+        .eq('id', sale.data.id)
+        .eq('status', 'draft')
+      if (confirmed.error) {
+        throw new Error(confirmed.error.message)
+      }
+      return { saleId: sale.data.id }
+    },
+
+    async addImportedOrderServiceLine(input) {
+      const { data, error } = await client
+        .from('order_service_lines')
+        .insert({
+          order_id: input.orderId,
+          template_id: null,
+          name: input.name,
+          description: input.description,
+          quantity: input.quantity,
+          unit_price: input.unitPrice,
+        })
+        .select('id')
+        .single()
+      if (error || !data) {
+        throw new Error(error?.message ?? 'Не удалось добавить услугу в заказ.')
+      }
+      return { lineId: data.id }
+    },
+
+    async addImportedOrderPartLine(input) {
+      const { data, error } = await client
+        .from('order_part_lines')
+        .insert({
+          order_id: input.orderId,
+          item_id: input.itemId,
+          name: input.itemId ? '' : input.name,
+          quantity: input.quantity,
+          unit_price: input.unitPrice,
+        })
+        .select('id')
+        .single()
+      if (error || !data) {
+        throw new Error(error?.message ?? 'Не удалось добавить запчасть в заказ.')
+      }
+      if (input.consumeStock && input.itemId) {
+        await ensureStockForConsume(client, {
+          itemId: input.itemId,
+          quantity: input.quantity,
+          unitCost: input.unitPrice,
+          receiptDate: new Date().toISOString().slice(0, 10),
+          supplier: `Импорт RO App / заказ`,
+        })
+        const consumed = await client.rpc('consume_inventory_fifo', {
+          target_item_id: input.itemId,
+          consume_quantity: input.quantity,
+          target_movement_type: 'repair_consumption',
+          target_reference_type: 'order',
+          target_reference_id: input.orderId,
+        })
+        if (consumed.error) {
+          throw new Error(consumed.error.message)
+        }
+      }
+      return { lineId: data.id }
+    },
+  }
+}
+
+async function ensureStockForConsume(
+  client: AnyClient,
+  input: {
+    itemId: string
+    quantity: number
+    unitCost: number
+    receiptDate: string
+    supplier: string
+  },
+) {
+  const { data: batches, error } = await client
+    .from('inventory_batches')
+    .select('remaining_quantity')
+    .eq('item_id', input.itemId)
+  if (error) {
+    throw new Error(error.message)
+  }
+  const available = (batches ?? []).reduce((sum, row) => sum + Number(row.remaining_quantity), 0)
+  const missing = input.quantity - available
+  if (missing <= 0) {
+    return
+  }
+  const receipt = await client
+    .from('inventory_receipts')
+    .insert({
+      supplier: input.supplier,
+      receipt_date: input.receiptDate,
+      notes: 'Автоприход для импорта документа RO App',
+    })
+    .select('id')
+    .single()
+  if (receipt.error || !receipt.data) {
+    throw new Error(receipt.error?.message ?? 'Не удалось создать автоприход.')
+  }
+  const batch = await client
+    .from('inventory_batches')
+    .insert({
+      item_id: input.itemId,
+      receipt_id: receipt.data.id,
+      supplier: input.supplier,
+      receipt_date: input.receiptDate,
+      purchase_price: input.unitCost,
+      quantity: missing,
+      remaining_quantity: 0,
+    })
+    .select('id')
+    .single()
+  if (batch.error || !batch.data) {
+    throw new Error(batch.error?.message ?? 'Не удалось создать партию автоприхода.')
+  }
+  const movement = await client.from('inventory_movements').insert({
+    item_id: input.itemId,
+    batch_id: batch.data.id,
+    quantity: missing,
+    unit_price: input.unitCost,
+    movement_type: 'receipt',
+    reference_type: 'receipt',
+    reference_id: receipt.data.id,
+  })
+  if (movement.error) {
+    throw new Error(movement.error.message)
   }
 }
 

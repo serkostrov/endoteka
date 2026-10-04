@@ -7,6 +7,9 @@ import {
   deleteDevice,
   getDeviceCard,
   getWarrantyDefaults,
+  listDeviceRegistryBrands,
+  listDeviceRegistryDevices,
+  listDeviceRegistryGroups,
   listDevices,
   searchDeviceSerial,
   updateDevice,
@@ -18,6 +21,36 @@ export function useDevices(search: string, page: number, pageSize: number) {
   return useQuery({
     queryKey: queryKeys.devices.list({ search, page, pageSize }),
     queryFn: () => listDevices(search, page, pageSize),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useDeviceRegistryGroups(search: string) {
+  return useQuery({
+    queryKey: queryKeys.devices.registryGroups(search),
+    queryFn: () => listDeviceRegistryGroups(search),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useDeviceRegistryBrands(search: string, groupKey: string | null) {
+  return useQuery({
+    queryKey: queryKeys.devices.registryBrands(search, groupKey ?? ''),
+    queryFn: () => listDeviceRegistryBrands(search, groupKey!),
+    enabled: Boolean(groupKey),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useDeviceRegistryDevices(
+  search: string,
+  groupKey: string | null,
+  brandKey: string | null,
+) {
+  return useQuery({
+    queryKey: queryKeys.devices.registryDevices(search, groupKey ?? '', brandKey ?? ''),
+    queryFn: () => listDeviceRegistryDevices(search, groupKey!, brandKey!),
+    enabled: Boolean(groupKey && brandKey),
     placeholderData: keepPreviousData,
   })
 }

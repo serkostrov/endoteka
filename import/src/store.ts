@@ -77,10 +77,44 @@ export type ImportStore = {
     supplier: string
     receiptDate: string
   }): Promise<{ receiptId: string; batchId: string }>
+  createImportedReceipt(input: {
+    supplier: string
+    supplierId: string | null
+    receiptDate: string
+    notes: string
+    lines: Array<{ itemId: string; quantity: number; purchasePrice: number }>
+  }): Promise<{ receiptId: string }>
   consumeForOrder(input: {
     orderId: string
     itemId: string
     quantity: number
     unitPrice: number | null
   }): Promise<{ movementIds: string[] }>
+  createImportedWriteOff(input: {
+    writeOffDate: string
+    reason: string
+    notes: string
+    lines: Array<{ itemId: string; quantity: number; unitCost: number }>
+  }): Promise<{ writeOffId: string }>
+  createImportedSale(input: {
+    invoiceNumber: string
+    customerId: string
+    saleDate: string
+    lines: Array<{ itemId: string; quantity: number; unitPrice: number; unitCost: number }>
+  }): Promise<{ saleId: string }>
+  addImportedOrderServiceLine(input: {
+    orderId: string
+    name: string
+    description: string
+    quantity: number
+    unitPrice: number
+  }): Promise<{ lineId: string }>
+  addImportedOrderPartLine(input: {
+    orderId: string
+    itemId: string | null
+    name: string
+    quantity: number
+    unitPrice: number
+    consumeStock: boolean
+  }): Promise<{ lineId: string }>
 }
