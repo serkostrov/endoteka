@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/DataTable'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { useDeviceCompatiblePartGroups } from '@/features/devices/hooks/use-compatible-parts'
 import { useServiceTemplates } from '@/features/services/hooks/use-services'
 import { routes } from '@/lib/constants/routes'
 import { ReferenceSetCode } from '@/lib/constants/references'
@@ -27,6 +28,7 @@ type ParameterRow = {
 export function ReferencesScreen() {
   const setsQuery = useReferenceSets()
   const templatesQuery = useServiceTemplates('', 1, 1)
+  const partGroupsQuery = useDeviceCompatiblePartGroups()
   const sets = setsQuery.data ?? []
 
   const dictionaryRows: ParameterRow[] = sets
@@ -44,6 +46,13 @@ export function ReferencesScreen() {
 
   const rows: ParameterRow[] = [
     ...dictionaryRows,
+    {
+      id: 'compatible-part-groups',
+      name: 'Группы запасных частей',
+      parent: '—',
+      count: partGroupsQuery.data ? String(partGroupsQuery.data.length) : '—',
+      to: routes.settingsCompatiblePartGroups,
+    },
     {
       id: 'service-templates',
       name: 'Шаблоны услуг',

@@ -36,6 +36,7 @@ export const routes = {
   settingsOrders: '/settings/orders',
   settingsOrderStatuses: '/settings/order-statuses',
   settingsNotifications: '/settings/notifications',
+  settingsCompatiblePartGroups: '/settings/compatible-part-groups',
   settingsServiceTemplates: '/settings/service-templates',
   auditLog: '/audit-log',
   authCallback: '/auth/callback',

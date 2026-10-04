@@ -49,6 +49,8 @@ export const queryKeys = {
     warrantyDefaults: ['devices', 'warranty-defaults'] as const,
     compatibleParts: (referenceItemId: string) =>
       ['devices', 'compatible-parts', referenceItemId] as const,
+    compatiblePartGroups: (referenceItemId?: string | null) =>
+      ['devices', 'compatible-part-groups', referenceItemId ?? 'all'] as const,
     itemPhotos: (referenceItemId: string) =>
       ['devices', 'item-photos', referenceItemId] as const,
   },

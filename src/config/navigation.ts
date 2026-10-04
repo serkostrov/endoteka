@@ -253,6 +253,15 @@ export function getBreadcrumbs(pathname: string, items: NavItem[] = flattenNavIt
     return [...crumbs, { label: 'Настройки', to: routes.settings }, { label: 'Уведомления' }]
   }
 
+  if (pathname === routes.settingsCompatiblePartGroups) {
+    return [
+      ...crumbs,
+      { label: 'Настройки', to: routes.settings },
+      { label: 'Параметры', to: routes.settingsReferences },
+      { label: 'Группы запасных частей' },
+    ]
+  }
+
   if (pathname === routes.settingsServiceTemplates) {
     return [
       ...crumbs,

@@ -41,7 +41,7 @@ export function SettingsHubScreen() {
     {
       to: routes.settingsFields,
       title: 'Поля карточек',
-      description: 'Дополнительные поля клиентов, приборов и диагностики',
+      description: 'Дополнительные поля клиентов, приборов, склада и диагностики',
       icon: SlidersHorizontal,
     },
     ...(canEditTemplates

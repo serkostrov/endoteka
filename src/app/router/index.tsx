@@ -49,6 +49,10 @@ const NotificationSettingsPage = lazyNamedPage(
   () => import('@/pages/NotificationSettingsPage'),
   'NotificationSettingsPage',
 )
+const CompatiblePartGroupsPage = lazyNamedPage(
+  () => import('@/pages/CompatiblePartGroupsPage'),
+  'CompatiblePartGroupsPage',
+)
 const AuditLogPage = lazyNamedPage(() => import('@/pages/AuditLogPage'), 'AuditLogPage')
 
 function LegacyDocumentTemplateRedirect() {
@@ -201,6 +205,7 @@ const router = createBrowserRouter([
               { path: routes.settingsOrders, element: <OrderWorkflowPage /> },
               { path: routes.settingsOrderStatuses, element: <OrderStatusesPage /> },
               { path: routes.settingsNotifications, element: <NotificationSettingsPage /> },
+              { path: routes.settingsCompatiblePartGroups, element: <CompatiblePartGroupsPage /> },
               { path: routes.settingsServiceTemplates, element: <ServiceTemplatesPage /> },
             ],
           },

@@ -65,7 +65,7 @@ export function ItemCompatibleTypesTab({ itemId }: ItemCompatibleTypesTabProps) 
 
   return (
     <SectionCard
-      title="Подходящее"
+      title="Совместимость"
       description="Виды приборов для этой детали."
       actions={
         canUpdate ? (

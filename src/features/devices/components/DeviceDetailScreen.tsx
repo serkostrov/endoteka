@@ -31,7 +31,7 @@ import {
   useSheetExitPresence,
 } from '@/components/ui/sheet'
 import { DynamicFieldRenderer, DynamicFieldValue, DynamicFieldsGrid, saveDynamicFieldValues } from '@/features/dynamic-fields'
-import { emptyFieldValue, filledFieldValues } from '@/features/dynamic-fields/schemas'
+import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
 import { useHasPermission } from '@/features/auth'
 import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
@@ -208,7 +208,7 @@ function DeviceCardBody({
   const tabItems = [
     { id: 'card' as const, label: 'Карточка' },
     { id: 'orders' as const, label: 'Заказы', count: orders.length },
-    { id: 'compatible' as const, label: 'Подходящее', count: compatibleCount },
+    { id: 'compatible' as const, label: 'Запасные части', count: compatibleCount },
     { id: 'history' as const, label: 'История', count: pastRepairs.length },
     { id: 'warranties' as const, label: 'Гарантии', count: card.warranties.length },
   ]
@@ -217,6 +217,7 @@ function DeviceCardBody({
     return (
       <div className="space-y-4">
         <DeviceCardEditor device={device} layout={layout} tabItems={tabItems} onTabChange={setTab} />
+        <DeviceFieldsSection deviceId={device.id} canEdit />
         {!hideChromeActions ? (
           <ConfirmDialog
             open={deleteOpen}
@@ -254,7 +255,12 @@ function DeviceCardBody({
         items={tabItems}
       />
 
-      {tab === 'card' ? <DeviceCardView device={device} /> : null}
+      {tab === 'card' ? (
+        <>
+          <DeviceCardView device={device} />
+          <DeviceFieldsSection deviceId={device.id} canEdit={false} />
+        </>
+      ) : null}
 
       {tab === 'compatible' ? (
         <DeviceCompatiblePartsReadonly
@@ -330,14 +336,6 @@ function DeviceCardBody({
 }
 
 function DeviceCardView({ device }: { device: DeviceLookup }) {
-  const fieldsQuery = useDynamicFields(FieldEntity.Devices)
-  const valuesQuery = useDynamicFieldValues(FieldEntity.Devices, device.id)
-  const activeFields = useMemo(
-    () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
-    [fieldsQuery.data],
-  )
-  const extraValues = valuesQuery.data ?? {}
-
   return (
     <SectionCard title="Карточка" className="gap-4 py-4">
       <DeviceTypePhotosReadonly
@@ -375,15 +373,74 @@ function DeviceCardView({ device }: { device: DeviceLookup }) {
         <div className="col-span-12 sm:col-span-6">
           <Info label="Обновлён" value={formatDateTime(device.updatedAt)} />
         </div>
-        {activeFields.map((field) => (
-          <div key={field.id} className={fieldLayoutWidthClass(field)}>
-            <dt className="text-muted-foreground">{field.name}</dt>
-            <dd className="mt-0.5 font-medium">
-              <DynamicFieldValue field={field} value={extraValues[field.code] ?? emptyFieldValue(field)} />
-            </dd>
-          </div>
-        ))}
       </dl>
+    </SectionCard>
+  )
+}
+
+function DeviceFieldsSection({ deviceId, canEdit }: { deviceId: string; canEdit: boolean }) {
+  const fieldsQuery = useDynamicFields(FieldEntity.Devices)
+  const valuesQuery = useDynamicFieldValues(FieldEntity.Devices, deviceId)
+  const queryClient = useQueryClient()
+  const activeFields = useMemo(
+    () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
+    [fieldsQuery.data],
+  )
+  const [extraDraft, setExtraDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
+  const extraValues = extraDraft ?? valuesQuery.data ?? {}
+  useSheetDirty(canEdit && extraDraft !== null, extraDraft ? () => saveExtra() : undefined)
+
+  if (activeFields.length === 0) {
+    return null
+  }
+
+  async function saveExtra() {
+    try {
+      await saveDynamicFieldValues(FieldEntity.Devices, deviceId, extraValues)
+      setExtraDraft(null)
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fields.values(FieldEntity.Devices, deviceId),
+      })
+      toast.success('Поля сохранены')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      throw error
+    }
+  }
+
+  return (
+    <SectionCard title="Дополнительные поля">
+      {canEdit ? (
+        <DynamicFieldsGrid className="gap-3">
+          {activeFields.map((field) => (
+            <DynamicFieldRenderer
+              key={field.id}
+              field={field}
+              value={extraValues[field.code] ?? emptyFieldValue(field)}
+              onChange={(value) =>
+                setExtraDraft((current) => ({
+                  ...(current ?? valuesQuery.data ?? {}),
+                  [field.code]: value,
+                }))
+              }
+            />
+          ))}
+        </DynamicFieldsGrid>
+      ) : (
+        <dl className="grid grid-cols-12 gap-3 text-sm">
+          {activeFields.map((field) => (
+            <div key={field.id} className={fieldLayoutWidthClass(field)}>
+              <dt className="text-muted-foreground">{field.name}</dt>
+              <dd className="mt-0.5 font-medium">
+                <DynamicFieldValue
+                  field={field}
+                  value={extraValues[field.code] ?? emptyFieldValue(field)}
+                />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </SectionCard>
   )
 }
@@ -400,15 +457,6 @@ function DeviceCardEditor({
   onTabChange: (tab: DeviceTab) => void
 }) {
   const update = useUpdateDevice(device.id)
-  const queryClient = useQueryClient()
-  const fieldsQuery = useDynamicFields(FieldEntity.Devices)
-  const valuesQuery = useDynamicFieldValues(FieldEntity.Devices, device.id)
-  const activeFields = useMemo(
-    () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
-    [fieldsQuery.data],
-  )
-  const [extraValues, setExtraValues] = useState<Record<string, DynamicFieldValueData>>({})
-  const extra = { ...(valuesQuery.data ?? {}), ...extraValues }
 
   const form = useForm<EditDeviceFormValues>({
     resolver: zodResolver(editDeviceSchema),
@@ -421,9 +469,7 @@ function DeviceCardEditor({
     },
   })
 
-  useSheetDirty(form.formState.isDirty || Object.keys(extraValues).length > 0, () =>
-    runSheetFormSave(form.handleSubmit, persist),
-  )
+  useSheetDirty(form.formState.isDirty, () => runSheetFormSave(form.handleSubmit, persist))
 
   async function persist(values: EditDeviceFormValues) {
     await update.mutateAsync({
@@ -434,12 +480,7 @@ function DeviceCardEditor({
       modelId: emptyToNull(values.modelId),
       modificationId: emptyToNull(values.modificationId),
     })
-    if (activeFields.length > 0) {
-      await saveDynamicFieldValues(FieldEntity.Devices, device.id, filledFieldValues(activeFields, extra))
-      await queryClient.invalidateQueries({ queryKey: queryKeys.fields.values(FieldEntity.Devices, device.id) })
-    }
     form.reset(values)
-    setExtraValues({})
     toast.success('Прибор сохранён')
   }
 
@@ -522,19 +563,6 @@ function DeviceCardEditor({
                 </div>
               </FormItem>
             </div>
-
-            {activeFields.length > 0 ? (
-              <DynamicFieldsGrid className="gap-3">
-                {activeFields.map((field) => (
-                  <DynamicFieldRenderer
-                    key={field.id}
-                    field={field}
-                    value={extra[field.code] ?? emptyFieldValue(field)}
-                    onChange={(value) => setExtraValues((current) => ({ ...current, [field.code]: value }))}
-                  />
-                ))}
-              </DynamicFieldsGrid>
-            ) : null}
 
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <Info label="Создан" value={formatDateTime(device.createdAt)} />

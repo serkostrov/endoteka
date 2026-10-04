@@ -465,10 +465,19 @@ type Row = {
     created_at: string
     updated_at: string
   }
+  device_compatible_part_groups: {
+    id: string
+    name: string
+    color: string
+    sort_order: number
+    created_by: string | null
+    created_at: string
+  }
   device_compatible_parts: {
     id: string
     reference_item_id: string
     item_id: string
+    group_id: string
     sort_order: number
     created_by: string | null
     created_at: string
@@ -1135,6 +1144,12 @@ export type Database = {
       }
       inventory_items: {
         Row: Row['inventory_items']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      device_compatible_part_groups: {
+        Row: Row['device_compatible_part_groups']
         Insert: never
         Update: never
         Relationships: []
@@ -1956,6 +1971,41 @@ export type Database = {
           cover_file_path: string | null
         }[]
       }
+      list_device_compatible_part_groups: {
+        Args: { target_reference_item_id?: string | null }
+        Returns: {
+          id: string
+          name: string
+          color: string
+          sort_order: number
+          part_count: number
+          created_at: string
+        }[]
+      }
+      upsert_device_compatible_part_group: {
+        Args: {
+          target_id: string | null
+          target_name: string
+          target_color?: string
+        }
+        Returns: string
+      }
+      delete_device_compatible_part_group: {
+        Args: { target_id: string }
+        Returns: undefined
+      }
+      reorder_device_compatible_part_groups: {
+        Args: { group_ids: string[] }
+        Returns: undefined
+      }
+      reorder_device_compatible_parts: {
+        Args: {
+          target_reference_item_id: string
+          target_group_id: string
+          link_ids: string[]
+        }
+        Returns: undefined
+      }
       list_device_compatible_parts: {
         Args: { target_reference_item_id: string }
         Returns: {
@@ -1974,6 +2024,10 @@ export type Database = {
           stock_quantity: number
           cover_file_path: string | null
           link_id: string
+          group_id: string
+          group_name: string
+          group_color: string
+          group_sort_order: number
           sort_order: number
           created_at: string
         }[]
@@ -2024,7 +2078,11 @@ export type Database = {
         Returns: undefined
       }
       add_device_compatible_part: {
-        Args: { target_reference_item_id: string; target_item_id: string }
+        Args: {
+          target_reference_item_id: string
+          target_item_id: string
+          target_group_id?: string | null
+        }
         Returns: string
       }
       remove_device_compatible_part: {

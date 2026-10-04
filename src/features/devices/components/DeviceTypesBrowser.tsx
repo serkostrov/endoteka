@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { ChevronRight, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { useQueryClient } from '@tanstack/react-query'
+import { ChevronRight, Pencil, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { useOpenEntitySheet } from '@/app/sheet-stack'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -25,16 +25,18 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useHasPermission } from '@/features/auth'
-import { ReferenceItemPhotos } from '@/features/devices/components/ReferenceItemPhotos'
 import {
-  useAddDeviceCompatiblePart,
-  useDeviceCompatibleParts,
-  useRemoveDeviceCompatiblePart,
-} from '@/features/devices/hooks/use-compatible-parts'
-import type { CompatiblePart } from '@/features/devices/services/compatible-parts-service'
-import { InventoryItemCoverThumb } from '@/features/inventory/components/InventoryItemCoverThumb'
-import { ItemSearchField } from '@/features/inventory/components/ItemSearchField'
-import type { InventoryItem } from '@/features/inventory/services/inventory-service'
+  DynamicFieldRenderer,
+  DynamicFieldValue,
+  DynamicFieldsGrid,
+  saveDynamicFieldValues,
+} from '@/features/dynamic-fields'
+import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
+import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
+import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
+import { DeviceCompatiblePartsPanel } from '@/features/devices/components/DeviceCompatiblePartsPanel'
+import { ReferenceItemPhotos } from '@/features/devices/components/ReferenceItemPhotos'
+import { useDeviceCompatibleParts } from '@/features/devices/hooks/use-compatible-parts'
 import { ReferenceItemDialog } from '@/features/references/components/ReferenceItemDialog'
 import {
   useDeleteReferenceItem,
@@ -44,10 +46,11 @@ import {
 } from '@/features/references/hooks/use-references'
 import type { ReferenceItemFormValues } from '@/features/references/schemas'
 import type { ReferenceItem, ReferenceSetSummary } from '@/features/references/services/references-service'
-import { formatQuantity } from '@/lib/constants/inventory'
+import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
 import { Permission } from '@/lib/constants/permissions'
 import { ReferenceSetCode } from '@/lib/constants/references'
 import { getErrorMessage } from '@/lib/errors'
+import { queryKeys } from '@/lib/query-keys'
 import { uniqueCode } from '@/lib/utils/code'
 import { formatInteger } from '@/lib/utils/number'
 import { cn } from '@/lib/utils'
@@ -798,7 +801,7 @@ function TypeDetailSheetContent({
   const tabItems = useMemo(
     () => [
       { id: 'card' as const, label: 'Карточка' },
-      { id: 'compatible' as const, label: 'Подходящее', count: compatibleCount },
+      { id: 'compatible' as const, label: 'Запасные части', count: compatibleCount },
     ],
     [compatibleCount],
   )
@@ -876,232 +879,167 @@ function TypeDetailSheetContent({
         />
 
         {tab === 'card' ? (
-          <SectionCard className="gap-4 py-4">
-            <div className="space-y-4">
-              <ReferenceItemPhotos referenceItemId={item.id} canEdit={canUpdate} />
+          <>
+            <SectionCard className="gap-4 py-4">
+              <div className="space-y-4">
+                <ReferenceItemPhotos referenceItemId={item.id} canEdit={canUpdate} />
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor={`type-name-${item.id}`}>Название</Label>
-                  <Input
-                    id={`type-name-${item.id}`}
-                    value={name}
-                    placeholder="Название"
-                    disabled={!canUpdate || save.isPending}
-                    readOnly={!canUpdate}
-                    onChange={(event) => setName(event.target.value)}
-                    onBlur={() => {
-                      if (!canUpdate || name.trim() === item.name.trim()) {
-                        return
-                      }
-                      void persist({ name, description, parentId })
-                    }}
-                  />
-                </div>
-                {requiresParent && parentLabel ? (
-                  <div className="space-y-2">
-                    <Label>{parentLabel}</Label>
-                    {canUpdate ? (
-                      <Select
-                        value={parentId}
-                        disabled={save.isPending}
-                        onValueChange={(value) => {
-                          setParentId(value)
-                          void persist({ name, description, parentId: value })
-                        }}
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder={`Выберите ${parentLabel.toLowerCase()}`} />
-                        </SelectTrigger>
-                        <SelectContent searchable>
-                          {parentOptions.map((option) => (
-                            <SelectItem key={option.id} value={option.id}>
-                              {option.name}
-                              {option.isActive ? '' : ' (скрыт)'}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <Input
-                        value={parentOptions.find((row) => row.id === parentId)?.name ?? '—'}
-                        readOnly
-                        disabled
-                      />
-                    )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor={`type-name-${item.id}`}>Название</Label>
+                    <Input
+                      id={`type-name-${item.id}`}
+                      value={name}
+                      placeholder="Название"
+                      disabled={!canUpdate || save.isPending}
+                      readOnly={!canUpdate}
+                      onChange={(event) => setName(event.target.value)}
+                      onBlur={() => {
+                        if (!canUpdate || name.trim() === item.name.trim()) {
+                          return
+                        }
+                        void persist({ name, description, parentId })
+                      }}
+                    />
                   </div>
-                ) : null}
-                <div className="space-y-2">
-                  <Label htmlFor={`type-code-${item.id}`}>Код</Label>
-                  <Input id={`type-code-${item.id}`} value={item.code} readOnly disabled />
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor={`type-desc-${item.id}`}>Описание</Label>
-                  <Textarea
-                    id={`type-desc-${item.id}`}
-                    value={description}
-                    disabled={!canUpdate || save.isPending}
-                    placeholder="Необязательно"
-                    className="min-h-24 resize-y"
-                    onChange={(event) => setDescription(event.target.value)}
-                    onBlur={() => {
-                      if (!canUpdate || description.trim() === item.description.trim()) {
-                        return
-                      }
-                      void persist({ name, description, parentId })
-                    }}
-                  />
+                  {requiresParent && parentLabel ? (
+                    <div className="space-y-2">
+                      <Label>{parentLabel}</Label>
+                      {canUpdate ? (
+                        <Select
+                          value={parentId}
+                          disabled={save.isPending}
+                          onValueChange={(value) => {
+                            setParentId(value)
+                            void persist({ name, description, parentId: value })
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder={`Выберите ${parentLabel.toLowerCase()}`} />
+                          </SelectTrigger>
+                          <SelectContent searchable>
+                            {parentOptions.map((option) => (
+                              <SelectItem key={option.id} value={option.id}>
+                                {option.name}
+                                {option.isActive ? '' : ' (скрыт)'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={parentOptions.find((row) => row.id === parentId)?.name ?? '—'}
+                          readOnly
+                          disabled
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                  <div className="space-y-2">
+                    <Label htmlFor={`type-code-${item.id}`}>Код</Label>
+                    <Input id={`type-code-${item.id}`} value={item.code} readOnly disabled />
+                  </div>
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor={`type-desc-${item.id}`}>Описание</Label>
+                    <Textarea
+                      id={`type-desc-${item.id}`}
+                      value={description}
+                      disabled={!canUpdate || save.isPending}
+                      placeholder="Необязательно"
+                      className="min-h-24 resize-y"
+                      onChange={(event) => setDescription(event.target.value)}
+                      onBlur={() => {
+                        if (!canUpdate || description.trim() === item.description.trim()) {
+                          return
+                        }
+                        void persist({ name, description, parentId })
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          </SectionCard>
+            </SectionCard>
+            <DeviceTypeFieldsSection referenceItemId={item.id} canEdit={canUpdate} />
+          </>
         ) : null}
 
         {tab === 'compatible' ? (
-          <CompatiblePartsBlock referenceItemId={item.id} canUpdate={canUpdate} />
+          <DeviceCompatiblePartsPanel referenceItemId={item.id} canUpdate={canUpdate} />
         ) : null}
       </div>
     </SheetContent>
   )
 }
 
-function CompatiblePartsBlock({
+function DeviceTypeFieldsSection({
   referenceItemId,
-  canUpdate,
+  canEdit,
 }: {
   referenceItemId: string
-  canUpdate: boolean
+  canEdit: boolean
 }) {
-  const openSheet = useOpenEntitySheet()
-  const partsQuery = useDeviceCompatibleParts(referenceItemId)
-  const addPart = useAddDeviceCompatiblePart(referenceItemId)
-  const removePart = useRemoveDeviceCompatiblePart(referenceItemId)
-  const [adding, setAdding] = useState(false)
-  const linkedIds = useMemo(
-    () => new Set((partsQuery.data ?? []).map((part) => part.id)),
-    [partsQuery.data],
+  const fieldsQuery = useDynamicFields(FieldEntity.Devices)
+  const valuesQuery = useDynamicFieldValues(FieldEntity.Devices, referenceItemId)
+  const queryClient = useQueryClient()
+  const activeFields = useMemo(
+    () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
+    [fieldsQuery.data],
   )
+  const [extraDraft, setExtraDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
+  const extraValues = extraDraft ?? valuesQuery.data ?? {}
+  useSheetDirty(canEdit && extraDraft !== null, extraDraft ? () => saveExtra() : undefined)
 
-  async function handleAdd(item: InventoryItem) {
-    if (linkedIds.has(item.id)) {
-      toast.message('Эта деталь уже в списке')
-      return
-    }
-    try {
-      await addPart.mutateAsync(item.id)
-      toast.success('Деталь добавлена')
-      setAdding(false)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
+  if (activeFields.length === 0) {
+    return null
   }
 
-  async function handleRemove(part: CompatiblePart) {
+  async function saveExtra() {
     try {
-      await removePart.mutateAsync(part.id)
-      toast.success('Деталь убрана')
+      await saveDynamicFieldValues(FieldEntity.Devices, referenceItemId, extraValues)
+      setExtraDraft(null)
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fields.values(FieldEntity.Devices, referenceItemId),
+      })
+      toast.success('Поля сохранены')
     } catch (error) {
       toast.error(getErrorMessage(error))
+      throw error
     }
   }
-
-  const parts = partsQuery.data ?? []
 
   return (
-    <SectionCard
-      title="Подходящее"
-      description="Запчасти из номенклатуры."
-      actions={
-        canUpdate ? (
-          <Button
-            type="button"
-            variant={adding ? 'secondary' : 'outline'}
-            size="sm"
-            className="shrink-0"
-            onClick={() => setAdding((value) => !value)}
-          >
-            {adding ? <X className="size-3.5" /> : <Plus className="size-3.5" />}
-            {adding ? 'Закрыть' : 'Добавить'}
-          </Button>
-        ) : null
-      }
-    >
-      <div className="space-y-3">
-        {adding ? (
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <ItemSearchField
-              searchPlaceholder="Найти деталь в номенклатуре"
-              showScan={false}
-              suggestSide="bottom"
-              onSelect={(item) => {
-                void handleAdd(item)
-              }}
+    <SectionCard title="Дополнительные поля">
+      {canEdit ? (
+        <DynamicFieldsGrid className="gap-3">
+          {activeFields.map((field) => (
+            <DynamicFieldRenderer
+              key={field.id}
+              field={field}
+              value={extraValues[field.code] ?? emptyFieldValue(field)}
+              onChange={(value) =>
+                setExtraDraft((current) => ({
+                  ...(current ?? valuesQuery.data ?? {}),
+                  [field.code]: value,
+                }))
+              }
             />
-          </div>
-        ) : null}
-
-        {partsQuery.isLoading ? (
-          <LoadingState label="Загрузка деталей" className="min-h-24 py-6" />
-        ) : partsQuery.error ? (
-          <ErrorState description={getErrorMessage(partsQuery.error)} />
-        ) : parts.length === 0 ? (
-          <EmptyState
-            title="Подходящих деталей нет"
-            description="Добавьте запчасти из номенклатуры."
-            className="py-12"
-          />
-        ) : (
-          <ul className="overflow-hidden rounded-lg border divide-y">
-            {parts.map((part) => (
-              <li key={part.id} className="group relative">
-                <button
-                  type="button"
-                  className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-accent/60"
-                  onClick={() => openSheet('item', part.id)}
-                >
-                  <InventoryItemCoverThumb src={part.coverUrl} alt={part.name} className="size-11" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{part.name}</span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                      {part.article ? <span>арт. {part.article}</span> : null}
-                      {part.code ? <span className="font-mono">{part.code}</span> : null}
-                      {part.categoryName ? <span>{part.categoryName}</span> : null}
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span
-                      className={cn(
-                        'block text-sm font-medium tabular-nums',
-                        part.stockQuantity <= 0 && 'text-muted-foreground',
-                      )}
-                    >
-                      {formatQuantity(part.stockQuantity)}
-                      {part.unitName ? ` ${part.unitName}` : ''}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">на складе</span>
-                  </span>
-                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground opacity-40" />
-                </button>
-                {canUpdate ? (
-                  <div className="absolute top-1/2 right-9 -translate-y-1/2 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-                    <IconActionButton
-                      label="Убрать"
-                      size="icon-sm"
-                      className="bg-card text-destructive shadow-sm hover:text-destructive"
-                      disabled={removePart.isPending}
-                      onClick={() => {
-                        void handleRemove(part)
-                      }}
-                    >
-                      <Trash2 />
-                    </IconActionButton>
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+          ))}
+        </DynamicFieldsGrid>
+      ) : (
+        <dl className="grid grid-cols-12 gap-3 text-sm">
+          {activeFields.map((field) => (
+            <div key={field.id} className={fieldLayoutWidthClass(field)}>
+              <dt className="text-muted-foreground">{field.name}</dt>
+              <dd className="mt-0.5 font-medium">
+                <DynamicFieldValue
+                  field={field}
+                  value={extraValues[field.code] ?? emptyFieldValue(field)}
+                />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </SectionCard>
   )
 }

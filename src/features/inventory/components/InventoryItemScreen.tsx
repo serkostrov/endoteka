@@ -277,7 +277,7 @@ function ItemCardBody({
     () => [
       { id: 'card' as const, label: 'Карточка' },
       { id: 'batches' as const, label: 'Партии', count: sortedBatches.length },
-      { id: 'compatible' as const, label: 'Подходящее', count: compatibleCount },
+      { id: 'compatible' as const, label: 'Совместимость', count: compatibleCount },
       { id: 'history' as const, label: 'История', count: movements.length },
     ],
     [compatibleCount, movements.length, sortedBatches.length],
