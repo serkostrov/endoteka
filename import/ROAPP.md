@@ -66,6 +66,21 @@ ROAPP_API_KEY=… SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
 
 Повторный прогон идемпотентен по `source_id` документа.
 
+### Выравнивание остатков
+
+Исторические оприходования поднимают остаток в CRM, но без полного журнала списаний RO App цифры разъезжаются. Источник истины для **текущего** остатка — снимок со страницы [Остатки RO App](https://web.roapp.io/warehouse/residue):
+
+```bash
+# Excel из RO App → import/data/roapp/остатки.xls
+SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
+  npm run import:roapp-stock-sync -- --dry-run --in import/data/roapp/остатки.xls
+
+SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
+  npm run import:roapp-stock-sync -- --in import/data/roapp/остатки.xls
+```
+
+Документы приходов не удаляются: выравнивание идёт корректировками остатка (`inventory_adjustment`).
+
 ## Что переносится
 
 | RO App | Endoteka |

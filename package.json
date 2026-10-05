@@ -23,6 +23,7 @@
     "import:roapp-receipts-convert": "tsx import/src/convert-roapp-receipts.ts",
     "import:roapp-receipts-sync": "tsx import/src/sync-roapp-receipts.ts",
     "import:roapp-receipts": "tsx import/src/run-roapp-receipts.ts",
+    "import:roapp-stock-sync": "tsx import/src/sync-roapp-stock.ts",
     "import:test": "tsx --test import/tests/duplicate.test.ts import/tests/partial-failure.test.ts import/tests/interrupted.test.ts"
   },
   "dependencies": {
