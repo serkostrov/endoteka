@@ -62,10 +62,10 @@ function extensionForMime(mime: string) {
 
 export async function getCompanyLogoUrl(): Promise<string | null> {
   const { data, error } = await getSupabase().rpc('get_company_logo')
-  if (error) {
-    throw toAppError(error, 'Не удалось загрузить логотип.')
+  if (error || typeof data !== 'string' || !data.trim()) {
+    return null
   }
-  return publicCompanyLogoUrl(typeof data === 'string' ? data : null)
+  return publicCompanyLogoUrl(data)
 }
 
 export async function uploadCompanyLogo(file: File): Promise<string> {

@@ -14,6 +14,7 @@ export function useCompanyLogo(enabled = true) {
     queryFn: getCompanyLogoUrl,
     enabled,
     staleTime: 60_000,
+    retry: 1,
   })
 }
 

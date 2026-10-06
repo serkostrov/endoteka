@@ -22,6 +22,40 @@ import {
 } from '../hooks/use-company-logo'
 import { COMPANY_LOGO_ACCEPT } from '../services/company-logo-service'
 
+type BrandMarkSize = 'sm' | 'md' | 'lg'
+
+const MARK_SIZE: Record<BrandMarkSize, string> = {
+  sm: 'size-8 text-sm',
+  md: 'size-10 text-base',
+  lg: 'size-12 text-lg',
+}
+
+type AppBrandMarkProps = {
+  size?: BrandMarkSize
+  className?: string
+}
+
+export function AppBrandMark({ size = 'sm', className }: AppBrandMarkProps) {
+  const logoQuery = useCompanyLogo()
+  const logoUrl = logoQuery.data ?? null
+
+  return (
+    <span
+      className={cn(
+        'relative flex shrink-0 items-center justify-center overflow-hidden rounded-md bg-primary font-semibold text-primary-foreground',
+        MARK_SIZE[size],
+        className,
+      )}
+    >
+      {logoUrl ? (
+        <img src={logoUrl} alt={APP_NAME} className="size-full bg-card object-contain" />
+      ) : (
+        <span aria-hidden="true">Э</span>
+      )}
+    </span>
+  )
+}
+
 type AppBrandLogoProps = {
   collapsed?: boolean
   className?: string
@@ -75,19 +109,16 @@ export function AppBrandLogo({ collapsed = false, className }: AppBrandLogoProps
   }
 
   const mark = (
-    <span
-      className={cn(
-        'relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-md bg-primary text-sm font-semibold text-primary-foreground',
-        canEdit && 'ring-offset-sidebar group-hover:ring-2 group-hover:ring-primary/40 group-focus-visible:ring-2 group-focus-visible:ring-ring',
-      )}
-    >
-      {logoUrl ? (
-        <img src={logoUrl} alt="" className="size-full object-contain bg-card" />
-      ) : (
-        <span aria-hidden="true">Э</span>
-      )}
+    <span className="relative shrink-0">
+      <AppBrandMark
+        className={
+          canEdit
+            ? 'ring-offset-sidebar group-hover:ring-2 group-hover:ring-primary/40 group-focus-visible:ring-2 group-focus-visible:ring-ring'
+            : undefined
+        }
+      />
       {canEdit ? (
-        <span className="absolute inset-0 flex items-center justify-center bg-black/45 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
+        <span className="absolute inset-0 flex items-center justify-center rounded-md bg-black/45 opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100">
           {pending ? (
             <Loader2 className="size-3.5 animate-spin text-white" />
           ) : (

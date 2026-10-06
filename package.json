@@ -24,6 +24,7 @@
     "import:roapp-receipts-sync": "tsx import/src/sync-roapp-receipts.ts",
     "import:roapp-receipts": "tsx import/src/run-roapp-receipts.ts",
     "import:roapp-stock-sync": "tsx import/src/sync-roapp-stock.ts",
+    "import:roapp-diagnostics": "tsx import/src/sync-roapp-diagnostics.ts",
     "import:test": "tsx --test import/tests/duplicate.test.ts import/tests/partial-failure.test.ts import/tests/interrupted.test.ts"
   },
   "dependencies": {

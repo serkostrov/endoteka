@@ -1,5 +1,6 @@
 import { DataTable } from '@/components/shared/DataTable'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { AppBrandMark } from '@/features/settings/components/AppBrandLogo'
 import { APP_NAME } from '@/lib/constants/app'
 import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
 import { saleStatusLabels, saleStatusTone } from '@/lib/constants/sales'
@@ -11,9 +12,12 @@ export function SalePrintDocument({ document }: { document: SaleDocument }) {
   return (
     <article className="mx-auto max-w-3xl space-y-6 bg-white text-black print:max-w-none">
       <header className="flex items-start justify-between gap-4 border-b pb-4">
-        <div>
-          <p className="text-sm text-neutral-600">{APP_NAME}</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Счёт {document.invoiceNumber}</h1>
+        <div className="flex items-start gap-3">
+          <AppBrandMark />
+          <div>
+            <p className="text-sm text-neutral-600">{APP_NAME}</p>
+            <h1 className="text-2xl font-semibold tracking-tight">Счёт {document.invoiceNumber}</h1>
+          </div>
         </div>
         <StatusBadge tone={saleStatusTone(document.status)}>{saleStatusLabels[document.status]}</StatusBadge>
       </header>

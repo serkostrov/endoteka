@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { AuthProvider } from '@/features/auth'
+import { CompanyLogoFavicon } from '@/features/settings/components/CompanyLogoFavicon'
 
 import { QueryProvider } from './QueryProvider'
 
@@ -11,6 +12,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <QueryProvider>
       <AuthProvider>
         <TooltipProvider>
+          <CompanyLogoFavicon />
           {children}
           <Toaster position="top-right" />
         </TooltipProvider>
