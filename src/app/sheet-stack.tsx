@@ -1,24 +1,60 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ComponentType,
   type ReactNode,
 } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { SHEET_EXIT_MS, SheetLayer, SheetStackMeta } from '@/components/ui/sheet'
-import { CustomerDetailSheet } from '@/features/customers'
-import { DeviceDetailSheet } from '@/features/devices'
-import { InventoryCountSheet } from '@/features/inventory/components/InventoryCountScreen'
-import { InventoryItemSheet } from '@/features/inventory/components/InventoryItemScreen'
-import { InventoryReceiptSheet } from '@/features/inventory/components/InventoryReceiptSheet'
-import { OrderDetailSheet } from '@/features/orders'
-import { SaleDetailSheet } from '@/features/sales'
-import { TaskDetailSheet } from '@/features/tasks/components/TaskDetailSheet'
+
+// Props vary per sheet; keep the loader untyped at the boundary.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type SheetComponent = ComponentType<any>
+
+function lazySheet(loader: () => Promise<{ default: SheetComponent }>) {
+  return lazy(loader)
+}
+
+const CustomerDetailSheet = lazySheet(async () => {
+  const mod = await import('@/features/customers/components/CustomerDetailScreen')
+  return { default: mod.CustomerDetailSheet }
+})
+const DeviceDetailSheet = lazySheet(async () => {
+  const mod = await import('@/features/devices/components/DeviceDetailScreen')
+  return { default: mod.DeviceDetailSheet }
+})
+const InventoryItemSheet = lazySheet(async () => {
+  const mod = await import('@/features/inventory/components/InventoryItemScreen')
+  return { default: mod.InventoryItemSheet }
+})
+const InventoryCountSheet = lazySheet(async () => {
+  const mod = await import('@/features/inventory/components/InventoryCountScreen')
+  return { default: mod.InventoryCountSheet }
+})
+const InventoryReceiptSheet = lazySheet(async () => {
+  const mod = await import('@/features/inventory/components/InventoryReceiptSheet')
+  return { default: mod.InventoryReceiptSheet }
+})
+const OrderDetailSheet = lazySheet(async () => {
+  const mod = await import('@/features/orders/components/OrderDetailScreen')
+  return { default: mod.OrderDetailSheet }
+})
+const SaleDetailSheet = lazySheet(async () => {
+  const mod = await import('@/features/sales/components/SaleDetailScreen')
+  return { default: mod.SaleDetailSheet }
+})
+const TaskDetailSheet = lazySheet(async () => {
+  const mod = await import('@/features/tasks/components/TaskDetailSheet')
+  return { default: mod.TaskDetailSheet }
+})
 
 export type EntitySheetKind =
   | 'customer'
@@ -259,30 +295,32 @@ export function SheetStackHost() {
 
         return (
           <SheetLayer key={key} level={layer}>
-            {entry.kind === 'customer' ? (
-              <CustomerDetailSheet customerId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
-            {entry.kind === 'device' ? (
-              <DeviceDetailSheet deviceId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
-            {entry.kind === 'item' ? (
-              <InventoryItemSheet itemId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
-            {entry.kind === 'order' ? (
-              <OrderDetailSheet orderId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
-            {entry.kind === 'task' ? (
-              <TaskDetailSheet taskId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
-            {entry.kind === 'sale' ? (
-              <SaleDetailSheet saleId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
-            {entry.kind === 'count' ? (
-              <InventoryCountSheet countId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
-            {entry.kind === 'receipt' ? (
-              <InventoryReceiptSheet receiptId={entry.id} open={open} onOpenChange={onOpenChange} />
-            ) : null}
+            <Suspense fallback={null}>
+              {entry.kind === 'customer' ? (
+                <CustomerDetailSheet customerId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'device' ? (
+                <DeviceDetailSheet deviceId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'item' ? (
+                <InventoryItemSheet itemId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'order' ? (
+                <OrderDetailSheet orderId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'task' ? (
+                <TaskDetailSheet taskId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'sale' ? (
+                <SaleDetailSheet saleId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'count' ? (
+                <InventoryCountSheet countId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'receipt' ? (
+                <InventoryReceiptSheet receiptId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+            </Suspense>
           </SheetLayer>
         )
       })}
