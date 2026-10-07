@@ -1,5 +1,6 @@
-import { AppError, toAppError } from '@/lib/errors'
+import { toAppError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase/client'
+import { invokeEdgeFunction } from '@/lib/supabase/invoke-function'
 import type { UserAccountRow } from '@/types/database'
 
 export type UserAccount = {
@@ -126,33 +127,13 @@ export async function updateUserAccount(input: {
     return
   }
 
-  const { data, error: passwordError } = await getSupabase().functions.invoke('set-user-password', {
-    body: { userId: input.userId, password },
-  })
-
-  if (isRecord(data) && typeof data.error === 'string') {
-    throw new AppError('SET_PASSWORD', data.error)
-  }
-
-  if (passwordError) {
-    throw toAppError(passwordError, 'Не удалось изменить пароль.')
-  }
+  await invokeEdgeFunction(
+    'set-user-password',
+    { userId: input.userId, password },
+    'Не удалось изменить пароль.',
+  )
 }
 
 export async function deleteUserAccount(userId: string): Promise<void> {
-  const { data, error } = await getSupabase().functions.invoke('delete-user', {
-    body: { userId },
-  })
-
-  if (isRecord(data) && typeof data.error === 'string') {
-    throw new AppError('DELETE_USER', data.error)
-  }
-
-  if (error) {
-    throw toAppError(error, 'Не удалось удалить пользователя.')
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null
+  await invokeEdgeFunction('delete-user', { userId }, 'Не удалось удалить пользователя.')
 }

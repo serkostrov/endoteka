@@ -17,7 +17,7 @@
 - Проверка сессии на сервере: `auth.getUser()`, не только локальный `getSession()`.
 - Неактивный профиль или отсутствие профиля приводит к выходу.
 - Выход: `auth.signOut()` после записи аудита.
-- Приглашение: Edge Function `invite-user` проверяет JWT и право `users:invite`, затем вызывает `create_invitation` и `auth.admin.inviteUserByEmail`.
+- Приглашение: Edge Function `invite-user` проверяет JWT и право `users:invite`, создаёт приглашение, генерирует invite-ссылку (`generateLink`) и отправляет письмо через `SMTP_*`.
 - Редирект из письма приглашения разрешён только на `/auth/callback` с origin из `SITE_URL`, URL проекта или localhost.
 - Публичная регистрация без приглашения не должна быть включена в Auth. Учётная запись без приглашения создаётся с `is_active = false` и не получает роль.
 

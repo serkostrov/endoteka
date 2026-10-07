@@ -74,7 +74,7 @@ Healthcheck: `GET /health`.
 
 | Функция | Назначение | Секреты |
 | --- | --- | --- |
-| `invite-user` | Приглашение сотрудника | `SITE_URL` |
+| `invite-user` | Приглашение сотрудника | `SITE_URL`, `SMTP_*` |
 | `process-deadlines` | Сроки заказов → внутренние уведомления | `CRON_SECRET` |
 | `dispatch-notifications` | Повтор обработки событий, email и Telegram | `CRON_SECRET`, `SMTP_*`, `TELEGRAM_BOT_TOKEN` |
 | `telegram-webhook` | Привязка чата `/start КОД` | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` |
@@ -87,7 +87,7 @@ Healthcheck: `GET /health`.
 - `SMTP_SECURE` — `true` для TLS
 - `SMTP_FROM` — адрес отправителя, если не задан в настройках уведомлений
 
-Письмо приглашения идёт через SMTP **Supabase Auth**, не через `dispatch-notifications`.
+Письмо приглашения отправляет `invite-user` через те же секреты `SMTP_*`, что и уведомления.
 
 ### Cron
 

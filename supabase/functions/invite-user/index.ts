@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.112.4'
+import { SMTPClient } from 'https://deno.land/x/denomailer@1.6.0/mod.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -20,6 +21,17 @@ Deno.serve(async (request) => {
       return jsonResponse({ error: 'Требуется авторизация.' }, 401)
     }
 
+    const smtp = readSmtpConfig()
+    if (!smtp) {
+      return jsonResponse(
+        {
+          error:
+            'Почта не настроена. Задайте секреты SMTP_HOST и SMTP_FROM (или SMTP_USER) для функции invite-user.',
+        },
+        400,
+      )
+    }
+
     const userClient = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
     })
@@ -39,35 +51,181 @@ Deno.serve(async (request) => {
       redirectTo?: string
     }
 
+    const email = (body.email ?? '').trim().toLowerCase()
+    const fullName = (body.fullName ?? '').trim()
+    const roleId = (body.roleId ?? '').trim()
+    const redirectTo = safeInviteRedirect(body.redirectTo, supabaseUrl)
+
     const { data: invitationId, error: invitationError } = await userClient.rpc('create_invitation', {
-      target_email: body.email ?? '',
-      target_full_name: body.fullName ?? '',
-      target_role_id: body.roleId ?? '',
+      target_email: email,
+      target_full_name: fullName,
+      target_role_id: roleId,
     })
 
     if (invitationError) {
-      return jsonResponse({ error: invitationError.message }, 400)
+      return jsonResponse({ error: cleanRpcMessage(invitationError.message) }, 400)
     }
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey)
-    const { error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(body.email ?? '', {
-      data: { full_name: body.fullName ?? '' },
-      redirectTo: safeInviteRedirect(body.redirectTo, supabaseUrl),
+    const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+      type: 'invite',
+      email,
+      options: {
+        data: { full_name: fullName },
+        redirectTo,
+      },
     })
 
-    if (inviteError) {
+    if (linkError || !linkData?.properties?.action_link) {
+      await userClient.rpc('fail_invitation', {
+        target_invitation_id: invitationId,
+        reason: 'invite_link_failed',
+      })
+      return jsonResponse({ error: inviteErrorMessage(linkError?.message) }, 400)
+    }
+
+    const publicSupabaseUrl = Deno.env.get('SUPABASE_PUBLIC_URL') || supabaseUrl
+    const actionLink = publicActionLink(linkData.properties.action_link, publicSupabaseUrl)
+
+    try {
+      await sendInviteEmail({
+        smtp,
+        to: email,
+        fullName,
+        actionLink,
+      })
+    } catch (cause) {
+      const createdUserId = linkData.user?.id
+      if (createdUserId) {
+        await adminClient.auth.admin.deleteUser(createdUserId)
+      }
       await userClient.rpc('fail_invitation', {
         target_invitation_id: invitationId,
         reason: 'invite_email_failed',
       })
-      return jsonResponse({ error: 'Не удалось отправить письмо. Проверьте email и настройки почты.' }, 400)
+      return jsonResponse(
+        {
+          error: errorMessage(cause) || 'Не удалось отправить письмо приглашения. Проверьте SMTP.',
+        },
+        400,
+      )
     }
 
     return jsonResponse({ id: invitationId }, 200)
-  } catch {
-    return jsonResponse({ error: 'Не удалось отправить приглашение.' }, 500)
+  } catch (cause) {
+    return jsonResponse(
+      { error: errorMessage(cause) || 'Не удалось отправить приглашение.' },
+      500,
+    )
   }
 })
+
+type SmtpConfig = {
+  host: string
+  port: number
+  user?: string
+  password?: string
+  secure: boolean
+  fromEmail: string
+}
+
+function readSmtpConfig(): SmtpConfig | null {
+  const host = Deno.env.get('SMTP_HOST')?.trim()
+  const fromEmail = (Deno.env.get('SMTP_FROM') ?? Deno.env.get('SMTP_USER') ?? '').trim()
+  if (!host || !fromEmail) {
+    return null
+  }
+
+  const port = Number(Deno.env.get('SMTP_PORT') ?? '587')
+  const user = Deno.env.get('SMTP_USER')?.trim()
+  const password = Deno.env.get('SMTP_PASSWORD') ?? undefined
+
+  return {
+    host,
+    port: Number.isFinite(port) ? port : 587,
+    user: user || undefined,
+    password,
+    secure: Deno.env.get('SMTP_SECURE') === 'true',
+    fromEmail,
+  }
+}
+
+async function sendInviteEmail(input: {
+  smtp: SmtpConfig
+  to: string
+  fullName: string
+  actionLink: string
+}) {
+  const greeting = input.fullName ? `${input.fullName}, здравствуйте!` : 'Здравствуйте!'
+  const client = new SMTPClient({
+    connection: {
+      hostname: input.smtp.host,
+      port: input.smtp.port,
+      tls: input.smtp.secure,
+      auth:
+        input.smtp.user && input.smtp.password
+          ? { username: input.smtp.user, password: input.smtp.password }
+          : undefined,
+    },
+  })
+
+  try {
+    await client.send({
+      from: input.smtp.fromEmail,
+      to: input.to,
+      subject: 'Приглашение в Эндотека',
+      content: [
+        greeting,
+        '',
+        'Вас пригласили в Эндотека.',
+        'Перейдите по ссылке, чтобы принять приглашение и задать пароль:',
+        input.actionLink,
+        '',
+        'Если вы не ожидали это письмо, просто проигнорируйте его.',
+      ].join('\n'),
+    })
+  } finally {
+    try {
+      await client.close()
+    } catch {
+      // ignore close errors
+    }
+  }
+}
+
+function publicActionLink(actionLink: string, supabaseUrl: string) {
+  try {
+    const link = new URL(actionLink)
+    const pub = new URL(supabaseUrl)
+    link.protocol = pub.protocol
+    link.host = pub.host
+    return link.toString()
+  } catch {
+    return actionLink
+  }
+}
+
+function inviteErrorMessage(message: string | undefined) {
+  const lowered = (message ?? '').toLowerCase()
+  if (lowered.includes('already') || lowered.includes('registered') || lowered.includes('exists')) {
+    return 'Пользователь с таким email уже зарегистрирован.'
+  }
+  if (message?.trim()) {
+    return cleanRpcMessage(message)
+  }
+  return 'Не удалось создать ссылку приглашения.'
+}
+
+function cleanRpcMessage(message: string) {
+  return message.replace(/^[A-Z0-9_]+:\s*/i, '').trim() || message
+}
+
+function errorMessage(cause: unknown) {
+  if (cause instanceof Error && cause.message) {
+    return cause.message.slice(0, 500)
+  }
+  return ''
+}
 
 function allowedOrigins(supabaseUrl: string) {
   const origins = new Set<string>()
