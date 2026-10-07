@@ -374,7 +374,9 @@ export function OrdersScreen() {
                 ? 'Требуют внимания'
                 : activeOnly
                   ? 'Только активные'
-                  : deadlineStateLabels[deadlineState]}
+                  : deadlineState !== 'all'
+                    ? deadlineStateLabels[deadlineState]
+                    : null}
               <span className="opacity-80">Сбросить</span>
             </Button>
           ) : null}
