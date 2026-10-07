@@ -6,6 +6,7 @@ import { useOrderJournal } from '@/features/diagnostics/hooks/use-diagnostics'
 import { formatJournalValue } from '@/features/diagnostics/services/diagnostics-service'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDateTime } from '@/lib/utils/date'
+import type { Json } from '@/types/database'
 
 import { orderJournalEventTypeLabel } from '../lib/journal-labels'
 
@@ -42,7 +43,7 @@ export function OrderHistoryTab({ orderId }: OrderHistoryTabProps) {
                 {orderJournalEventTypeLabel(event.eventType)}
                 {' · '}
                 {formatDateTime(event.createdAt)}
-                {event.actorName ? ` · ${event.actorName}` : ''}
+                {actorLine(event.actorName, event.payload)}
               </p>
               {event.changes.length > 0 ? (
                 <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
@@ -59,4 +60,13 @@ export function OrderHistoryTab({ orderId }: OrderHistoryTabProps) {
       )}
     </SectionCard>
   )
+}
+
+function actorLine(actorName: string, payload: Json) {
+  const fromPayload =
+    payload && typeof payload === 'object' && !Array.isArray(payload) && typeof payload.actor_name === 'string'
+      ? payload.actor_name
+      : ''
+  const name = actorName || fromPayload
+  return name ? ` · ${name}` : ''
 }

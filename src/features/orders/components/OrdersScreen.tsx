@@ -20,8 +20,11 @@ import {
 } from '@/features/references/services/references-service'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import {
+  deadlineStateLabels,
+  isDeadlineState,
   ORDER_BOARD_PAGE_SIZE,
   ORDER_SEARCH_DEBOUNCE_MS,
+  type DeadlineState,
 } from '@/lib/constants/orders'
 import { Permission } from '@/lib/constants/permissions'
 import { ReferenceSetCode } from '@/lib/constants/references'
@@ -49,8 +52,8 @@ const LIST_SORT_COLUMNS = [
   'total',
 ] as const satisfies readonly OrderSortColumn[]
 
-const DEFAULT_LIST_SORT: OrderSortColumn = 'deadline'
-const DEFAULT_LIST_DIR = 'asc' as const
+const DEFAULT_LIST_SORT: OrderSortColumn = 'number'
+const DEFAULT_LIST_DIR = 'desc' as const
 const CUSTOMER_FILTER_PAGE_SIZE = 200
 
 function parsePage(value: string | null) {
@@ -71,6 +74,12 @@ function parseListDir(value: string | null): 'asc' | 'desc' {
   return value === 'desc' || value === 'asc' ? value : DEFAULT_LIST_DIR
 }
 
+function parseDeadlineState(value: string | null): DeadlineState | 'all' {
+  return value && isDeadlineState(value) ? value : 'all'
+}
+
+const PRESET_FILTER_CLEAR = { attention: null, active: null, deadline: null } as const
+
 export function OrdersScreen() {
   const { user } = useAuth()
   const canCreate = useHasPermission(Permission.OrdersCreate)
@@ -88,6 +97,7 @@ export function OrdersScreen() {
   const responsibleParam = searchParams.get('responsible') ?? 'all'
   const attentionOnly = searchParams.get('attention') === '1'
   const activeOnly = searchParams.get('active') === '1' && !attentionOnly
+  const deadlineState = parseDeadlineState(searchParams.get('deadline'))
   const statusCode = searchParams.get('status') ?? 'all'
   const customerId = searchParams.get('customer') ?? 'all'
   const groupId = searchParams.get('group') ?? 'all'
@@ -174,7 +184,7 @@ export function OrdersScreen() {
       search: debouncedSearch,
       statusId: hasSearch ? 'all' : statusId,
       responsibleId: hasSearch ? 'all' : responsibleId || 'all',
-      deadlineState: 'all',
+      deadlineState: hasSearch ? 'all' : deadlineState,
       customerId: hasSearch ? 'all' : customerId,
       groupId: hasSearch ? 'all' : groupId,
       brandId: hasSearch ? 'all' : brandId,
@@ -235,7 +245,7 @@ export function OrdersScreen() {
   const assignmentFilter = responsibleParam === 'me' ? 'me' : 'all'
 
   function setAssignmentFilter(next: 'all' | 'me') {
-    patchFilters({ responsible: next, attention: null, active: null })
+    patchFilters({ responsible: next, ...PRESET_FILTER_CLEAR })
   }
 
   function setView(next: OrdersViewMode) {
@@ -303,8 +313,7 @@ export function OrdersScreen() {
       group: next,
       brand: nextBrand === 'all' ? null : nextBrand,
       model: modelStillValid ? (modelId === 'all' ? null : modelId) : null,
-      attention: null,
-      active: null,
+      ...PRESET_FILTER_CLEAR,
     })
   }
 
@@ -326,8 +335,7 @@ export function OrdersScreen() {
     patchFilters({
       brand: next,
       model: modelStillValid ? (modelId === 'all' ? null : modelId) : null,
-      attention: null,
-      active: null,
+      ...PRESET_FILTER_CLEAR,
     })
   }
 
@@ -357,12 +365,16 @@ export function OrdersScreen() {
             ]}
             onChange={setAssignmentFilter}
           />
-          {attentionOnly || activeOnly ? (
+          {attentionOnly || activeOnly || deadlineState !== 'all' ? (
             <Button
               type="button"
-              onClick={() => patchFilters({ attention: null, active: null })}
+              onClick={() => patchFilters({ ...PRESET_FILTER_CLEAR })}
             >
-              {attentionOnly ? 'Требуют внимания' : 'Только активные'}
+              {attentionOnly
+                ? 'Требуют внимания'
+                : activeOnly
+                  ? 'Только активные'
+                  : deadlineStateLabels[deadlineState]}
               <span className="opacity-80">Сбросить</span>
             </Button>
           ) : null}
@@ -394,7 +406,7 @@ export function OrdersScreen() {
             value={responsibleSelectValue}
             onValueChange={(value) => {
               const next = value === user?.id ? 'me' : value
-              patchFilters({ responsible: next, attention: null, active: null })
+              patchFilters({ responsible: next, ...PRESET_FILTER_CLEAR })
             }}
           >
             <SelectTrigger
@@ -416,7 +428,7 @@ export function OrdersScreen() {
 
           <Select
             value={statusCode}
-            onValueChange={(value) => patchFilters({ status: value, attention: null, active: null })}
+            onValueChange={(value) => patchFilters({ status: value, ...PRESET_FILTER_CLEAR })}
           >
             <SelectTrigger
               aria-label="Фильтр по статусу"
@@ -436,7 +448,7 @@ export function OrdersScreen() {
 
           <Select
             value={customerId}
-            onValueChange={(value) => patchFilters({ customer: value, attention: null, active: null })}
+            onValueChange={(value) => patchFilters({ customer: value, ...PRESET_FILTER_CLEAR })}
           >
             <SelectTrigger
               aria-label="Фильтр по клиенту"
@@ -496,7 +508,7 @@ export function OrdersScreen() {
 
           <Select
             value={modelSelectValue}
-            onValueChange={(value) => patchFilters({ model: value, attention: null, active: null })}
+            onValueChange={(value) => patchFilters({ model: value, ...PRESET_FILTER_CLEAR })}
             disabled={brandId !== 'all' && modelOptions.length === 0}
           >
             <SelectTrigger

@@ -156,8 +156,8 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                                 : ''}
                             </span>
                           </div>
-                          {head.actorName ? (
-                            <p className="mt-0.5 text-[11px] text-muted-foreground">{head.actorName}</p>
+                          {eventActorName(head) ? (
+                            <p className="mt-0.5 text-[11px] text-muted-foreground">{eventActorName(head)}</p>
                           ) : null}
                           <JournalAttachmentBatch
                             attachments={batchAttachments}
@@ -194,8 +194,8 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                             {event.summary}
                           </p>
                         )}
-                        {event.actorName ? (
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">{event.actorName}</p>
+                        {eventActorName(event) ? (
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{eventActorName(event)}</p>
                         ) : null}
                         {event.changes.length > 0 ? (
                           <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
@@ -562,6 +562,10 @@ function isTaskJournalEvent(eventType: string) {
     eventType === TaskJournalEvent.Completed ||
     eventType === TaskJournalEvent.Deleted
   )
+}
+
+function eventActorName(event: OrderJournalEvent) {
+  return event.actorName || payloadString(event.payload, 'actor_name') || ''
 }
 
 function payloadString(payload: Json, key: string): string | null {
