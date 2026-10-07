@@ -95,22 +95,22 @@ export function AppSidebar({ groups, collapsed, onNavigate, onToggleCollapsed }:
         <nav
           aria-label="Основная навигация"
           className={cn(
-            'space-y-4 py-3',
-            collapsed ? 'flex w-full flex-col items-center px-1' : 'w-max max-w-full px-2',
+            'w-full space-y-4 py-3',
+            collapsed ? 'flex flex-col items-center px-1' : null,
           )}
         >
           {groups.map((group) => (
-            <div key={group.id} className={cn(collapsed && 'flex w-full flex-col items-center')}>
+            <div key={group.id} className={cn('w-full', collapsed && 'flex flex-col items-center')}>
               {collapsed ? (
                 <span className="sr-only">{group.label}</span>
               ) : (
-                <p className="mb-1 px-2 text-[11px] font-medium tracking-wide whitespace-nowrap text-sidebar-foreground/45 uppercase">
+                <p className="mb-1 px-3 text-[11px] font-medium tracking-wide whitespace-nowrap text-sidebar-foreground/45 uppercase">
                   {group.label}
                 </p>
               )}
-              <ul className={cn('space-y-0.5', collapsed && 'flex w-full flex-col items-center')}>
+              <ul className={cn('w-full space-y-0.5', collapsed && 'flex flex-col items-center')}>
                 {group.items.map((item) => (
-                  <li key={item.to} className={collapsed ? 'flex w-full justify-center' : undefined}>
+                  <li key={item.to} className={collapsed ? 'flex w-full justify-center' : 'w-full'}>
                     <SidebarLink
                       item={item}
                       collapsed={collapsed}
@@ -222,8 +222,10 @@ function SidebarLink({
       onClick={onNavigate}
       aria-current={isActive ? 'page' : undefined}
       className={cn(
-        'flex items-center rounded-md text-sm transition-colors',
-        collapsed ? 'relative size-8 justify-center' : 'gap-2 px-2 py-1.5 whitespace-nowrap',
+        'flex items-center text-sm transition-colors',
+        collapsed
+          ? 'relative size-8 justify-center rounded-md'
+          : 'w-full gap-2 px-3 py-1.5 whitespace-nowrap',
         isActive
           ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
           : 'text-sidebar-foreground hover:bg-sidebar-accent/70',
