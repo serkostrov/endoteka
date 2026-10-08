@@ -148,7 +148,8 @@ export function TasksScreen() {
     for (const [key, value] of Object.entries(patch)) {
       if (!value) {
         next.delete(key)
-      } else if (value === 'all' && key !== 'status') {
+      } else if (value === 'all' && key !== 'status' && key !== 'assignee') {
+        // assignee=all оставляем в URL: дефолт без параметра — «мне», иначе «Все» сразу сбрасывается.
         next.delete(key)
       } else {
         next.set(key, value)
@@ -164,6 +165,7 @@ export function TasksScreen() {
       patchFilters({ assignee: 'me' })
       return
     }
+    // «Все» и «От меня» — полный список; «От меня» дополнительно режется по createdBy.
     patchFilters({ assignee: 'all' })
   }
 

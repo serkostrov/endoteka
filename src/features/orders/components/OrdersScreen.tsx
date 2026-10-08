@@ -11,7 +11,7 @@ import { SegmentedFilter } from '@/components/shared/SegmentedFilter'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth, useHasPermission } from '@/features/auth'
-import { useCustomers } from '@/features/customers/hooks/use-customers'
+import { useCustomerCard, useCustomers } from '@/features/customers/hooks/use-customers'
 import { useReferenceItemsBySetCode } from '@/features/references/hooks/use-references'
 import {
   referenceIdsWithSameName,
@@ -19,6 +19,7 @@ import {
   uniqueReferenceItemsByName,
 } from '@/features/references/services/references-service'
 import { useActiveEmployees } from '@/features/users/hooks/use-users'
+import { CUSTOMER_SEARCH_DEBOUNCE_MS } from '@/lib/constants/customers'
 import {
   deadlineStateLabels,
   isDeadlineState,
@@ -54,7 +55,7 @@ const LIST_SORT_COLUMNS = [
 
 const DEFAULT_LIST_SORT: OrderSortColumn = 'number'
 const DEFAULT_LIST_DIR = 'desc' as const
-const CUSTOMER_FILTER_PAGE_SIZE = 200
+const CUSTOMER_FILTER_PAGE_SIZE = 50
 
 function parsePage(value: string | null) {
   if (!value) {
@@ -106,7 +107,25 @@ export function OrdersScreen() {
 
   const employees = useActiveEmployees()
   const catalogQuery = useOrderStatusCatalog()
-  const customersQuery = useCustomers('', 1, CUSTOMER_FILTER_PAGE_SIZE)
+  const [customerFilterQuery, setCustomerFilterQuery] = useState('')
+  const debouncedCustomerFilter = useDebouncedValue(
+    customerFilterQuery.trim(),
+    CUSTOMER_SEARCH_DEBOUNCE_MS,
+  )
+  const customersQuery = useCustomers(debouncedCustomerFilter, 1, CUSTOMER_FILTER_PAGE_SIZE)
+  const selectedCustomerQuery = useCustomerCard(customerId !== 'all' ? customerId : undefined)
+  const customerOptions = useMemo(() => {
+    const items = customersQuery.data?.items ?? []
+    const selected = selectedCustomerQuery.data?.customer
+    if (!selected || items.some((row) => row.id === selected.id)) {
+      return items
+    }
+    return [selected, ...items]
+  }, [customersQuery.data?.items, selectedCustomerQuery.data?.customer])
+  const customerSearchEmpty =
+    Boolean(debouncedCustomerFilter) &&
+    !customersQuery.isFetching &&
+    (customersQuery.data?.items.length ?? 0) === 0
   const groupsQuery = useReferenceItemsBySetCode(ReferenceSetCode.DeviceGroups)
   const brandsQuery = useReferenceItemsBySetCode(ReferenceSetCode.DeviceBrands)
   const modelsQuery = useReferenceItemsBySetCode(ReferenceSetCode.DeviceModels)
@@ -458,9 +477,15 @@ export function OrdersScreen() {
             >
               <SelectValue placeholder="Клиент" />
             </SelectTrigger>
-            <SelectContent searchable>
+            <SelectContent
+              searchable
+              searchPlaceholder="Имя, телефон или ИНН"
+              filterLocally={false}
+              onSearchChange={setCustomerFilterQuery}
+              searchEmpty={customerSearchEmpty}
+            >
               <SelectItem value="all">Все клиенты</SelectItem>
-              {(customersQuery.data?.items ?? []).map((customer) => (
+              {customerOptions.map((customer) => (
                 <SelectItem key={customer.id} value={customer.id}>
                   {customer.name}
                 </SelectItem>

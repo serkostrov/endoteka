@@ -115,15 +115,25 @@ function SelectContent({
   align = "center",
   searchable = false,
   searchPlaceholder = "Поиск…",
+  /** false — не фильтровать пункты локально (поиск на сервере через onSearchChange). */
+  filterLocally = true,
+  onSearchChange,
+  searchEmpty = false,
   onCloseAutoFocus,
   onKeyDown,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content> & {
   searchable?: boolean
   searchPlaceholder?: string
+  filterLocally?: boolean
+  onSearchChange?: (query: string) => void
+  /** Показать «Ничего не найдено» при серверном поиске. */
+  searchEmpty?: boolean
 }) {
   const [query, setQuery] = React.useState("")
   const inputRef = React.useRef<HTMLInputElement>(null)
+  const onSearchChangeRef = React.useRef(onSearchChange)
+  onSearchChangeRef.current = onSearchChange
 
   React.useEffect(() => {
     if (!searchable) {
@@ -133,12 +143,25 @@ function SelectContent({
     return () => window.cancelAnimationFrame(frame)
   }, [searchable])
 
+  const setSearchQuery = React.useCallback((next: string) => {
+    setQuery(next)
+    onSearchChangeRef.current?.(next)
+  }, [])
+
   const { nodes: displayed, matchCount } = React.useMemo(() => {
     if (!searchable) {
       return { nodes: React.Children.toArray(children), matchCount: -1 }
     }
+    if (!filterLocally) {
+      const nodes = React.Children.toArray(children)
+      return { nodes, matchCount: nodes.length }
+    }
     return filterSelectChildren(children, query)
-  }, [children, query, searchable])
+  }, [children, filterLocally, query, searchable])
+
+  const showEmpty =
+    searchable &&
+    ((filterLocally && matchCount === 0) || (!filterLocally && searchEmpty))
 
   return (
     <SelectPrimitive.Portal>
@@ -162,7 +185,7 @@ function SelectContent({
           onKeyDown?.(event)
         }}
         onCloseAutoFocus={(event) => {
-          setQuery("")
+          setSearchQuery("")
           onCloseAutoFocus?.(event)
         }}
       >
@@ -187,14 +210,14 @@ function SelectContent({
                 autoComplete="off"
                 className="h-8 w-full rounded-md border border-input bg-muted pr-2 pl-7 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 onChange={(event) => {
-                  setQuery(event.target.value)
+                  setSearchQuery(event.target.value)
                   window.requestAnimationFrame(() => inputRef.current?.focus())
                 }}
                 onKeyDown={(event) => {
                   event.stopPropagation()
                   if (event.key === "Escape" && query) {
                     event.preventDefault()
-                    setQuery("")
+                    setSearchQuery("")
                   }
                 }}
                 onClick={(event) => event.stopPropagation()}
@@ -213,7 +236,7 @@ function SelectContent({
           onWheel={searchable ? (event) => event.stopPropagation() : undefined}
           onTouchMove={searchable ? (event) => event.stopPropagation() : undefined}
         >
-          {searchable && matchCount === 0 ? (
+          {showEmpty ? (
             <div className="px-2 py-3 text-center text-sm text-muted-foreground" role="status">
               Ничего не найдено
             </div>
