@@ -124,7 +124,14 @@ export function DatePicker({
           aria-invalid={ariaInvalid}
           aria-describedby={ariaDescribedBy}
           className="pr-9"
-          onChange={(event) => setEditing(maskDateInput(event.target.value))}
+          onChange={(event) => {
+            const next = maskDateInput(event.target.value)
+            setEditing(next)
+            // Пустое значение сразу считаем изменением (очистка срока), не ждём blur.
+            if (!next.trim()) {
+              onChange('')
+            }
+          }}
           onBlur={commitDraft}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {

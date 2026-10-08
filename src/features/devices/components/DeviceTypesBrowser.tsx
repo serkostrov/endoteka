@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
+import { KeepAliveTab } from '@/components/shared/KeepAliveTab'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageTabs } from '@/components/shared/PageTabs'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -878,94 +879,92 @@ function TypeDetailSheetContent({
           items={tabItems}
         />
 
-        {tab === 'card' ? (
-          <>
-            <SectionCard className="gap-4 py-4">
-              <div className="space-y-4">
-                <ReferenceItemPhotos referenceItemId={item.id} canEdit={canUpdate} />
+        <KeepAliveTab active={tab === 'card'}>
+          <SectionCard className="gap-4 py-4">
+            <div className="space-y-4">
+              <ReferenceItemPhotos referenceItemId={item.id} canEdit={canUpdate} />
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor={`type-name-${item.id}`}>Название</Label>
-                    <Input
-                      id={`type-name-${item.id}`}
-                      value={name}
-                      placeholder="Название"
-                      disabled={!canUpdate || save.isPending}
-                      readOnly={!canUpdate}
-                      onChange={(event) => setName(event.target.value)}
-                      onBlur={() => {
-                        if (!canUpdate || name.trim() === item.name.trim()) {
-                          return
-                        }
-                        void persist({ name, description, parentId })
-                      }}
-                    />
-                  </div>
-                  {requiresParent && parentLabel ? (
-                    <div className="space-y-2">
-                      <Label>{parentLabel}</Label>
-                      {canUpdate ? (
-                        <Select
-                          value={parentId}
-                          disabled={save.isPending}
-                          onValueChange={(value) => {
-                            setParentId(value)
-                            void persist({ name, description, parentId: value })
-                          }}
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder={`Выберите ${parentLabel.toLowerCase()}`} />
-                          </SelectTrigger>
-                          <SelectContent searchable>
-                            {parentOptions.map((option) => (
-                              <SelectItem key={option.id} value={option.id}>
-                                {option.name}
-                                {option.isActive ? '' : ' (скрыт)'}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Input
-                          value={parentOptions.find((row) => row.id === parentId)?.name ?? '—'}
-                          readOnly
-                          disabled
-                        />
-                      )}
-                    </div>
-                  ) : null}
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`type-name-${item.id}`}>Название</Label>
+                  <Input
+                    id={`type-name-${item.id}`}
+                    value={name}
+                    placeholder="Название"
+                    disabled={!canUpdate || save.isPending}
+                    readOnly={!canUpdate}
+                    onChange={(event) => setName(event.target.value)}
+                    onBlur={() => {
+                      if (!canUpdate || name.trim() === item.name.trim()) {
+                        return
+                      }
+                      void persist({ name, description, parentId })
+                    }}
+                  />
+                </div>
+                {requiresParent && parentLabel ? (
                   <div className="space-y-2">
-                    <Label htmlFor={`type-code-${item.id}`}>Код</Label>
-                    <Input id={`type-code-${item.id}`} value={item.code} readOnly disabled />
+                    <Label>{parentLabel}</Label>
+                    {canUpdate ? (
+                      <Select
+                        value={parentId}
+                        disabled={save.isPending}
+                        onValueChange={(value) => {
+                          setParentId(value)
+                          void persist({ name, description, parentId: value })
+                        }}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder={`Выберите ${parentLabel.toLowerCase()}`} />
+                        </SelectTrigger>
+                        <SelectContent searchable>
+                          {parentOptions.map((option) => (
+                            <SelectItem key={option.id} value={option.id}>
+                              {option.name}
+                              {option.isActive ? '' : ' (скрыт)'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <Input
+                        value={parentOptions.find((row) => row.id === parentId)?.name ?? '—'}
+                        readOnly
+                        disabled
+                      />
+                    )}
                   </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor={`type-desc-${item.id}`}>Описание</Label>
-                    <Textarea
-                      id={`type-desc-${item.id}`}
-                      value={description}
-                      disabled={!canUpdate || save.isPending}
-                      placeholder="Необязательно"
-                      className="min-h-24 resize-y"
-                      onChange={(event) => setDescription(event.target.value)}
-                      onBlur={() => {
-                        if (!canUpdate || description.trim() === item.description.trim()) {
-                          return
-                        }
-                        void persist({ name, description, parentId })
-                      }}
-                    />
-                  </div>
+                ) : null}
+                <div className="space-y-2">
+                  <Label htmlFor={`type-code-${item.id}`}>Код</Label>
+                  <Input id={`type-code-${item.id}`} value={item.code} readOnly disabled />
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`type-desc-${item.id}`}>Описание</Label>
+                  <Textarea
+                    id={`type-desc-${item.id}`}
+                    value={description}
+                    disabled={!canUpdate || save.isPending}
+                    placeholder="Необязательно"
+                    className="min-h-24 resize-y"
+                    onChange={(event) => setDescription(event.target.value)}
+                    onBlur={() => {
+                      if (!canUpdate || description.trim() === item.description.trim()) {
+                        return
+                      }
+                      void persist({ name, description, parentId })
+                    }}
+                  />
                 </div>
               </div>
-            </SectionCard>
-            <DeviceTypeFieldsSection referenceItemId={item.id} canEdit={canUpdate} />
-          </>
-        ) : null}
+            </div>
+          </SectionCard>
+          <DeviceTypeFieldsSection referenceItemId={item.id} canEdit={canUpdate} />
+        </KeepAliveTab>
 
-        {tab === 'compatible' ? (
+        <KeepAliveTab active={tab === 'compatible'}>
           <DeviceCompatiblePartsPanel referenceItemId={item.id} canUpdate={canUpdate} />
-        ) : null}
+        </KeepAliveTab>
       </div>
     </SheetContent>
   )

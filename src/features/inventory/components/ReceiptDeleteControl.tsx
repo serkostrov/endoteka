@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
+import { InventoryReceiptStatus } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 
@@ -14,6 +15,7 @@ import { useDeleteInventoryReceipt, type InventoryReceiptDeleteMode } from '../h
 type ReceiptDeleteTarget = {
   id: string
   supplier: string
+  status?: string
 }
 
 type ReceiptDeleteControlProps = {
@@ -33,6 +35,7 @@ export function ReceiptDeleteControl({
   const remove = useDeleteInventoryReceipt()
   const [open, setOpen] = useState(false)
   const [pendingMode, setPendingMode] = useState<InventoryReceiptDeleteMode | null>(null)
+  const isDraft = receipt.status === InventoryReceiptStatus.Draft
 
   if (!canReceive) {
     return null
@@ -43,7 +46,13 @@ export function ReceiptDeleteControl({
     try {
       await remove.mutateAsync({ id: receipt.id, mode })
       onDeleted?.()
-      toast.success(mode === 'hide' ? 'Запись прихода скрыта (остаток не изменён)' : 'Приход отменён, товар списан со склада')
+      toast.success(
+        isDraft
+          ? 'Черновик удалён'
+          : mode === 'hide'
+            ? 'Запись прихода скрыта (остаток не изменён)'
+            : 'Приход отменён, товар списан со склада',
+      )
       setOpen(false)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -75,6 +84,8 @@ export function ReceiptDeleteControl({
       </IconActionButton>
     )
 
+  const supplierLabel = receipt.supplier || 'без поставщика'
+
   return (
     <div
       onClick={(event) => event.stopPropagation()}
@@ -82,22 +93,35 @@ export function ReceiptDeleteControl({
       onPointerDown={(event) => event.stopPropagation()}
     >
       {trigger}
-      <ConfirmDialog
-        open={open}
-        title="Отменить приход?"
-        description={`${receipt.supplier}: «Отменить приход» убирает товар со склада (если он ещё не израсходован). «Скрыть запись» только убирает документ из списка, остаток не меняется.`}
-        cancelLabel="Закрыть"
-        confirmLabel="Отменить приход"
-        extraAction={{
-          label: 'Скрыть запись',
-          variant: 'outline',
-          isPending: pendingMode === 'hide',
-          onClick: () => void runDelete('hide'),
-        }}
-        isPending={pendingMode === 'reverse'}
-        onOpenChange={setOpen}
-        onConfirm={() => void runDelete('reverse')}
-      />
+      {isDraft ? (
+        <ConfirmDialog
+          open={open}
+          title="Удалить черновик?"
+          description={`${supplierLabel}: черновик будет удалён без изменений на складе.`}
+          cancelLabel="Отмена"
+          confirmLabel="Удалить"
+          isPending={pendingMode === 'reverse'}
+          onOpenChange={setOpen}
+          onConfirm={() => void runDelete('reverse')}
+        />
+      ) : (
+        <ConfirmDialog
+          open={open}
+          title="Отменить приход?"
+          description={`${supplierLabel}: «Отменить приход» убирает товар со склада (если он ещё не израсходован). «Скрыть запись» только убирает документ из списка, остаток не меняется.`}
+          cancelLabel="Закрыть"
+          confirmLabel="Отменить приход"
+          extraAction={{
+            label: 'Скрыть запись',
+            variant: 'outline',
+            isPending: pendingMode === 'hide',
+            onClick: () => void runDelete('hide'),
+          }}
+          isPending={pendingMode === 'reverse'}
+          onOpenChange={setOpen}
+          onConfirm={() => void runDelete('reverse')}
+        />
+      )}
     </div>
   )
 }

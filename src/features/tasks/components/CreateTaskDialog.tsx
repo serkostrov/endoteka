@@ -77,6 +77,7 @@ function CreateTaskForm({
 }) {
   const user = useCurrentUser()
   const canPickOrder = useHasPermission(Permission.OrdersRead) && !presetOrderId
+  const canManageOthers = useHasPermission(Permission.TasksManageOthers)
   const employees = useActiveEmployees()
   const create = useCreateTask()
   const [title, setTitle] = useState('')
@@ -152,20 +153,28 @@ function CreateTaskForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label>Исполнитель</Label>
-          <Select value={assigneeId} onValueChange={setAssigneeId}>
+          <Select
+            value={assigneeId}
+            onValueChange={setAssigneeId}
+            disabled={!canManageOthers && Boolean(user?.id)}
+          >
             <SelectTrigger className="w-full" aria-label="Исполнитель">
               <SelectValue placeholder="Исполнитель" />
             </SelectTrigger>
             <SelectContent searchable>
-              <SelectItem value={TASK_ASSIGNEE_NONE}>Не назначен</SelectItem>
+              {canManageOthers ? (
+                <SelectItem value={TASK_ASSIGNEE_NONE}>Не назначен</SelectItem>
+              ) : null}
               {user && !(employees.data ?? []).some((employee) => employee.id === user.id) ? (
                 <SelectItem value={user.id}>{user.fullName || user.email}</SelectItem>
               ) : null}
-              {(employees.data ?? []).map((employee) => (
-                <SelectItem key={employee.id} value={employee.id}>
-                  {employee.fullName}
-                </SelectItem>
-              ))}
+              {(employees.data ?? [])
+                .filter((employee) => canManageOthers || employee.id === user?.id)
+                .map((employee) => (
+                  <SelectItem key={employee.id} value={employee.id}>
+                    {employee.fullName}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         </div>

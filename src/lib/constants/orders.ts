@@ -74,7 +74,8 @@ export function getOrderBoardColumnId(statusCode: string): OrderBoardColumnId {
 }
 
 export const ORDER_FILE_MAX_BYTES = 5 * 1024 * 1024 * 1024
-export const ORDER_FILE_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf'
+export const ORDER_FILE_ACCEPT =
+  'image/jpeg,image/png,image/webp,image/jpg,application/pdf,.jpg,.jpeg,.png,.webp,.pdf'
 export const ORDER_FILE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'application/pdf']
 export const ORDER_JOURNAL_NOTE_MAX_LENGTH = 4000
 export const ORDER_JOURNAL_MAX_FILES = 10

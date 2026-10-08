@@ -33,7 +33,7 @@ export function htmlTemplateBody(
 }
 
 export function sanitizeDocumentHtml(html: string) {
-  return DOMPurify.sanitize(html, {
+  return DOMPurify.sanitize(normalizeTableColumnWidths(html), {
     ALLOWED_TAGS: [
       'p',
       'br',
@@ -56,6 +56,10 @@ export function sanitizeDocumentHtml(html: string) {
       'table',
       'thead',
       'tbody',
+      'tfoot',
+      'colgroup',
+      'col',
+      'caption',
       'tr',
       'th',
       'td',
@@ -82,6 +86,7 @@ export function sanitizeDocumentHtml(html: string) {
       'rel',
       'width',
       'height',
+      'span',
       'colspan',
       'rowspan',
       'border',
@@ -104,6 +109,306 @@ export function sanitizeDocumentHtml(html: string) {
     ],
     ALLOW_DATA_ATTR: true,
   })
+}
+
+/**
+ * TinyMCE хранит ширины колонок в <colgroup>/<col> (и иногда только в data-mce-style).
+ * Перед печатью/превью поднимаем их в style, собираем colgroup и переводим абсолютные
+ * ширины в % — иначе px/pt с холста редактора вылезают за поля листа.
+ */
+export function normalizeTableColumnWidths(html: string) {
+  if (typeof DOMParser === 'undefined' || !html.includes('<table')) {
+    return html
+  }
+
+  const parsed = new DOMParser().parseFromString(`<div id="root">${html}</div>`, 'text/html')
+  const root = parsed.getElementById('root')
+  if (!root) {
+    return html
+  }
+
+  for (const el of root.querySelectorAll('col, td, th, table')) {
+    promoteMceStyle(el)
+  }
+
+  for (const table of root.querySelectorAll('table')) {
+    ensureColgroupFromCells(table)
+    convertAbsoluteColumnWidthsToPercent(table)
+    // Если есть colgroup — ширины только там; px на td снова раздувают таблицу в Chrome print.
+    if (table.querySelector(':scope > colgroup, :scope > col')) {
+      for (const cell of table.querySelectorAll('td, th')) {
+        stripWidth(cell)
+      }
+    }
+    clampTableToPageWidth(table)
+  }
+
+  for (const el of root.querySelectorAll('[style], [width], [height]')) {
+    stripPrintOverflowHints(el)
+  }
+
+  return root.innerHTML
+}
+
+function promoteMceStyle(el: Element) {
+  const mce = el.getAttribute('data-mce-style')?.trim()
+  if (!mce) {
+    return
+  }
+  const current = el.getAttribute('style')?.trim() || ''
+  if (!current) {
+    el.setAttribute('style', mce)
+  } else if (!/\bwidth\s*:/i.test(current) && /\bwidth\s*:/i.test(mce)) {
+    el.setAttribute('style', `${current.replace(/;?\s*$/, '')}; ${mce}`)
+  }
+  el.removeAttribute('data-mce-style')
+}
+
+function tableHasExplicitColumnWidths(table: HTMLTableElement) {
+  if ([...table.querySelectorAll(':scope > colgroup col, :scope > col')].some(hasWidthHint)) {
+    return true
+  }
+  const firstRow = table.rows[0]
+  if (!firstRow) {
+    return false
+  }
+  return [...firstRow.cells].some(hasWidthHint)
+}
+
+function hasWidthHint(el: Element) {
+  const style = el.getAttribute('style') || ''
+  if (/\bwidth\s*:/i.test(style)) {
+    return true
+  }
+  const width = el.getAttribute('width')
+  return Boolean(width && width !== '0')
+}
+
+function ensureColgroupFromCells(table: HTMLTableElement) {
+  if (table.querySelector(':scope > colgroup, :scope > col')) {
+    return
+  }
+  const firstRow = table.rows[0]
+  if (!firstRow) {
+    return
+  }
+  const widths = [...firstRow.cells].map((cell) => {
+    const fromStyle = /(?:^|;)\s*width\s*:\s*([^;]+)/i.exec(cell.getAttribute('style') || '')?.[1]?.trim()
+    return fromStyle || cell.getAttribute('width')?.trim() || ''
+  })
+  if (!widths.some(Boolean)) {
+    return
+  }
+
+  const colgroup = table.ownerDocument.createElement('colgroup')
+  for (const width of widths) {
+    const col = table.ownerDocument.createElement('col')
+    if (width) {
+      col.setAttribute('style', `width: ${width}`)
+    }
+    colgroup.appendChild(col)
+  }
+  table.insertBefore(colgroup, table.firstChild)
+}
+
+function readWidthToken(el: Element): string {
+  const fromStyle = /(?:^|;)\s*width\s*:\s*([^;]+)/i.exec(el.getAttribute('style') || '')?.[1]?.trim()
+  if (fromStyle) {
+    return fromStyle
+  }
+  return el.getAttribute('width')?.trim() || ''
+}
+
+function parseWidthToNumber(token: string): { value: number; unit: 'px' | 'pt' | 'mm' | '%' | 'other' } | null {
+  const match = /^([\d.]+)\s*(px|pt|mm|%)?$/i.exec(token.trim())
+  if (!match) {
+    return null
+  }
+  const value = Number.parseFloat(match[1] ?? '')
+  if (!Number.isFinite(value) || value <= 0) {
+    return null
+  }
+  const unit = (match[2]?.toLowerCase() || 'px') as 'px' | 'pt' | 'mm' | '%'
+  return { value, unit }
+}
+
+/** Абсолютные ширины колонок → доли %, чтобы таблица умещалась в ширину листа. */
+function convertAbsoluteColumnWidthsToPercent(table: HTMLTableElement) {
+  const cols = [...table.querySelectorAll(':scope > colgroup col, :scope > col')]
+  const targets: Element[] =
+    cols.length > 0
+      ? cols
+      : table.rows[0]
+        ? [...table.rows[0].cells]
+        : []
+  if (targets.length === 0) {
+    return
+  }
+
+  const parsed = targets.map((el) => parseWidthToNumber(readWidthToken(el)))
+  const hasAbsolute = parsed.some((item) => item && item.unit !== '%')
+  if (!hasAbsolute) {
+    // Уже проценты — нормализуем сумму к 100%, если разъехалась.
+    const percents = parsed.map((item) => (item && item.unit === '%' ? item.value : 0))
+    const sum = percents.reduce((acc, value) => acc + value, 0)
+    if (sum > 100.5 || (sum > 0 && sum < 99.5 && percents.every((value) => value > 0))) {
+      applyPercentWidths(targets, percents)
+    }
+    return
+  }
+
+  const weights = parsed.map((item) => {
+    if (!item) {
+      return 0
+    }
+    if (item.unit === '%') {
+      return item.value
+    }
+    if (item.unit === 'pt') {
+      return item.value * (96 / 72)
+    }
+    if (item.unit === 'mm') {
+      return item.value * (96 / 25.4)
+    }
+    return item.value
+  })
+  if (!weights.some((value) => value > 0)) {
+    return
+  }
+
+  applyPercentWidths(targets, weights)
+
+  // Ширины на ячейках первой строки больше не нужны — источник правды colgroup.
+  if (cols.length > 0 && table.rows[0]) {
+    for (const cell of table.rows[0].cells) {
+      stripWidth(cell)
+    }
+  }
+}
+
+function applyPercentWidths(targets: Element[], weights: number[]) {
+  const total = weights.reduce((acc, value) => acc + value, 0)
+  if (total <= 0) {
+    return
+  }
+  let assigned = 0
+  targets.forEach((el, index) => {
+    const isLast = index === targets.length - 1
+    let pct = isLast
+      ? Math.max(0, Math.round((100 - assigned) * 100) / 100)
+      : Math.round(((weights[index] ?? 0) / total) * 10000) / 100
+    if (!isLast) {
+      assigned += pct
+    }
+    if (pct <= 0 && !isLast) {
+      return
+    }
+    setWidthPercent(el, pct)
+  })
+}
+
+function setWidthPercent(el: Element, pct: number) {
+  const style = (el.getAttribute('style') || '')
+    .replace(/(?:^|;)\s*width\s*:[^;]*/gi, '')
+    .replace(/;;+/g, ';')
+    .replace(/^;|;$/g, '')
+    .trim()
+  const next = style ? `${style}; width: ${pct}%` : `width: ${pct}%`
+  el.setAttribute('style', next)
+  el.removeAttribute('width')
+}
+
+function stripWidth(el: Element) {
+  const style = (el.getAttribute('style') || '')
+    .replace(/(?:^|;)\s*width\s*:[^;]*/gi, '')
+    .replace(/;;+/g, ';')
+    .replace(/^;|;$/g, '')
+    .trim()
+  if (style) {
+    el.setAttribute('style', style)
+  } else {
+    el.removeAttribute('style')
+  }
+  el.removeAttribute('width')
+}
+
+function clampTableToPageWidth(table: HTMLTableElement) {
+  let style = (table.getAttribute('style') || '')
+    .replace(/(?:^|;)\s*width\s*:[^;]*/gi, '')
+    .replace(/(?:^|;)\s*max-width\s*:[^;]*/gi, '')
+    .replace(/(?:^|;)\s*min-width\s*:[^;]*/gi, '')
+    .replace(/(?:^|;)\s*table-layout\s*:[^;]*/gi, '')
+    .replace(/(?:^|;)\s*margin(?:-left|-right)?\s*:[^;]*/gi, '')
+    .replace(/;;+/g, ';')
+    .replace(/^;|;$/g, '')
+    .trim()
+
+  style = [
+    style,
+    'width: 100%',
+    'max-width: 100%',
+    'table-layout: fixed',
+    'box-sizing: border-box',
+    'margin-left: 0',
+    'margin-right: 0',
+  ]
+    .filter(Boolean)
+    .join('; ')
+
+  table.setAttribute('style', style)
+  table.removeAttribute('width')
+}
+
+/** Убирает CSS, из‑за которого Chrome в системном preview обрезает правый край. */
+function stripPrintOverflowHints(el: Element) {
+  if (el instanceof HTMLTableElement || el.tagName === 'COL' || el.tagName === 'COLGROUP') {
+    return
+  }
+
+  let style = el.getAttribute('style') || ''
+  if (!style && !el.hasAttribute('width')) {
+    return
+  }
+
+  style = style
+    .replace(/(?:^|;)\s*min-width\s*:[^;]*/gi, '')
+    .replace(/(?:^|;)\s*white-space\s*:\s*nowrap\s*/gi, '')
+    .replace(/;;+/g, ';')
+    .replace(/^;|;$/g, '')
+    .trim()
+
+  const widthToken = /(?:^|;)\s*width\s*:\s*([^;]+)/i.exec(style)?.[1]?.trim()
+  const parsed = widthToken ? parseWidthToNumber(widthToken) : null
+  if (parsed && parsed.unit !== '%') {
+    const px =
+      parsed.unit === 'pt'
+        ? parsed.value * (96 / 72)
+        : parsed.unit === 'mm'
+          ? parsed.value * (96 / 25.4)
+          : parsed.value
+    // Широкие блоки с холста A4 — в % от листа; мелкие (логотип и т.п.) не трогаем.
+    if (px >= 400 && el.tagName !== 'IMG' && el.tagName !== 'SVG') {
+      style = style
+        .replace(/(?:^|;)\s*width\s*:[^;]*/gi, '')
+        .replace(/;;+/g, ';')
+        .replace(/^;|;$/g, '')
+        .trim()
+      style = style ? `${style}; width: 100%; max-width: 100%` : 'width: 100%; max-width: 100%'
+    }
+  }
+
+  if (style) {
+    el.setAttribute('style', style)
+  } else {
+    el.removeAttribute('style')
+  }
+
+  if (el.tagName !== 'IMG' && el.tagName !== 'SVG') {
+    const widthAttr = el.getAttribute('width')
+    if (widthAttr && Number.parseFloat(widthAttr) >= 400) {
+      el.removeAttribute('width')
+    }
+  }
 }
 
 export async function renderFilledDocumentHtml(html: string, context: DocumentContext) {
@@ -194,7 +499,28 @@ export function prepareDocumentHtml(html: string, context: DocumentContext) {
   }
 
   interpolateNode(root, context.values)
+  // Пустой item.barcode после подстановки → код позиции, иначе остаётся текст «Штрихкод».
+  fillEmptyBarcodeCodes(root, context.values)
   return root.innerHTML
+}
+
+function fillEmptyBarcodeCodes(root: Element, values: Record<string, string>) {
+  const fallback = (
+    values['item.barcode'] ||
+    values['item.code'] ||
+    values['part.code'] ||
+    values['line.code'] ||
+    ''
+  ).trim()
+  if (!fallback) {
+    return
+  }
+  for (const node of root.querySelectorAll('.doc-barcode')) {
+    const code = node.getAttribute('data-code')?.trim() ?? ''
+    if (!code) {
+      node.setAttribute('data-code', fallback)
+    }
+  }
 }
 
 function expandRepeatingTable(table: HTMLTableElement, context: DocumentContext) {

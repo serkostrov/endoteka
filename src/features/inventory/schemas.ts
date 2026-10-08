@@ -17,6 +17,7 @@ export const inventoryItemFormSchema = z.object({
   purchasePrice: moneySchema,
   repairPrice: moneySchema,
   retailPrice: moneySchema,
+  isPermanent: z.boolean(),
 })
 
 export type InventoryItemFormValues = z.infer<typeof inventoryItemFormSchema>
@@ -32,6 +33,7 @@ export const emptyInventoryItemFormValues: InventoryItemFormValues = {
   purchasePrice: 0,
   repairPrice: 0,
   retailPrice: 0,
+  isPermanent: true,
 }
 
 export const receiveFormSchema = z.object({

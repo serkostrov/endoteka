@@ -13,7 +13,11 @@ import { SearchInput } from '@/components/shared/SearchInput'
 import { SelectionBulkBar } from '@/components/shared/SelectionBulkBar'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
-import { CUSTOMER_SEARCH_DEBOUNCE_MS, CustomerKind } from '@/lib/constants/customers'
+import {
+  CUSTOMER_SEARCH_DEBOUNCE_MS,
+  CustomerKind,
+  customerKindLabels,
+} from '@/lib/constants/customers'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
@@ -52,7 +56,14 @@ export function CustomersScreen() {
   const isPeople = tab === 'people'
   const kind = isPeople ? CustomerKind.Individual : CustomerKind.Organization
   const debouncedSearch = useDebouncedValue(search, CUSTOMER_SEARCH_DEBOUNCE_MS)
-  const customersQuery = useCustomers(debouncedSearch, page, pageSize, kind)
+  const hasSearch = debouncedSearch.trim().length > 0
+  // Поиск ищет по всем контактам: вкладка — только фильтр просмотра без запроса.
+  const customersQuery = useCustomers(
+    debouncedSearch,
+    page,
+    pageSize,
+    hasSearch ? undefined : kind,
+  )
   const remove = useDeleteCustomer()
   const customerId = searchParams.get('customer')
   const total = customersQuery.data?.total ?? 0
@@ -127,17 +138,25 @@ export function CustomersScreen() {
   const columns: DataTableColumn<Customer>[] = [
     {
       id: 'name',
-      header: isPeople ? 'ФИО' : 'Название',
-      cell: (row) => (
-        <div className="min-w-0">
-          <div className="font-medium">{row.name}</div>
-          {row.contactName ? <div className="text-xs text-muted-foreground">{row.contactName}</div> : null}
-        </div>
-      ),
+      header: hasSearch ? 'Контакт' : isPeople ? 'ФИО' : 'Название',
+      cell: (row) => {
+        const subtitle = [
+          hasSearch ? customerKindLabels[row.kind] : null,
+          row.contactName || null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+        return (
+          <div className="min-w-0">
+            <div className="font-medium">{row.name}</div>
+            {subtitle ? <div className="text-xs text-muted-foreground">{subtitle}</div> : null}
+          </div>
+        )
+      },
     },
-    ...(isPeople
-      ? []
-      : [{ id: 'inn', header: 'ИНН', cell: (row: Customer) => row.inn || '—' }]),
+    ...(hasSearch || !isPeople
+      ? [{ id: 'inn', header: 'ИНН', cell: (row: Customer) => row.inn || '—' }]
+      : []),
     {
       id: 'phone',
       header: 'Телефон',
@@ -205,12 +224,8 @@ export function CustomersScreen() {
             setSelectedIds([])
           }}
           className="max-w-xl"
-          label={isPeople ? 'Поиск людей' : 'Поиск организаций'}
-          placeholder={
-            isPeople
-              ? 'ФИО, телефон, email, город'
-              : 'Название, ИНН, телефон, email, город'
-          }
+          label="Поиск контактов"
+          placeholder="ФИО, название, ИНН, телефон, email, город"
         />
       </FilterBar>
 
@@ -242,7 +257,13 @@ export function CustomersScreen() {
         error={customersQuery.error ? getErrorMessage(customersQuery.error) : null}
         data={customersQuery.data?.items ?? []}
         getRowId={(row) => row.id}
-        emptyTitle={isPeople ? 'Люди не найдены' : 'Организации не найдены'}
+        emptyTitle={
+          search.trim()
+            ? 'Контакты не найдены'
+            : isPeople
+              ? 'Люди не найдены'
+              : 'Организации не найдены'
+        }
         emptyDescription={
           search.trim()
             ? 'Измените запрос или добавьте контакт.'

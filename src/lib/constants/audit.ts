@@ -72,6 +72,8 @@ export const auditActionLabels: Record<string, string> = {
   'orders.transition_deleted': 'Переход статуса удалён',
   'orders.attachment_deleted': 'Файл заказа удалён',
   'inventory.received': 'Приход на склад',
+  'inventory.receipt_draft_saved': 'Черновик прихода сохранён',
+  'inventory.receipt_draft_deleted': 'Черновик прихода удалён',
   'inventory.receipt_hidden': 'Приход скрыт',
   'inventory.receipt_reversed': 'Приход отменён',
   'inventory.consumed_repair': 'Списание в ремонт',
@@ -152,6 +154,8 @@ export const auditActionFilterGroups: { label: string; actions: string[] }[] = [
     label: 'Склад',
     actions: [
       'inventory.received',
+      'inventory.receipt_draft_saved',
+      'inventory.receipt_draft_deleted',
       'inventory.receipt_hidden',
       'inventory.receipt_reversed',
       'inventory.consumed_repair',

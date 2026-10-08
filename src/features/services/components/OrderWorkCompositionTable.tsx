@@ -38,6 +38,7 @@ import {
   DynamicFieldRenderer,
   DynamicFieldValue,
   DynamicFieldsGrid,
+  buildEntityValuesSchema,
   filledFieldValues,
   groupDynamicFields,
   saveDynamicFieldValues,
@@ -56,7 +57,8 @@ import {
   useUpdateOrderCustomPartLine,
 } from '@/features/inventory/hooks/use-inventory'
 import type { OrderInventoryUsage } from '@/features/inventory/services/inventory-service'
-import { useAutosave } from '@/hooks/use-autosave'
+import { useSheetDirty } from '@/components/ui/sheet'
+import { useRegisterOrderCardSave } from '@/features/orders/lib/order-card-save-context'
 import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
 import { formatMoney, formatQuantity, parseQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
@@ -292,45 +294,77 @@ function WorkCompositionFields({
   const queryClient = useQueryClient()
   const valuesQuery = useDynamicFieldValues(FieldEntity.OrderWork, orderId)
   const [draft, setDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
-  const lastSavedKey = useRef<string | null>(null)
-  const valuesReady = valuesQuery.isSuccess
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
   const values = draft ?? valuesQuery.data ?? {}
   const fieldGroups = useMemo(() => groupDynamicFields(fields), [fields])
+  const dirty = canEdit && draft !== null
 
-  const persist = useCallback(
-    async (next: Record<string, DynamicFieldValueData>) => {
-      if (!valuesQuery.isSuccess) {
-        return
-      }
-      const payload = filledFieldValues(fields, { ...valuesQuery.data, ...next })
-      const key = JSON.stringify(payload)
-      if (key === lastSavedKey.current) {
-        return
-      }
-      try {
-        await saveDynamicFieldValues(FieldEntity.OrderWork, orderId, payload)
-        lastSavedKey.current = key
-        setDraft(null)
-        await queryClient.invalidateQueries({
-          queryKey: queryKeys.fields.values(FieldEntity.OrderWork, orderId),
-        })
-      } catch (error) {
-        toast.error(getErrorMessage(error))
-      }
-    },
-    [fields, orderId, queryClient, valuesQuery.data, valuesQuery.isSuccess],
-  )
+  const valuesKey = queryKeys.fields.values(FieldEntity.OrderWork, orderId)
 
-  useAutosave(canEdit && valuesReady ? draft : null, persist)
-
-  useEffect(() => {
-    if (!valuesQuery.isSuccess) {
+  const persist = useCallback(async () => {
+    if (!draft || !valuesQuery.isSuccess) {
       return
     }
-    lastSavedKey.current = JSON.stringify(filledFieldValues(fields, valuesQuery.data ?? {}))
-  }, [fields, valuesQuery.data, valuesQuery.isSuccess])
+
+    const valuesMerged = { ...(valuesQuery.data ?? {}), ...draft }
+    const filled = filledFieldValues(fields, valuesMerged)
+    const parsed = buildEntityValuesSchema(fields).safeParse(filled)
+    if (!parsed.success) {
+      const nextErrors: Record<string, string> = {}
+      for (const issue of parsed.error.issues) {
+        const code = issue.path[0]
+        if (typeof code === 'string' && !nextErrors[code]) {
+          nextErrors[code] = issue.message
+        }
+      }
+      setFieldErrors(nextErrors)
+      toast.error('Заполните обязательные поля состава работ.')
+      throw new Error('Заполните обязательные поля состава работ.')
+    }
+
+    setFieldErrors({})
+    setSaving(true)
+    try {
+      await saveDynamicFieldValues(FieldEntity.OrderWork, orderId, parsed.data)
+      queryClient.setQueryData(valuesKey, parsed.data)
+      await queryClient.invalidateQueries({ queryKey: valuesKey })
+      setDraft(null)
+      toast.success('Состав работ сохранён')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      throw error
+    } finally {
+      setSaving(false)
+    }
+  }, [draft, fields, orderId, queryClient, valuesKey, valuesQuery.data, valuesQuery.isSuccess])
+
+  useSheetDirty(dirty, dirty ? () => persist() : undefined)
+
+  const saveFromFooter = useCallback(async () => {
+    try {
+      await persist()
+    } catch {
+      // toast already shown
+    }
+  }, [persist])
+
+  useRegisterOrderCardSave('work', {
+    dirty,
+    saving,
+    save: saveFromFooter,
+    enabled: canEdit,
+  })
 
   function setFieldValue(code: string, value: DynamicFieldValueData) {
+    setFieldErrors((current) => {
+      if (!current[code]) {
+        return current
+      }
+      const next = { ...current }
+      delete next[code]
+      return next
+    })
     setDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [code]: value }))
   }
 
@@ -365,6 +399,7 @@ function WorkCompositionFields({
                   key={field.id}
                   field={field}
                   value={values[field.code] ?? emptyFieldValue(field)}
+                  error={fieldErrors[field.code]}
                   onChange={(value) => setFieldValue(field.code, value)}
                 />
               ) : (

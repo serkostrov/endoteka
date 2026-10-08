@@ -1,10 +1,12 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { SectionCard } from '@/components/shared/SectionCard'
+import { useSheetDirty } from '@/components/ui/sheet'
 import { useHasPermission } from '@/features/auth'
+import { useRegisterOrderCardSave } from '@/features/orders/lib/order-card-save-context'
 import {
   DynamicFieldRenderer,
   DynamicFieldValue,
@@ -20,7 +22,6 @@ import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDateTime } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
-import { useAutosave } from '@/hooks/use-autosave'
 import type { DynamicFieldDefinition, DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
 import { useOrderDiagnostics, useSaveOrderDiagnostics } from '../hooks/use-diagnostics'
@@ -38,7 +39,7 @@ export function DiagnosticsWorkspace({ orderId }: DiagnosticsWorkspaceProps) {
   const valuesQuery = useDynamicFieldValues(FieldEntity.Diagnostics, orderId)
   const [extraDraft, setExtraDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const lastSavedKey = useRef<string | null>(null)
+  const [saving, setSaving] = useState(false)
 
   const activeFields = useMemo(
     () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
@@ -46,50 +47,58 @@ export function DiagnosticsWorkspace({ orderId }: DiagnosticsWorkspaceProps) {
   )
   const extraValues = extraDraft ?? valuesQuery.data ?? {}
   const extraGroups = useMemo(() => groupDynamicFields(activeFields), [activeFields])
+  const dirty = canUpdate && extraDraft !== null
 
-  const persistProtocol = useCallback(
-    async (draft: Record<string, DynamicFieldValueData>) => {
-      const values = { ...(valuesQuery.data ?? {}), ...draft }
-      const filled = filledFieldValues(activeFields, values)
-      const key = JSON.stringify(filled)
-      if (key === lastSavedKey.current) {
-        return
-      }
+  const persistProtocol = useCallback(async () => {
+    if (!extraDraft) {
+      return
+    }
 
-      const parsed = buildEntityValuesSchema(activeFields).safeParse(filled)
-      if (!parsed.success) {
-        const nextErrors: Record<string, string> = {}
-        for (const issue of parsed.error.issues) {
-          const code = issue.path[0]
-          if (typeof code === 'string' && !nextErrors[code]) {
-            nextErrors[code] = issue.message
-          }
+    const values = { ...(valuesQuery.data ?? {}), ...extraDraft }
+    const filled = filledFieldValues(activeFields, values)
+    const parsed = buildEntityValuesSchema(activeFields).safeParse(filled)
+    if (!parsed.success) {
+      const nextErrors: Record<string, string> = {}
+      for (const issue of parsed.error.issues) {
+        const code = issue.path[0]
+        if (typeof code === 'string' && !nextErrors[code]) {
+          nextErrors[code] = issue.message
         }
-        setFieldErrors(nextErrors)
-        throw new Error('Заполните обязательные поля диагностики.')
       }
+      setFieldErrors(nextErrors)
+      throw new Error('Заполните обязательные поля диагностики.')
+    }
 
-      setFieldErrors({})
+    setFieldErrors({})
+    setSaving(true)
+    try {
+      await save.mutateAsync({ fieldValues: parsed.data })
+      setExtraDraft(null)
+      toast.success('Диагностика сохранена')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      throw error
+    } finally {
+      setSaving(false)
+    }
+  }, [activeFields, extraDraft, save, valuesQuery.data])
 
-      try {
-        await save.mutateAsync({ fieldValues: parsed.data })
-        lastSavedKey.current = key
-        setExtraDraft((current) => {
-          if (!current) {
-            return null
-          }
-          const next = filledFieldValues(activeFields, { ...(valuesQuery.data ?? {}), ...current })
-          return JSON.stringify(next) === key ? null : current
-        })
-      } catch (error) {
-        toast.error(getErrorMessage(error))
-        throw error
-      }
-    },
-    [activeFields, save, valuesQuery.data],
-  )
+  useSheetDirty(dirty, dirty ? () => persistProtocol() : undefined)
 
-  useAutosave(canUpdate ? extraDraft : null, persistProtocol)
+  const saveFromFooter = useCallback(async () => {
+    try {
+      await persistProtocol()
+    } catch {
+      // toast already shown
+    }
+  }, [persistProtocol])
+
+  useRegisterOrderCardSave('diagnostics', {
+    dirty,
+    saving,
+    save: saveFromFooter,
+    enabled: canUpdate,
+  })
 
   if (!canRead && !canUpdate) {
     return <ErrorState description="Недостаточно прав для просмотра диагностики." />
@@ -133,6 +142,7 @@ export function DiagnosticsWorkspace({ orderId }: DiagnosticsWorkspaceProps) {
           }}
         />
       ))}
+
     </div>
   )
 }

@@ -5,8 +5,9 @@ import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { useHasPermission } from '@/features/auth'
+import { useCurrentUser, useHasPermission } from '@/features/auth'
 import { Permission } from '@/lib/constants/permissions'
+import { canMutateTaskAccess } from '../lib/task-access'
 import { taskPriorityLabels, taskPriorityTone } from '@/lib/constants/tasks'
 import { sheets } from '@/lib/constants/routes'
 import { cn } from '@/lib/utils'
@@ -24,7 +25,15 @@ type TaskListCardProps = {
 
 export function TaskListCard({ task, onOpen, selected, onSelectedChange }: TaskListCardProps) {
   const navigate = useNavigate()
+  const user = useCurrentUser()
   const canUpdate = useHasPermission(Permission.TasksUpdate)
+  const canManageOthers = useHasPermission(Permission.TasksManageOthers)
+  const canMutate = canMutateTaskAccess({
+    assigneeId: task.assigneeId,
+    currentUserId: user?.id,
+    canUpdate,
+    canManageOthers,
+  })
   const due = taskDueHint(task.dueDate, task.completed)
   const to = sheets.task(task.id)
   const selectable = Boolean(onSelectedChange)
@@ -127,7 +136,7 @@ export function TaskListCard({ task, onOpen, selected, onSelectedChange }: TaskL
       </div>
 
       <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
-        {canUpdate ? (
+        {canMutate ? (
           <div
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
@@ -138,7 +147,7 @@ export function TaskListCard({ task, onOpen, selected, onSelectedChange }: TaskL
             </IconActionButton>
           </div>
         ) : null}
-        <TaskDeleteControl task={task} />
+        {canMutate ? <TaskDeleteControl task={task} /> : null}
       </div>
     </article>
   )

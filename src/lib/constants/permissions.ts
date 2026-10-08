@@ -19,6 +19,7 @@ export const Permission = {
   TasksCreate: 'tasks:create',
   TasksUpdate: 'tasks:update',
   TasksDelete: 'tasks:delete',
+  TasksManageOthers: 'tasks:manage_others',
   DiagnosticsRead: 'diagnostics:read',
   DiagnosticsUpdate: 'diagnostics:update',
   InventoryRead: 'inventory:read',

@@ -62,7 +62,7 @@ export const permissionModules: PermissionModule[] = [
       edit: Permission.TasksUpdate,
       delete: Permission.TasksDelete,
     },
-    extras: [],
+    extras: [{ code: Permission.TasksManageOthers, label: 'Чужие и общие' }],
   },
   {
     resource: 'diagnostics',

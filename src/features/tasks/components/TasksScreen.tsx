@@ -58,7 +58,8 @@ export function TasksScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const [search, setSearch] = useState('')
-  const assigneeParam = searchParams.get('assignee') ?? 'all'
+  const canManageOthers = useHasPermission(Permission.TasksManageOthers)
+  const assigneeParam = searchParams.get('assignee') ?? 'me'
   const status = paramIn(searchParams.get('status'), Object.values(TaskStatusFilter), TaskStatusFilter.Open)
   const [priority, setPriority] = useState('all')
   const due = paramIn(searchParams.get('due'), Object.values(TaskDueFilter), TaskDueFilter.All)
@@ -89,7 +90,13 @@ export function TasksScreen() {
     setSelectedIds([])
   }
   const assigneeSelectValue = assigneeParam === 'me' ? (user?.id ?? 'me') : assigneeParam
-  const assignmentChip: AssignmentChip = fromMe ? 'from_me' : assigneeParam === 'me' ? 'to_me' : assigneeParam === 'all' ? 'all' : 'all'
+  const assignmentChip: AssignmentChip = fromMe
+    ? 'from_me'
+    : assigneeParam === 'me'
+      ? 'to_me'
+      : canManageOthers && assigneeParam === 'all'
+        ? 'all'
+        : 'to_me'
   const tasksQuery = useTasks(
     {
       search: debouncedSearch,
@@ -153,7 +160,7 @@ export function TasksScreen() {
 
   function setAssignment(chip: AssignmentChip) {
     setFromMe(chip === 'from_me')
-    if (chip === 'to_me') {
+    if (chip === 'to_me' || (chip === 'all' && !canManageOthers)) {
       patchFilters({ assignee: 'me' })
       return
     }
@@ -207,9 +214,9 @@ export function TasksScreen() {
         <SegmentedFilter
           aria-label="Назначение"
           value={assignmentChip}
-          inactiveValues={['all']}
+          inactiveValues={canManageOthers ? ['all'] : ['to_me']}
           options={[
-            { value: 'all', label: 'Все' },
+            ...(canManageOthers ? [{ value: 'all' as const, label: 'Все' }] : []),
             { value: 'to_me', label: 'Мне' },
             { value: 'from_me', label: 'От меня' },
           ]}
@@ -229,30 +236,32 @@ export function TasksScreen() {
               '[&_input]:border-primary [&_input]:bg-primary [&_input]:text-primary-foreground [&_input]:placeholder:text-primary-foreground/70 [&_svg]:text-primary-foreground',
           )}
         />
-        <Select
-          value={assigneeSelectValue}
-          onValueChange={(value) => {
-            setFromMe(false)
-            const next = value === user?.id ? 'me' : value
-            patchFilters({ assignee: next })
-          }}
-        >
-          <SelectTrigger
-            aria-label="Исполнитель"
-            className={activeFilterControlClass(assigneeParam !== 'all', 'w-auto min-w-0 flex-1')}
+        {canManageOthers ? (
+          <Select
+            value={assigneeSelectValue}
+            onValueChange={(value) => {
+              setFromMe(false)
+              const next = value === user?.id ? 'me' : value
+              patchFilters({ assignee: next })
+            }}
           >
-            <SelectValue placeholder="Исполнитель" />
-          </SelectTrigger>
-          <SelectContent searchable>
-            <SelectItem value="all">Все исполнители</SelectItem>
-            <SelectItem value="unassigned">Без исполнителя</SelectItem>
-            {(employees.data ?? []).map((employee) => (
-              <SelectItem key={employee.id} value={employee.id}>
-                {employee.fullName}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+            <SelectTrigger
+              aria-label="Исполнитель"
+              className={activeFilterControlClass(assigneeParam !== 'me', 'w-auto min-w-0 flex-1')}
+            >
+              <SelectValue placeholder="Исполнитель" />
+            </SelectTrigger>
+            <SelectContent searchable>
+              <SelectItem value="all">Все исполнители</SelectItem>
+              <SelectItem value="unassigned">Без исполнителя</SelectItem>
+              {(employees.data ?? []).map((employee) => (
+                <SelectItem key={employee.id} value={employee.id}>
+                  {employee.fullName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
         <Select
           value={priority}
           onValueChange={(value) => {

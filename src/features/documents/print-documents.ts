@@ -20,71 +20,89 @@ export type PrintableDocument = {
 const MAX_PDF_PAGES = 40
 
 function buildPrintStyles(pageSize: 'a4' | 'label', margins: PageMarginsMm) {
-  // Поля через @page — браузер сам резервирует область листа.
-  // body { padding } при @page { margin: 0 } часто обрезает верх (Chrome/Safari).
+  // Поля листа — только через @page (padding у body в Safari/Chrome часто обрезает верх).
+  // Горизонтальный overflow в Safari лечим явной шириной контента в mm, не убирая @page margin.
+  const pageW = pageSize === 'label' ? 58 : 210
+  const pageH = pageSize === 'label' ? 40 : 297
+  const contentW = Math.max(8, pageW - margins.left - margins.right)
   const pageMargin = `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`
-
-  if (pageSize === 'label') {
-    return `
-      @page {
-        size: 58mm 40mm;
-        margin: ${pageMargin};
-      }
-      html, body {
-        margin: 0;
-        padding: 0;
-        background: white;
-        color: #000;
-        -webkit-print-color-adjust: exact;
-        print-color-adjust: exact;
-      }
-      .document-html-body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-      }
-      a[href]::after { content: none !important; }
-      ${DOCUMENT_HTML_BODY_STYLE}
-    `
-  }
 
   return `
     @page {
-      size: A4;
+      size: ${pageW}mm ${pageH}mm;
       margin: ${pageMargin};
     }
-    html, body {
+    html {
       margin: 0;
       padding: 0;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      width: ${contentW}mm;
+      max-width: 100%;
+      box-sizing: border-box;
       background: white;
       color: #000;
+      overflow-x: hidden;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+    .document-document,
     .document-html-body {
       margin: 0;
       padding: 0;
       width: 100%;
+      max-width: ${contentW}mm;
+      box-sizing: border-box;
+      overflow-x: hidden;
     }
     .document-html-body table {
+      width: 100% !important;
+      max-width: 100% !important;
+      table-layout: fixed !important;
+      border-collapse: collapse !important;
+      margin-left: 0 !important;
+      margin-right: 0 !important;
+      box-sizing: border-box !important;
       break-inside: auto;
       page-break-inside: auto;
+    }
+    .document-html-body td,
+    .document-html-body th {
+      overflow: hidden !important;
+      word-break: break-word !important;
+      overflow-wrap: break-word !important;
+      -webkit-hyphens: auto;
+      hyphens: auto;
+      white-space: normal !important;
+      box-sizing: border-box !important;
+    }
+    .document-html-body img {
+      max-width: 100% !important;
+      height: auto !important;
+    }
+    .document-html-body svg:not(.doc-barcode-svg) {
+      max-width: 100% !important;
+      height: auto !important;
+    }
+    .document-html-body .doc-barcode-svg,
+    .document-html-body svg.doc-barcode-svg {
+      display: inline-block !important;
+      height: 3rem !important;
+      max-width: 100% !important;
+      width: auto !important;
+      vertical-align: middle;
     }
     .document-html-body tr {
       break-inside: auto;
       page-break-inside: auto;
     }
-    .document-html-body img {
-      max-width: 100%;
-      height: auto;
-    }
     .document-document + .document-document {
       break-before: page;
       page-break-before: always;
     }
-    a[href]::after {
-      content: none !important;
-    }
+    a[href]::after { content: none !important; }
     ${DOCUMENT_HTML_BODY_STYLE}
   `
 }
@@ -121,6 +139,8 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
   const primary = documents[0]!
   const margins = templatePageMargins(primary.body, primary.pageSize)
   const styles = buildPrintStyles(primary.pageSize, margins)
+  const pageWmm = primary.pageSize === 'label' ? 58 : 210
+  const contentWmm = Math.max(8, pageWmm - margins.left - margins.right)
 
   const bodies = await Promise.all(
     documents.map(async (document) => {
@@ -134,6 +154,7 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
 <html lang="ru">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=${pageWmm}mm, initial-scale=1">
   <title>&nbsp;</title>
   <style>${styles}</style>
 </head>
@@ -142,6 +163,7 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
   <script>
     (function () {
       var printed = false;
+      var contentWmm = ${contentWmm};
       function whenImagesReady(done) {
         var imgs = Array.prototype.slice.call(document.images || []);
         var pending = imgs.filter(function (img) { return !img.complete; });
@@ -157,6 +179,28 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
         });
         setTimeout(done, 4000);
       }
+      /**
+       * Safari: ширина popup ≠ ширина A4, поэтому меряем относительно
+       * известной ширины контента листа (mm → CSS px), а не clientWidth окна.
+       */
+      function fitOverflow() {
+        var available = contentWmm * 96 / 25.4;
+        var roots = Array.prototype.slice.call(document.querySelectorAll('.document-html-body'));
+        roots.forEach(function (root) {
+          if (!(root instanceof HTMLElement)) return;
+          root.style.transform = '';
+          root.style.width = '100%';
+          root.style.maxWidth = contentWmm + 'mm';
+          var needed = Math.max(root.scrollWidth, root.offsetWidth);
+          if (!available || !needed || needed <= available + 2) return;
+          var scale = available / needed;
+          if (scale >= 0.995) return;
+          if (scale < 0.85) scale = 0.85;
+          root.style.transformOrigin = 'top left';
+          root.style.transform = 'scale(' + scale + ')';
+          root.style.width = (100 / scale) + '%';
+        });
+      }
       function triggerPrint() {
         if (printed) return;
         printed = true;
@@ -165,7 +209,8 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
       }
       function start() {
         whenImagesReady(function () {
-          setTimeout(triggerPrint, 150);
+          fitOverflow();
+          setTimeout(triggerPrint, 200);
         });
       }
       if (document.readyState === 'complete') start();

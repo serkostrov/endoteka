@@ -29,6 +29,30 @@ export const inventoryMovementTypeLabels: Record<InventoryMovementType, string> 
   write_off: 'Списание',
 }
 
+export const InventoryReceiptStatus = {
+  Draft: 'draft',
+  Posted: 'posted',
+} as const
+
+export type InventoryReceiptStatus =
+  (typeof InventoryReceiptStatus)[keyof typeof InventoryReceiptStatus]
+
+export const inventoryReceiptStatusLabels: Record<InventoryReceiptStatus, string> = {
+  draft: 'Черновик',
+  posted: 'Проведён',
+}
+
+export function isInventoryReceiptStatus(value: string): value is InventoryReceiptStatus {
+  return value === InventoryReceiptStatus.Draft || value === InventoryReceiptStatus.Posted
+}
+
+export function inventoryReceiptStatusTone(status: InventoryReceiptStatus) {
+  if (status === InventoryReceiptStatus.Draft) {
+    return 'neutral' as const
+  }
+  return 'success' as const
+}
+
 export function isInventoryMovementType(value: string): value is InventoryMovementType {
   return value in inventoryMovementTypeLabels
 }

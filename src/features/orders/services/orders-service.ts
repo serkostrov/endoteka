@@ -534,24 +534,49 @@ export async function addOrderAttachmentUrl(orderId: string, url: string, captio
   }
 }
 
+function resolveOrderUploadMime(file: File): string {
+  const type = file.type.trim().toLowerCase()
+  if (ORDER_FILE_MIME_TYPES.includes(type)) {
+    return type === 'image/jpg' ? 'image/jpeg' : type
+  }
+
+  const name = file.name.trim().toLowerCase()
+  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) {
+    return 'image/jpeg'
+  }
+  if (name.endsWith('.png')) {
+    return 'image/png'
+  }
+  if (name.endsWith('.webp')) {
+    return 'image/webp'
+  }
+  if (name.endsWith('.pdf')) {
+    return 'application/pdf'
+  }
+
+  throw toAppError(
+    { message: 'Можно загрузить только фото или PDF.' },
+    'Можно загрузить только фото или PDF.',
+  )
+}
+
 export function validateOrderUploadFile(file: File): void {
   if (file.size > ORDER_FILE_MAX_BYTES) {
     throw toAppError({ message: 'Файл больше 5 ГБ.' }, 'Файл больше 5 ГБ.')
   }
 
-  if (!ORDER_FILE_MIME_TYPES.includes(file.type)) {
-    throw toAppError({ message: 'Можно загрузить только фото или PDF.' }, 'Можно загрузить только фото или PDF.')
-  }
+  resolveOrderUploadMime(file)
 }
 
 export async function uploadOrderFile(orderId: string, file: File, caption: string): Promise<void> {
   validateOrderUploadFile(file)
+  const mimeType = resolveOrderUploadMime(file)
 
   const extension = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.')) : ''
   const path = `${orderId}/${crypto.randomUUID()}${extension}`
   const supabase = getSupabase()
   const { error: uploadError } = await supabase.storage.from(ORDER_ATTACHMENTS_BUCKET).upload(path, file, {
-    contentType: file.type,
+    contentType: mimeType,
     upsert: false,
   })
 
@@ -563,7 +588,7 @@ export async function uploadOrderFile(orderId: string, file: File, caption: stri
     target_order_id: orderId,
     file_path: path,
     file_name: file.name,
-    mime_type: file.type,
+    mime_type: mimeType,
     file_size: file.size,
     caption,
   })

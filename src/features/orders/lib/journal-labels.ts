@@ -27,6 +27,9 @@ export function orderJournalEventTypeLabel(eventType: string) {
   if (eventType === 'device_changed') {
     return 'Прибор'
   }
+  if (eventType === 'order_updated') {
+    return 'Изменения'
+  }
   if (eventType === OrderJournalEventType.Comment) {
     return 'Комментарий'
   }

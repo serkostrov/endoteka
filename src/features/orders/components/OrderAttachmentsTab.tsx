@@ -1,5 +1,5 @@
 import { ExternalLink, FileText, Paperclip, Trash2 } from 'lucide-react'
-import { type ChangeEvent, useRef, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
@@ -22,6 +22,7 @@ import { useHasPermission } from '@/features/auth'
 import { ORDER_FILE_ACCEPT } from '@/lib/constants/orders'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { pickImageFiles } from '@/lib/pick-image-files'
 import { formatDateTime } from '@/lib/utils/date'
 import { formatFileSize } from '@/lib/utils/file'
 
@@ -40,7 +41,6 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
   const attachmentsQuery = useOrderAttachments(orderId)
   const upload = useUploadOrderFile(orderId)
   const remove = useDeleteOrderAttachment(orderId)
-  const fileInput = useRef<HTMLInputElement>(null)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<OrderAttachment | null>(null)
 
@@ -61,27 +61,22 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
     title: item.fileName || item.caption || 'Фото',
   }))
 
-  async function uploadFiles(files: FileList | File[]) {
-    const list = Array.from(files)
-    if (list.length === 0) {
+  async function handleAttach() {
+    if (upload.isPending) {
+      return
+    }
+    const files = await pickImageFiles({ accept: ORDER_FILE_ACCEPT, multiple: true })
+    if (files.length === 0) {
       return
     }
 
     try {
-      for (const file of list) {
+      for (const file of files) {
         await upload.mutateAsync({ file, caption: '' })
       }
-      toast.success(list.length === 1 ? 'Файл добавлен' : `Добавлено файлов: ${list.length}`)
+      toast.success(files.length === 1 ? 'Файл добавлен' : `Добавлено файлов: ${files.length}`)
     } catch (error) {
       toast.error(getErrorMessage(error))
-    }
-  }
-
-  async function onFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const files = event.target.files
-    event.target.value = ''
-    if (files) {
-      await uploadFiles(files)
     }
   }
 
@@ -124,24 +119,10 @@ export function OrderAttachmentsTab({ orderId }: OrderAttachmentsTabProps) {
         flat
         actions={
           canAddFiles ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={fileInput}
-                type="file"
-                multiple
-                accept={ORDER_FILE_ACCEPT}
-                className="sr-only"
-                onChange={(event) => void onFileChange(event)}
-              />
-              <Button
-                type="button"
-                disabled={upload.isPending}
-                onClick={() => fileInput.current?.click()}
-              >
-                <Paperclip className="size-4" />
-                {upload.isPending ? 'Загрузка…' : 'Прикрепить файл'}
-              </Button>
-            </div>
+            <Button type="button" disabled={upload.isPending} onClick={() => void handleAttach()}>
+              <Paperclip className="size-4" />
+              {upload.isPending ? 'Загрузка…' : 'Прикрепить файл'}
+            </Button>
           ) : null
         }
       >

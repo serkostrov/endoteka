@@ -77,7 +77,11 @@ export function isDocumentPageSize(value: string): value is DocumentPageSize {
 }
 
 export function sourceTypeForTemplate(kind: DocumentKind, code = '') {
-  if (code === 'label_part') {
+  if (kind === DocumentKind.Label) {
+    // Этикетка заказа — из заказа; остальные этикетки (в т.ч. «Этикетка запчасти») — из номенклатуры.
+    if (code === 'label_order') {
+      return DocumentSourceType.Order
+    }
     return DocumentSourceType.Item
   }
   if (kind === DocumentKind.Waybill) {

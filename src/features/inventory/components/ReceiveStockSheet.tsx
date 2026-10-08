@@ -6,7 +6,9 @@ import { Trash2 } from 'lucide-react'
 
 import { DatePicker } from '@/components/shared/DatePicker'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
+import { LoadingState } from '@/components/shared/LoadingState'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -20,7 +22,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  runSheetFormSave,
 } from '@/components/ui/sheet'
 import {
   Table,
@@ -41,7 +42,11 @@ import { CreateItemDialog } from './CreateItemDialog'
 import { InventoryItemCoverThumb } from './InventoryItemCoverThumb'
 import { InventoryItemSheet } from './InventoryItemScreen'
 import { ItemSearchField } from './ItemSearchField'
-import { useReceiveInventory } from '../hooks/use-inventory'
+import {
+  useInventoryReceipt,
+  useReceiveInventory,
+  useSaveInventoryReceiptDraft,
+} from '../hooks/use-inventory'
 import { receiveFormSchema, type ReceiveFormValues } from '../schemas'
 import type { InventoryItem } from '../services/inventory-service'
 
@@ -61,19 +66,31 @@ type ReceiveStockSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   presetSupplier?: ReceiptSupplierPreset
+  /** Редактирование существующего черновика. */
+  draftId?: string | null
 }
 
 const cellPad = 'px-2 py-1.5'
 const spinless =
   '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
-export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: ReceiveStockSheetProps) {
+export function ReceiveStockSheet({
+  open,
+  onOpenChange,
+  presetSupplier,
+  draftId = null,
+}: ReceiveStockSheetProps) {
   const receive = useReceiveInventory()
+  const saveDraft = useSaveInventoryReceiptDraft()
+  const draftQuery = useInventoryReceipt(draftId ?? undefined)
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId)
   const [lines, setLines] = useState<DraftLine[]>([])
   const [supplierId, setSupplierId] = useState(presetSupplier?.id ?? '')
   const [createItemOpen, setCreateItemOpen] = useState(false)
   const [createQuery, setCreateQuery] = useState('')
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
+  const [hydratedDraftId, setHydratedDraftId] = useState<string | null>(null)
+  const [linesTouched, setLinesTouched] = useState(false)
   const form = useForm<ReceiveFormValues>({
     resolver: zodResolver(receiveFormSchema),
     defaultValues: {
@@ -84,12 +101,26 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
   })
   const documentTotal = lines.reduce((sum, line) => sum + line.quantity * line.purchasePrice, 0)
   const lockedSupplier = Boolean(presetSupplier)
+  const pending = receive.isPending || saveDraft.isPending
+  const isEditingDraft = Boolean(activeDraftId)
+  const dirty = form.formState.isDirty || linesTouched
+  const draftLoading = Boolean(draftId) && draftQuery.isLoading && hydratedDraftId !== draftId
+  const draftError = Boolean(draftId) && draftQuery.error && hydratedDraftId !== draftId
 
   useEffect(() => {
     if (!open) {
+      setHydratedDraftId(null)
+      setActiveDraftId(draftId)
+      setLinesTouched(false)
+      return
+    }
+    setActiveDraftId(draftId)
+    if (draftId) {
       return
     }
     setLines([])
+    setHydratedDraftId(null)
+    setLinesTouched(false)
     if (presetSupplier) {
       setSupplierId(presetSupplier.id)
       form.reset({
@@ -105,7 +136,41 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
       receiptDate: toIsoDate(new Date()),
       notes: '',
     })
-  }, [open, form, presetSupplier?.id, presetSupplier?.name])
+  }, [open, form, presetSupplier?.id, presetSupplier?.name, draftId])
+
+  useEffect(() => {
+    if (!open || !draftId || !draftQuery.data || draftQuery.data.status !== 'draft') {
+      return
+    }
+    if (hydratedDraftId === draftId) {
+      return
+    }
+    const receipt = draftQuery.data
+    setActiveDraftId(receipt.id)
+    setSupplierId(receipt.supplierId ?? '')
+    form.reset({
+      supplier: receipt.supplier,
+      receiptDate: receipt.receiptDate || toIsoDate(new Date()),
+      notes: receipt.notes,
+    })
+    setLines(
+      receipt.lines.flatMap((line) => {
+        if (!line.item) {
+          return []
+        }
+        return [
+          {
+            key: `${line.item.id}-${line.unitPrice}-${line.id}`,
+            item: line.item,
+            quantity: line.quantity,
+            purchasePrice: line.unitPrice,
+          },
+        ]
+      }),
+    )
+    setLinesTouched(false)
+    setHydratedDraftId(draftId)
+  }, [open, draftId, draftQuery.data, form, hydratedDraftId])
 
   function addLine(item: InventoryItem, quantity = 1, purchasePrice = item.purchasePrice) {
     if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -116,6 +181,7 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
       toast.error('Цена не может быть отрицательной')
       return
     }
+    setLinesTouched(true)
     setLines((current) => {
       const existing = current.find((line) => line.item.id === item.id && line.purchasePrice === purchasePrice)
       if (existing) {
@@ -132,7 +198,16 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
   }
 
   function updateLine(key: string, patch: Partial<Pick<DraftLine, 'quantity' | 'purchasePrice'>>) {
+    setLinesTouched(true)
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...patch } : line)))
+  }
+
+  function linePayload() {
+    return lines.map((line) => ({
+      itemId: line.item.id,
+      quantity: line.quantity,
+      purchasePrice: line.purchasePrice,
+    }))
   }
 
   async function persist(values: ReceiveFormValues) {
@@ -147,13 +222,26 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
       supplierId: supplierId || null,
       receiptDate: values.receiptDate,
       notes: values.notes,
-      lines: lines.map((line) => ({
-        itemId: line.item.id,
-        quantity: line.quantity,
-        purchasePrice: line.purchasePrice,
-      })),
+      lines: linePayload(),
+      draftId: activeDraftId,
     })
     toast.success('Приход проведён, товар добавлен на склад')
+  }
+
+  async function persistDraft(values: ReceiveFormValues) {
+    if (lines.some((line) => line.quantity <= 0 || line.purchasePrice < 0)) {
+      throw new Error('Проверьте количество и цену в строках')
+    }
+    const id = await saveDraft.mutateAsync({
+      draftId: activeDraftId,
+      supplier: values.supplier,
+      supplierId: supplierId || null,
+      receiptDate: values.receiptDate || toIsoDate(new Date()),
+      notes: values.notes,
+      lines: linePayload(),
+    })
+    setActiveDraftId(id)
+    toast.success('Черновик сохранён')
   }
 
   async function onSubmit(values: ReceiveFormValues) {
@@ -165,12 +253,28 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
     }
   }
 
+  async function onSaveDraft() {
+    const values = form.getValues()
+    if (!values.receiptDate) {
+      form.setError('receiptDate', { message: 'Укажите дату' })
+      return
+    }
+    try {
+      await persistDraft(values)
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   return (
     <>
       <Sheet
         open={open}
-        dirty={form.formState.isDirty || lines.length > 0}
-        onSave={() => runSheetFormSave(form.handleSubmit, persist)}
+        dirty={dirty}
+        onSave={async () => {
+          await persistDraft(form.getValues())
+        }}
         onOpenChange={onOpenChange}
       >
         <SheetContent
@@ -178,11 +282,18 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
           className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,56rem)]"
         >
           <SheetHeader className="shrink-0 border-b px-4 py-3 pr-14">
-            <SheetTitle>Новый приход</SheetTitle>
+            <SheetTitle>{isEditingDraft ? 'Черновик прихода' : 'Новый приход'}</SheetTitle>
             <SheetDescription>
-              Документ и строки. Проведение создаёт партии и журнал одной транзакцией.
+              {isEditingDraft
+                ? 'Можно продолжить заполнение или провести документ.'
+                : 'Документ и строки. Проведение создаёт партии и журнал одной транзакцией.'}
             </SheetDescription>
           </SheetHeader>
+          {draftLoading ? (
+            <LoadingState label="Загрузка черновика" className="min-h-40 flex-1" />
+          ) : draftError ? (
+            <ErrorState description={getErrorMessage(draftQuery.error)} className="flex-1" />
+          ) : (
           <Form {...form}>
             <form
               className="flex min-h-0 flex-1 flex-col"
@@ -349,9 +460,10 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                                 key={line.key}
                                 line={line}
                                 onChange={(patch) => updateLine(line.key, patch)}
-                                onRemove={() =>
+                                onRemove={() => {
+                                  setLinesTouched(true)
                                   setLines((current) => current.filter((item) => item.key !== line.key))
-                                }
+                                }}
                                 onOpenItem={setOpenedItemId}
                               />
                             ))}
@@ -374,19 +486,29 @@ export function ReceiveStockSheet({ open, onOpenChange, presetSupplier }: Receiv
                     <span className="text-muted-foreground">Добавьте товары для проведения</span>
                   )}
                 </p>
-                <div className="flex w-full gap-2 sm:w-auto">
+                <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                   <SheetClose asChild>
-                    <Button type="button" variant="outline" className="flex-1 sm:flex-none">
+                    <Button type="button" variant="outline" className="flex-1 sm:flex-none" disabled={pending}>
                       Отмена
                     </Button>
                   </SheetClose>
-                  <Button type="submit" disabled={receive.isPending || lines.length === 0} className="flex-1 sm:flex-none">
-                    {receive.isPending ? 'Проведение…' : 'Провести приход'}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 sm:flex-none"
+                    disabled={pending}
+                    onClick={() => void onSaveDraft()}
+                  >
+                    {saveDraft.isPending ? 'Сохранение…' : 'Сохранить как черновик'}
+                  </Button>
+                  <Button type="submit" disabled={pending || lines.length === 0} className="flex-1 sm:flex-none">
+                    {receive.isPending ? 'Проведение…' : 'Оприходовать'}
                   </Button>
                 </div>
               </SheetFooter>
             </form>
           </Form>
+          )}
         </SheetContent>
       </Sheet>
       <InventoryItemSheet

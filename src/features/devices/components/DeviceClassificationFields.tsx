@@ -232,7 +232,7 @@ export function DeviceClassificationFields({
       <div
         className={cn(
           header
-            ? 'flex flex-wrap items-baseline gap-2'
+            ? 'flex flex-wrap items-baseline gap-x-1.5 gap-y-1'
             : parts === 'modification'
               ? 'min-w-0'
               : 'grid gap-3 sm:grid-cols-2',
@@ -249,6 +249,7 @@ export function DeviceClassificationFields({
               triggerClassName={triggerClass}
               triggerSlot={triggerSlot}
               hideLabel={header}
+              hideChevron={header}
               allowCreate={canCreate}
               onCreate={(query) => {
                 setCreateName(query)
@@ -269,6 +270,7 @@ export function DeviceClassificationFields({
               triggerClassName={triggerClass}
               triggerSlot={triggerSlot}
               hideLabel={header}
+              hideChevron={header}
               allowCreate={canCreate && groupId !== CLASSIFICATION_NONE}
               onCreate={(query) => {
                 setCreateName(query)
@@ -288,6 +290,7 @@ export function DeviceClassificationFields({
               triggerClassName={triggerClass}
               triggerSlot={triggerSlot}
               hideLabel={header}
+              hideChevron={header}
               allowCreate={canCreate && brandId !== CLASSIFICATION_NONE}
               onCreate={(query) => {
                 setCreateName(query)
@@ -398,6 +401,7 @@ function RefSelect({
   triggerClassName,
   triggerSlot,
   hideLabel = false,
+  hideChevron = false,
   allowCreate = false,
   onCreate,
 }: {
@@ -410,6 +414,8 @@ function RefSelect({
   triggerClassName?: string
   triggerSlot?: string
   hideLabel?: boolean
+  /** В шапке карточки шевроны выглядят как точки между названиями. */
+  hideChevron?: boolean
   allowCreate?: boolean
   onCreate?: (query: string) => void
 }) {
@@ -476,11 +482,14 @@ function RefSelect({
                       'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
                       'disabled:cursor-not-allowed disabled:opacity-50',
                       '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:opacity-50',
+                      hideChevron && 'gap-0 px-0.5',
                       triggerClassName,
                     )}
                   >
-                    <span className="min-w-0 flex-1 truncate">{selectedLabel}</span>
-                    <ChevronDown />
+                    <span className={cn('min-w-0 truncate', hideChevron ? 'flex-none' : 'flex-1')}>
+                      {selectedLabel}
+                    </span>
+                    {hideChevron ? null : <ChevronDown />}
                   </button>
                 </FormControl>
               </PopoverTrigger>

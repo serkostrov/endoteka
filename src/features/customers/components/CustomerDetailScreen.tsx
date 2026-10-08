@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { InlineTextInput } from '@/components/shared/InlineTextInput'
+import { KeepAliveTab } from '@/components/shared/KeepAliveTab'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PageTabs } from '@/components/shared/PageTabs'
@@ -214,23 +215,31 @@ function CustomerCardBody({
 
           <PageTabs aria-label="Разделы карточки контакта" value={tab} onChange={setTab} items={tabItems} />
 
-          {tab === 'card' ? (
+          <KeepAliveTab active={tab === 'card'}>
             <div className="grid items-stretch gap-4">
               <SectionCard title="Данные контакта" className="h-full">
                 <CustomerView customer={customer} />
               </SectionCard>
               <CustomerFieldsSection customerId={customer.id} canEdit={false} />
             </div>
-          ) : null}
+          </KeepAliveTab>
         </>
       )}
 
-      {tab === 'devices' ? <CustomerDevicesSection devices={devices} /> : null}
-      {tab === 'orders' ? <CustomerOrdersSection orders={orders} /> : null}
-      {tab === 'receipts' && showReceipts ? (
-        <CustomerReceiptsSection customer={customer} receipts={receipts} />
+      <KeepAliveTab active={tab === 'devices'}>
+        <CustomerDevicesSection devices={devices} />
+      </KeepAliveTab>
+      <KeepAliveTab active={tab === 'orders'}>
+        <CustomerOrdersSection orders={orders} />
+      </KeepAliveTab>
+      {showReceipts ? (
+        <KeepAliveTab active={tab === 'receipts'}>
+          <CustomerReceiptsSection customer={customer} receipts={receipts} />
+        </KeepAliveTab>
       ) : null}
-      {tab === 'history' ? <CustomerHistorySection history={history} /> : null}
+      <KeepAliveTab active={tab === 'history'}>
+        <CustomerHistorySection history={history} />
+      </KeepAliveTab>
     </div>
   )
 }
@@ -464,14 +473,14 @@ function CustomerEditableCard({
 
         <PageTabs aria-label="Разделы карточки контакта" value={tab} onChange={onTabChange} items={tabItems} />
 
-        {tab === 'card' ? (
+        <KeepAliveTab active={tab === 'card'}>
           <div className="grid items-stretch gap-4">
             <SectionCard title="Данные контакта" className="h-full">
               <CustomerFields form={form} excludeCustomerId={customer.id} hideName layout="card" />
             </SectionCard>
             <CustomerFieldsSection customerId={customer.id} canEdit />
           </div>
-        ) : null}
+        </KeepAliveTab>
       </form>
     </Form>
   )

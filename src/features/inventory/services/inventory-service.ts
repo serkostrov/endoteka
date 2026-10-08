@@ -1,7 +1,10 @@
 import { AppError, toAppError } from '@/lib/errors'
 import {
+  InventoryReceiptStatus,
   isInventoryMovementType,
+  isInventoryReceiptStatus,
   type InventoryMovementType,
+  type InventoryReceiptStatus as ReceiptStatus,
 } from '@/lib/constants/inventory'
 import { getSupabase } from '@/lib/supabase/client'
 import type { Json } from '@/types/database'
@@ -34,6 +37,7 @@ export type InventoryItem = {
   purchasePrice: number
   repairPrice: number
   retailPrice: number
+  isPermanent: boolean
   stockQuantity: number
   coverUrl: string | null
   createdAt: string
@@ -51,6 +55,7 @@ export type InventoryItemInput = {
   purchasePrice: number
   repairPrice: number
   retailPrice: number
+  isPermanent: boolean
 }
 
 export type InventoryListResult = {
@@ -109,6 +114,7 @@ export type InventoryReceiptListItem = {
   supplierId: string | null
   receiptDate: string
   notes: string
+  status: ReceiptStatus
   createdAt: string
   actorName: string
   lineCount: number
@@ -123,8 +129,9 @@ export type InventoryReceiptLine = {
   itemArticle: string
   quantity: number
   unitPrice: number
-  batchId: string
+  batchId: string | null
   remainingQuantity: number
+  item?: InventoryItem
 }
 
 export type InventoryReceiptDetail = {
@@ -133,6 +140,7 @@ export type InventoryReceiptDetail = {
   supplierId: string | null
   receiptDate: string
   notes: string
+  status: ReceiptStatus
   createdAt: string
   actorName: string
   lines: InventoryReceiptLine[]
@@ -254,6 +262,7 @@ function mapItem(row: {
     purchasePrice: asNumber(row.purchase_price),
     repairPrice: asNumber(row.repair_price),
     retailPrice: asNumber(row.retail_price),
+    isPermanent: true,
     stockQuantity: asNumber(row.stock_quantity),
     coverUrl: row.cover_url ?? null,
     createdAt: row.created_at,
@@ -282,6 +291,7 @@ function mapItemFromCard(value: Json | undefined): InventoryItem | null {
     purchasePrice: asNumber(row.purchase_price),
     repairPrice: asNumber(row.repair_price),
     retailPrice: asNumber(row.retail_price),
+    isPermanent: row.is_permanent !== false,
     stockQuantity: asNumber(row.stock_quantity),
     coverUrl: null,
     createdAt: asString(row.created_at),
@@ -669,6 +679,7 @@ export async function createInventoryItem(input: InventoryItemInput): Promise<st
     item_repair_price: input.repairPrice,
     item_retail_price: input.retailPrice,
     item_description: input.description,
+    item_is_permanent: input.isPermanent,
   })
 
   if (error) {
@@ -691,6 +702,7 @@ export async function updateInventoryItem(itemId: string, input: InventoryItemIn
     item_repair_price: input.repairPrice,
     item_retail_price: input.retailPrice,
     item_description: input.description,
+    item_is_permanent: input.isPermanent,
   })
 
   if (error) {
@@ -714,8 +726,38 @@ export async function receiveInventory(input: {
   receiptDate: string
   notes: string
   lines: ReceiptLineInput[]
+  draftId?: string | null
 }): Promise<string> {
   const { data, error } = await getSupabase().rpc('receive_inventory', {
+    supplier_name: input.supplier,
+    doc_receipt_date: input.receiptDate,
+    doc_notes: input.notes,
+    lines: input.lines.map((line) => ({
+      item_id: line.itemId,
+      quantity: line.quantity,
+      purchase_price: line.purchasePrice,
+    })),
+    supplier_customer_id: input.supplierId ?? null,
+    draft_receipt_id: input.draftId ?? null,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось оформить приход.')
+  }
+
+  return data
+}
+
+export async function saveInventoryReceiptDraft(input: {
+  draftId?: string | null
+  supplier: string
+  supplierId?: string | null
+  receiptDate: string
+  notes: string
+  lines: ReceiptLineInput[]
+}): Promise<string> {
+  const { data, error } = await getSupabase().rpc('save_inventory_receipt_draft', {
+    target_receipt_id: input.draftId ?? null,
     supplier_name: input.supplier,
     doc_receipt_date: input.receiptDate,
     doc_notes: input.notes,
@@ -728,7 +770,7 @@ export async function receiveInventory(input: {
   })
 
   if (error) {
-    throw toAppError(error, 'Не удалось оформить приход.')
+    throw toAppError(error, 'Не удалось сохранить черновик прихода.')
   }
 
   return data
@@ -848,6 +890,7 @@ export async function listInventoryReceipts(page: number, pageSize: number) {
       supplierId: row.supplier_id ?? null,
       receiptDate: row.receipt_date,
       notes: row.notes,
+      status: isInventoryReceiptStatus(row.status) ? row.status : InventoryReceiptStatus.Posted,
       createdAt: row.created_at,
       actorName: row.actor_name,
       lineCount: Number(row.line_count ?? 0),
@@ -871,12 +914,17 @@ export async function getInventoryReceipt(id: string): Promise<InventoryReceiptD
     return null
   }
 
+  const status = isInventoryReceiptStatus(asString(row.status))
+    ? (asString(row.status) as ReceiptStatus)
+    : InventoryReceiptStatus.Posted
+
   return {
     id: row.id,
     supplier: asString(row.supplier),
     supplierId: asId(row.supplier_id),
     receiptDate: asString(row.receipt_date),
     notes: asString(row.notes),
+    status,
     createdAt: asString(row.created_at),
     actorName: asString(row.actor_name),
     lines: Array.isArray(row.lines)
@@ -885,17 +933,43 @@ export async function getInventoryReceipt(id: string): Promise<InventoryReceiptD
           if (!item || typeof item.id !== 'string') {
             return []
           }
+          const itemId = asString(item.item_id)
+          const mappedItem: InventoryItem | undefined =
+            status === InventoryReceiptStatus.Draft && itemId
+              ? {
+                  id: itemId,
+                  code: asString(item.item_code),
+                  article: asString(item.item_article),
+                  barcode: asString(item.item_barcode),
+                  barcodeType: '',
+                  name: asString(item.item_name),
+                  description: '',
+                  categoryId: asString(item.category_id),
+                  categoryName: asString(item.category_name),
+                  unitId: asString(item.unit_id),
+                  unitName: asString(item.unit_name),
+                  purchasePrice: asNumber(item.item_purchase_price),
+                  repairPrice: asNumber(item.repair_price),
+                  retailPrice: asNumber(item.retail_price),
+                  isPermanent: true,
+                  stockQuantity: asNumber(item.stock_quantity),
+                  coverUrl: null,
+                  createdAt: asString(item.item_created_at),
+                  updatedAt: asString(item.item_updated_at),
+                }
+              : undefined
           return [
             {
               id: item.id,
-              itemId: asString(item.item_id),
+              itemId,
               itemName: asString(item.item_name),
               itemCode: asString(item.item_code),
               itemArticle: asString(item.item_article),
               quantity: asNumber(item.quantity),
               unitPrice: asNumber(item.unit_price),
-              batchId: asString(item.batch_id),
+              batchId: asId(item.batch_id),
               remainingQuantity: asNumber(item.remaining_quantity),
+              item: mappedItem,
             },
           ]
         })

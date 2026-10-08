@@ -14,6 +14,7 @@ import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { InlineTextInput } from '@/components/shared/InlineTextInput'
+import { KeepAliveTab } from '@/components/shared/KeepAliveTab'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PageTabs } from '@/components/shared/PageTabs'
@@ -185,7 +186,7 @@ function InventoryItemSheetContent({
       actions={
         item ? (
           <SheetEntityToolbar
-            leading={<ItemLabelPrintButton itemId={item.id} />}
+            leading={<ItemLabelPrintButton item={item} />}
             onDelete={canReceive ? () => setDeleteOpen(true) : undefined}
             extra={toolbarExtra}
           />
@@ -397,7 +398,7 @@ function ItemCardBody({
       />
     ) : null
 
-  if (canReceive && tab === 'card') {
+  if (canReceive) {
     return (
       <div className="space-y-4">
         <ItemCardEditor
@@ -405,10 +406,22 @@ function ItemCardBody({
           variant={variant}
           stockBadge={stockBadge}
           actionsRow={actionsRow}
+          tab={tab}
           tabItems={tabItems}
           onTabChange={setTab}
         />
-        <ItemFieldsSection itemId={item.id} canEdit />
+        <KeepAliveTab active={tab === 'card'}>
+          <ItemFieldsSection itemId={item.id} canEdit />
+        </KeepAliveTab>
+        <KeepAliveTab active={tab === 'batches'}>
+          <ItemBatchesSection batches={sortedBatches} />
+        </KeepAliveTab>
+        <KeepAliveTab active={tab === 'compatible'}>
+          <ItemCompatibleTypesTab itemId={item.id} />
+        </KeepAliveTab>
+        <KeepAliveTab active={tab === 'history'}>
+          <ItemHistorySection movements={movements} />
+        </KeepAliveTab>
         {deleteDialog}
       </div>
     )
@@ -438,18 +451,22 @@ function ItemCardBody({
         items={tabItems}
       />
 
-      {tab === 'card' ? (
-        <>
-          <ItemDataSection item={item} />
-          <ItemFieldsSection itemId={item.id} canEdit={false} />
-        </>
-      ) : null}
+      <KeepAliveTab active={tab === 'card'}>
+        <ItemDataSection item={item} />
+        <ItemFieldsSection itemId={item.id} canEdit={false} />
+      </KeepAliveTab>
 
-      {tab === 'batches' ? <ItemBatchesSection batches={sortedBatches} /> : null}
+      <KeepAliveTab active={tab === 'batches'}>
+        <ItemBatchesSection batches={sortedBatches} />
+      </KeepAliveTab>
 
-      {tab === 'compatible' ? <ItemCompatibleTypesTab itemId={item.id} /> : null}
+      <KeepAliveTab active={tab === 'compatible'}>
+        <ItemCompatibleTypesTab itemId={item.id} />
+      </KeepAliveTab>
 
-      {tab === 'history' ? <ItemHistorySection movements={movements} /> : null}
+      <KeepAliveTab active={tab === 'history'}>
+        <ItemHistorySection movements={movements} />
+      </KeepAliveTab>
 
       {deleteDialog}
     </div>
@@ -461,6 +478,7 @@ function ItemCardEditor({
   variant,
   stockBadge,
   actionsRow,
+  tab,
   tabItems,
   onTabChange,
 }: {
@@ -468,6 +486,7 @@ function ItemCardEditor({
   variant: 'page' | 'sheet'
   stockBadge: ReactNode
   actionsRow: ReactNode
+  tab: ItemTab
   tabItems: { id: ItemTab; label: string; count?: number }[]
   onTabChange: (tab: ItemTab) => void
 }) {
@@ -485,26 +504,26 @@ function ItemCardEditor({
       purchasePrice: item.purchasePrice,
       repairPrice: item.repairPrice,
       retailPrice: item.retailPrice,
+      isPermanent: item.isPermanent,
     },
   })
   const watchedName = form.watch('name')
   const debouncedName = useDebouncedValue(watchedName.trim(), INVENTORY_SEARCH_DEBOUNCE_MS)
   const matchesQuery = useInventoryNameMatches(debouncedName, item.id)
   const matches = matchesQuery.data ?? []
+  const dirty = form.formState.isDirty
 
-  useSheetDirty(form.formState.isDirty, () =>
-    runSheetFormSave(form.handleSubmit, async (values) => {
-      await update.mutateAsync(values)
-      form.reset(values)
-      toast.success('Позиция сохранена')
-    }),
-  )
+  async function persist(values: InventoryItemFormValues) {
+    await update.mutateAsync(values)
+    form.reset(values)
+    toast.success('Позиция сохранена')
+  }
+
+  useSheetDirty(dirty, () => runSheetFormSave(form.handleSubmit, persist))
 
   async function onSubmit(values: InventoryItemFormValues) {
     try {
-      await update.mutateAsync(values)
-      form.reset(values)
-      toast.success('Позиция сохранена')
+      await persist(values)
     } catch (error) {
       if (isInventoryDuplicateError(error)) {
         form.setError('name', { message: error.message })
@@ -601,61 +620,71 @@ function ItemCardEditor({
 
         <PageTabs
           aria-label="Разделы карточки позиции"
-          value="card"
+          value={tab}
           onChange={onTabChange}
           items={tabItems}
         />
 
-        {matches.length > 0 ? (
-          <Alert>
-            <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
-            <AlertDescription>
-              <ul className="space-y-1">
-                {matches.map((match) => (
-                  <li key={match.id}>
-                    <EntitySheetLink kind="item" id={match.id}>
-                      Открыть {match.name}
-                      {match.code ? ` (${match.code})` : ''}
-                    </EntitySheetLink>
-                  </li>
-                ))}
-              </ul>
-            </AlertDescription>
-          </Alert>
-        ) : null}
+        <KeepAliveTab active={tab === 'card'}>
+          {matches.length > 0 ? (
+            <Alert>
+              <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
+              <AlertDescription>
+                <ul className="space-y-1">
+                  {matches.map((match) => (
+                    <li key={match.id}>
+                      <EntitySheetLink kind="item" id={match.id}>
+                        Открыть {match.name}
+                        {match.code ? ` (${match.code})` : ''}
+                      </EntitySheetLink>
+                    </li>
+                  ))}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-        <SectionCard>
-          <div className="space-y-4">
-            <ItemMediaLabel item={item} form={form} canEdit />
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem className="min-w-0">
-                  <FormLabel>Описание</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      {...field}
-                      rows={5}
-                      placeholder="Описание позиции"
-                      className="min-h-28 resize-y"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <ItemFields
-              form={form}
-              excludeItemId={item.id}
-              hideName
-              hideCodeArticle
-              hideBarcode
-              hideDescription
-              layout="card"
-            />
+          <SectionCard>
+            <div className="space-y-4">
+              <ItemMediaLabel item={item} form={form} canEdit />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem className="min-w-0">
+                    <FormLabel>Описание</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        rows={5}
+                        placeholder="Описание позиции"
+                        className="min-h-28 resize-y"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <ItemFields
+                form={form}
+                excludeItemId={item.id}
+                hideName
+                hideCodeArticle
+                hideBarcode
+                hideDescription
+                layout="card"
+              />
+            </div>
+          </SectionCard>
+        </KeepAliveTab>
+
+        {dirty ? (
+          <div className="flex justify-end border-t pt-3">
+            <Button type="submit" disabled={update.isPending}>
+              {update.isPending ? 'Сохранение…' : 'Сохранить'}
+            </Button>
           </div>
-        </SectionCard>
+        ) : null}
       </form>
     </Form>
   )
@@ -782,21 +811,39 @@ function ItemFieldsSection({ itemId, canEdit }: { itemId: string; canEdit: boole
     }
   }
 
+  const extrasDirty = canEdit && extraDraft !== null
+
   return (
     <SectionCard title="Дополнительные поля">
       {canEdit ? (
-        <DynamicFieldsGrid className="gap-3">
-          {activeFields.map((field) => (
-            <DynamicFieldRenderer
-              key={field.id}
-              field={field}
-              value={extraValues[field.code] ?? emptyFieldValue(field)}
-              onChange={(value) =>
-                setExtraDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [field.code]: value }))
-              }
-            />
-          ))}
-        </DynamicFieldsGrid>
+        <div className="space-y-3">
+          <DynamicFieldsGrid className="gap-3">
+            {activeFields.map((field) => (
+              <DynamicFieldRenderer
+                key={field.id}
+                field={field}
+                value={extraValues[field.code] ?? emptyFieldValue(field)}
+                onChange={(value) =>
+                  setExtraDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [field.code]: value }))
+                }
+              />
+            ))}
+          </DynamicFieldsGrid>
+          {extrasDirty ? (
+            <div className="flex justify-end border-t pt-3">
+              <Button
+                type="button"
+                onClick={() => {
+                  void saveExtra().catch(() => {
+                    // toast already shown
+                  })
+                }}
+              >
+                Сохранить
+              </Button>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <dl className="grid grid-cols-12 gap-3 text-sm">
           {activeFields.map((field) => (

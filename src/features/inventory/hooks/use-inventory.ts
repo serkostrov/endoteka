@@ -43,6 +43,7 @@ import {
   listInventoryReceipts,
   listInventoryWriteOffs,
   receiveInventory,
+  saveInventoryReceiptDraft,
   createInventoryWriteOff,
   removeOrderPartLine,
   listInventoryRegistryCategories,
@@ -322,9 +323,30 @@ export function useReceiveInventory() {
       receiptDate: string
       notes: string
       lines: ReceiptLineInput[]
+      draftId?: string | null
     }) => receiveInventory(input),
     onSuccess: async () => {
       await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.customers.all })
+    },
+  })
+}
+
+export function useSaveInventoryReceiptDraft() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: {
+      draftId?: string | null
+      supplier: string
+      supplierId?: string | null
+      receiptDate: string
+      notes: string
+      lines: ReceiptLineInput[]
+    }) => saveInventoryReceiptDraft(input),
+    onSuccess: async (id) => {
+      await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.receipt(id) })
       await queryClient.invalidateQueries({ queryKey: queryKeys.customers.all })
     },
   })

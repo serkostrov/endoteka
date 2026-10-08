@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
+import { KeepAliveTab } from '@/components/shared/KeepAliveTab'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SectionCard } from '@/components/shared/SectionCard'
@@ -414,7 +415,7 @@ function CountDocumentBody({
         ))}
       </div>
 
-      {tab === 'count' ? (
+      <KeepAliveTab active={tab === 'count'}>
         <SectionCard title="Позиции" flat className="gap-3">
           <div className="space-y-3">
             {editable ? (
@@ -449,7 +450,9 @@ function CountDocumentBody({
             />
           </div>
         </SectionCard>
-      ) : (
+      </KeepAliveTab>
+
+      <KeepAliveTab active={tab === 'statement'}>
         <SectionCard
           title="Акт расхождений"
           description="Строки, где факт отличается от ожидаемого остатка."
@@ -463,7 +466,7 @@ function CountDocumentBody({
             actorName={document.actorName}
           />
         </SectionCard>
-      )}
+      </KeepAliveTab>
       {!hideChromeDelete ? (
         <ConfirmDialog
           open={deleteOpen}

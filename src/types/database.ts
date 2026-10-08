@@ -457,6 +457,7 @@ type Row = {
     barcode_type: string
     name: string
     description: string
+    is_permanent: boolean
     category_id: string
     unit_id: string
     purchase_price: number
@@ -510,8 +511,12 @@ type Row = {
     supplier_id: string | null
     receipt_date: string
     notes: string
+    status: string
+    draft_lines: Json
     created_by: string | null
     created_at: string
+    hidden_at: string | null
+    reversed_at: string | null
   }
   inventory_write_offs: {
     id: string
@@ -651,6 +656,7 @@ type Row = {
     created_by: string | null
     created_at: string
     updated_at: string
+    deleted_at: string | null
   }
   documents: {
     id: string
@@ -1888,6 +1894,7 @@ export type Database = {
           item_repair_price?: number
           item_retail_price?: number
           item_description?: string
+          item_is_permanent?: boolean
         }
         Returns: string
       }
@@ -1904,6 +1911,7 @@ export type Database = {
           item_repair_price?: number
           item_retail_price?: number
           item_description?: string
+          item_is_permanent?: boolean
         }
         Returns: undefined
       }
@@ -2121,6 +2129,18 @@ export type Database = {
           doc_notes: string
           lines: Json
           supplier_customer_id?: string | null
+          draft_receipt_id?: string | null
+        }
+        Returns: string
+      }
+      save_inventory_receipt_draft: {
+        Args: {
+          target_receipt_id?: string | null
+          supplier_name?: string
+          doc_receipt_date?: string
+          doc_notes?: string
+          lines?: Json
+          supplier_customer_id?: string | null
         }
         Returns: string
       }
@@ -2158,6 +2178,7 @@ export type Database = {
           supplier_id: string | null
           receipt_date: string
           notes: string
+          status: string
           created_at: string
           actor_name: string
           line_count: number

@@ -1,12 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/DataTable'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { SupplierLink } from '@/components/shared/SupplierLink'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
-import { formatQuantity } from '@/lib/constants/inventory'
+import {
+  formatQuantity,
+  InventoryReceiptStatus,
+  inventoryReceiptStatusLabels,
+  inventoryReceiptStatusTone,
+} from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
@@ -24,6 +30,7 @@ export function InventoryReceiptsScreen() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
+  const [editDraftId, setEditDraftId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const receiptsQuery = useInventoryReceipts(page, pageSize)
@@ -48,6 +55,28 @@ export function InventoryReceiptsScreen() {
     setPage(1)
     setSelectedIds([])
   }
+
+  function handleRowClick(row: InventoryReceiptListItem) {
+    if (row.status === InventoryReceiptStatus.Draft) {
+      if (canReceive) {
+        setEditDraftId(row.id)
+      }
+      return
+    }
+    openReceipt(row.id)
+  }
+
+  useEffect(() => {
+    if (!receiptId || !canReceive || !receiptsQuery.data) {
+      return
+    }
+    const row = receiptsQuery.data.items.find((item) => item.id === receiptId)
+    if (row?.status !== InventoryReceiptStatus.Draft) {
+      return
+    }
+    setEditDraftId(receiptId)
+    closeReceipt()
+  }, [receiptId, canReceive, receiptsQuery.data])
 
   return (
     <div className="space-y-4">
@@ -75,7 +104,7 @@ export function InventoryReceiptsScreen() {
         getRowId={(row) => row.id}
         emptyTitle="Приходов нет"
         emptyDescription="Оформите поступление, чтобы появились партии."
-        onRowClick={(row) => openReceipt(row.id)}
+        onRowClick={handleRowClick}
         selection={{
           selectedIds,
           onSelectedIdsChange: setSelectedIds,
@@ -93,9 +122,23 @@ export function InventoryReceiptsScreen() {
         columns={[
           { id: 'date', header: 'Дата', cell: (row) => formatDate(row.receiptDate) },
           {
+            id: 'status',
+            header: 'Статус',
+            cell: (row) => (
+              <StatusBadge tone={inventoryReceiptStatusTone(row.status)}>
+                {inventoryReceiptStatusLabels[row.status]}
+              </StatusBadge>
+            ),
+          },
+          {
             id: 'supplier',
             header: 'Поставщик',
-            cell: (row) => <SupplierLink name={row.supplier} customerId={row.supplierId} />,
+            cell: (row) =>
+              row.supplier ? (
+                <SupplierLink name={row.supplier} customerId={row.supplierId} />
+              ) : (
+                <span className="text-muted-foreground">—</span>
+              ),
           },
           { id: 'lines', header: 'Строк', cell: (row) => String(row.lineCount) },
           { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.totalQuantity) },
@@ -120,11 +163,14 @@ export function InventoryReceiptsScreen() {
                   cell: (row: InventoryReceiptListItem) => (
                     <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
                       <ReceiptDeleteControl
-                        receipt={{ id: row.id, supplier: row.supplier }}
+                        receipt={{ id: row.id, supplier: row.supplier, status: row.status }}
                         onDeleted={() => {
                           setSelectedIds((ids) => ids.filter((id) => id !== row.id))
                           if (receiptId === row.id) {
                             closeReceipt()
+                          }
+                          if (editDraftId === row.id) {
+                            setEditDraftId(null)
                           }
                         }}
                       />
@@ -137,6 +183,15 @@ export function InventoryReceiptsScreen() {
       />
 
       <ReceiveStockSheet open={createOpen} onOpenChange={setCreateOpen} />
+      <ReceiveStockSheet
+        open={Boolean(editDraftId)}
+        draftId={editDraftId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditDraftId(null)
+          }
+        }}
+      />
       <InventoryReceiptSheet
         receiptId={receiptId}
         open={Boolean(receiptId)}

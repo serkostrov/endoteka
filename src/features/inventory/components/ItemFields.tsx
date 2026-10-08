@@ -5,6 +5,7 @@ import type { UseFormReturn } from 'react-hook-form'
 import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { SearchCreateAction } from '@/components/shared/SearchSuggestOverlay'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Checkbox } from '@/components/ui/checkbox'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -209,44 +210,72 @@ export function ItemFields({
               allowCreate={canCreate}
               onCreate={() => setCreateKind('unit')}
             />
-            <PriceField form={form} name="purchasePrice" label="Закупка" disabled={disabled} />
-            <PriceField form={form} name="repairPrice" label="Ремонт" disabled={disabled} />
-            <PriceField form={form} name="retailPrice" label="Розница" disabled={disabled} />
           </>
         ) : null}
       </div>
 
       {!card ? (
-        <>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <RefSelectField
-              form={form}
-              name="categoryId"
-              label="Категория"
-              placeholder="Выберите категорию"
-              disabled={disabled}
-              options={categoryOptions}
-              allowCreate={canCreate}
-              onCreate={() => setCreateKind('category')}
-            />
-            <RefSelectField
-              form={form}
-              name="unitId"
-              label="Единица"
-              placeholder="шт или упак"
-              disabled={disabled}
-              options={unitOptions}
-              allowCreate={canCreate}
-              onCreate={() => setCreateKind('unit')}
-            />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <PriceField form={form} name="purchasePrice" label="Закупка" disabled={disabled} />
-            <PriceField form={form} name="repairPrice" label="Ремонт" disabled={disabled} />
-            <PriceField form={form} name="retailPrice" label="Розница" disabled={disabled} />
-          </div>
-        </>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <RefSelectField
+            form={form}
+            name="categoryId"
+            label="Категория"
+            placeholder="Выберите категорию"
+            disabled={disabled}
+            options={categoryOptions}
+            allowCreate={canCreate}
+            onCreate={() => setCreateKind('category')}
+          />
+          <RefSelectField
+            form={form}
+            name="unitId"
+            label="Единица"
+            placeholder="шт или упак"
+            disabled={disabled}
+            options={unitOptions}
+            allowCreate={canCreate}
+            onCreate={() => setCreateKind('unit')}
+          />
+        </div>
       ) : null}
+
+      <FormField
+        control={form.control}
+        name="isPermanent"
+        render={({ field }) => (
+          <FormItem>
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                checked={field.value}
+                onCheckedChange={(next) => field.onChange(next === true)}
+                disabled={disabled}
+                className="mt-0.5"
+              />
+              <span className="min-w-0">
+                <span className="font-medium">Постоянный товар</span>
+                <span className="mt-0.5 block text-muted-foreground">
+                  При нулевом остатке позиция попадает в фильтр «Нет остатка» для отдела закупки.
+                </span>
+              </span>
+            </label>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+
+      {card ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <PriceField form={form} name="purchasePrice" label="Закупка" disabled={disabled} />
+          <PriceField form={form} name="repairPrice" label="Ремонт" disabled={disabled} />
+          <PriceField form={form} name="retailPrice" label="Розница" disabled={disabled} />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-3">
+          <PriceField form={form} name="purchasePrice" label="Закупка" disabled={disabled} />
+          <PriceField form={form} name="repairPrice" label="Ремонт" disabled={disabled} />
+          <PriceField form={form} name="retailPrice" label="Розница" disabled={disabled} />
+        </div>
+      )}
 
       {createKind && createSet ? (
         <ReferenceItemDialog

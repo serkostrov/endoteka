@@ -34,9 +34,14 @@ const DOCUMENT_BASE_STYLE = `
     border-top: 1px solid #000;
     margin: 0.4em 0;
   }
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
   table {
     border-collapse: collapse;
     width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
     font-family: inherit;
   }
   td, th {
@@ -44,6 +49,9 @@ const DOCUMENT_BASE_STYLE = `
     vertical-align: middle;
     font-family: inherit;
     line-height: 1.15;
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
+    word-break: break-word;
   }
   /*
    * TinyMCE оборачивает ячейки в <p>. Любой margin/padding у них
@@ -231,9 +239,15 @@ export const DOCUMENT_HTML_BODY_STYLE = `
     border: none;
     border-top: 1px solid #000;
   }
+  .document-html-body,
+  .document-html-body * {
+    box-sizing: border-box;
+  }
   .document-html-body table {
     width: 100%;
+    max-width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
   }
   .document-html-body td,
   .document-html-body th {
@@ -241,6 +255,9 @@ export const DOCUMENT_HTML_BODY_STYLE = `
     vertical-align: middle;
     border: none;
     line-height: 1.15;
+    overflow-wrap: anywhere;
+    word-wrap: break-word;
+    word-break: break-word;
   }
   .document-html-body td > p,
   .document-html-body th > p {

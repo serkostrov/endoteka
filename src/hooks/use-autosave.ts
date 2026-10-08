@@ -23,7 +23,10 @@ export function useAutosave<T>(
     pendingRef.current = true
     const timer = window.setTimeout(() => {
       pendingRef.current = false
-      void saveRef.current(value)
+      const latest = valueRef.current
+      if (latest !== null) {
+        void saveRef.current(latest)
+      }
     }, delayMs)
 
     return () => window.clearTimeout(timer)

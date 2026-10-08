@@ -14,6 +14,7 @@ import { DataTable } from '@/components/shared/DataTable'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { InlineTextInput } from '@/components/shared/InlineTextInput'
+import { KeepAliveTab } from '@/components/shared/KeepAliveTab'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { PageTabs } from '@/components/shared/PageTabs'
@@ -213,63 +214,59 @@ function DeviceCardBody({
     { id: 'warranties' as const, label: 'Гарантии', count: card.warranties.length },
   ]
 
-  if (canUpdate && tab === 'card') {
-    return (
-      <div className="space-y-4">
-        <DeviceCardEditor device={device} layout={layout} tabItems={tabItems} onTabChange={setTab} />
-        <DeviceFieldsSection deviceId={device.id} canEdit />
-        {!hideChromeActions ? (
-          <ConfirmDialog
-            open={deleteOpen}
-            title="Удалить прибор"
-            description={`${deviceTitle(device)}. ${deviceSerialLine(device.serialNumber)} будет удалён. Если по нему есть заказы, удаление не пройдёт.`}
-            confirmLabel="Удалить"
-            isPending={remove.isPending}
-            onOpenChange={setDeleteOpen}
-            onConfirm={() => void handleDelete()}
-          />
-        ) : null}
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
-      {layout === 'page' ? (
-        <PageHeader
-          title={deviceTitle(device)}
-          description={deviceSerialLine(device.serialNumber)}
-          actions={headerActions ?? undefined}
+      {canUpdate ? (
+        <DeviceCardEditor
+          device={device}
+          layout={layout}
+          tab={tab}
+          tabItems={tabItems}
+          onTabChange={setTab}
         />
       ) : (
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold tracking-tight">{deviceTitle(device)}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{deviceSerialLine(device.serialNumber)}</p>
-        </div>
+        <>
+          {layout === 'page' ? (
+            <PageHeader
+              title={deviceTitle(device)}
+              description={deviceSerialLine(device.serialNumber)}
+              actions={headerActions ?? undefined}
+            />
+          ) : (
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold tracking-tight">{deviceTitle(device)}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{deviceSerialLine(device.serialNumber)}</p>
+            </div>
+          )}
+
+          <PageTabs
+            aria-label="Разделы карточки прибора"
+            value={tab}
+            onChange={setTab}
+            items={tabItems}
+          />
+
+          <KeepAliveTab active={tab === 'card'}>
+            <DeviceCardView device={device} />
+            <DeviceFieldsSection deviceId={device.id} canEdit={false} />
+          </KeepAliveTab>
+        </>
       )}
 
-      <PageTabs
-        aria-label="Разделы карточки прибора"
-        value={tab}
-        onChange={setTab}
-        items={tabItems}
-      />
-
-      {tab === 'card' ? (
-        <>
-          <DeviceCardView device={device} />
-          <DeviceFieldsSection deviceId={device.id} canEdit={false} />
-        </>
+      {canUpdate ? (
+        <KeepAliveTab active={tab === 'card'}>
+          <DeviceFieldsSection deviceId={device.id} canEdit />
+        </KeepAliveTab>
       ) : null}
 
-      {tab === 'compatible' ? (
+      <KeepAliveTab active={tab === 'compatible'}>
         <DeviceCompatiblePartsReadonly
           modelId={device.modelId}
           modificationId={device.modificationId}
         />
-      ) : null}
+      </KeepAliveTab>
 
-      {tab === 'orders' ? (
+      <KeepAliveTab active={tab === 'orders'}>
         <SectionCard title="Заказы" description="Все ремонты этого серийного номера, независимо от текущего клиента.">
           <DataTable
             caption="Заказы прибора"
@@ -292,9 +289,9 @@ function DeviceCardBody({
             ]}
           />
         </SectionCard>
-      ) : null}
+      </KeepAliveTab>
 
-      {tab === 'history' ? (
+      <KeepAliveTab active={tab === 'history'}>
         <SectionCard title="История ремонтов" description="Выданные и закрытые обращения. Клиент указан на момент заказа.">
           {pastRepairs.length === 0 ? (
             <p className="text-sm text-muted-foreground">Закрытых ремонтов пока нет.</p>
@@ -316,9 +313,11 @@ function DeviceCardBody({
             </ul>
           )}
         </SectionCard>
-      ) : null}
+      </KeepAliveTab>
 
-      {tab === 'warranties' ? <WarrantiesSection warranties={card.warranties} /> : null}
+      <KeepAliveTab active={tab === 'warranties'}>
+        <WarrantiesSection warranties={card.warranties} />
+      </KeepAliveTab>
 
       {!hideChromeActions ? (
         <ConfirmDialog
@@ -448,11 +447,13 @@ function DeviceFieldsSection({ deviceId, canEdit }: { deviceId: string; canEdit:
 function DeviceCardEditor({
   device,
   layout,
+  tab,
   tabItems,
   onTabChange,
 }: {
   device: DeviceLookup
   layout: 'page' | 'sheet'
+  tab: DeviceTab
   tabItems: { id: DeviceTab; label: string; count?: number }[]
   onTabChange: (tab: DeviceTab) => void
 }) {
@@ -537,39 +538,41 @@ function DeviceCardEditor({
 
         <PageTabs
           aria-label="Разделы карточки прибора"
-          value="card"
+          value={tab}
           onChange={onTabChange}
           items={tabItems}
         />
 
-        <SectionCard title="Карточка">
-          <div className="space-y-4">
-            <DeviceTypePhotosReadonly
-              modelId={watchedModelId}
-              modificationId={watchedModificationId}
-            />
+        <KeepAliveTab active={tab === 'card'}>
+          <SectionCard title="Карточка">
+            <div className="space-y-4">
+              <DeviceTypePhotosReadonly
+                modelId={watchedModelId}
+                modificationId={watchedModificationId}
+              />
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <DeviceClassificationFields form={form} parts="modification" />
-              <FormItem>
-                <FormLabel>Гарантия</FormLabel>
-                <div className="flex h-9 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md border border-input bg-muted px-3 text-sm shadow-xs dark:bg-input/30">
-                  <WarrantyBadge warranty={device.warranty} />
-                  {device.warranty ? (
-                    <span className="truncate text-muted-foreground">
-                      {formatDate(device.warranty.startsOn)} — {formatDate(device.warranty.endsOn)}
-                    </span>
-                  ) : null}
-                </div>
-              </FormItem>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <DeviceClassificationFields form={form} parts="modification" />
+                <FormItem>
+                  <FormLabel>Гарантия</FormLabel>
+                  <div className="flex h-9 w-full min-w-0 items-center gap-2 overflow-hidden rounded-md border border-input bg-muted px-3 text-sm shadow-xs dark:bg-input/30">
+                    <WarrantyBadge warranty={device.warranty} />
+                    {device.warranty ? (
+                      <span className="truncate text-muted-foreground">
+                        {formatDate(device.warranty.startsOn)} — {formatDate(device.warranty.endsOn)}
+                      </span>
+                    ) : null}
+                  </div>
+                </FormItem>
+              </div>
+
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <Info label="Создан" value={formatDateTime(device.createdAt)} />
+                <Info label="Обновлён" value={formatDateTime(device.updatedAt)} />
+              </dl>
             </div>
-
-            <dl className="grid gap-3 text-sm sm:grid-cols-2">
-              <Info label="Создан" value={formatDateTime(device.createdAt)} />
-              <Info label="Обновлён" value={formatDateTime(device.updatedAt)} />
-            </dl>
-          </div>
-        </SectionCard>
+          </SectionCard>
+        </KeepAliveTab>
       </form>
     </Form>
   )

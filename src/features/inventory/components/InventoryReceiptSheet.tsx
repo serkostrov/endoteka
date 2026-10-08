@@ -5,6 +5,7 @@ import { DataTable } from '@/components/shared/DataTable'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { SupplierLink } from '@/components/shared/SupplierLink'
 import {
   Sheet,
@@ -14,7 +15,13 @@ import {
   SheetTitle,
   useSheetExitPresence,
 } from '@/components/ui/sheet'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import {
+  formatMoney,
+  formatQuantity,
+  InventoryReceiptStatus,
+  inventoryReceiptStatusLabels,
+  inventoryReceiptStatusTone,
+} from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDate } from '@/lib/utils/date'
 
@@ -53,7 +60,10 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
       className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,56rem)]"
       actions={
         receipt ? (
-          <ReceiptDeleteControl receipt={{ id: receipt.id, supplier: receipt.supplier }} onDeleted={onClose} />
+          <ReceiptDeleteControl
+            receipt={{ id: receipt.id, supplier: receipt.supplier, status: receipt.status }}
+            onDeleted={onClose}
+          />
         ) : null
       }
     >
@@ -72,9 +82,19 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
           <div className="space-y-4">
             <div className="flex min-w-0 items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-lg font-semibold tracking-tight">
-                  Приход <SupplierLink name={receipt.supplier} customerId={receipt.supplierId} />
-                </h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-lg font-semibold tracking-tight">
+                    Приход{' '}
+                    {receipt.supplier ? (
+                      <SupplierLink name={receipt.supplier} customerId={receipt.supplierId} />
+                    ) : (
+                      <span className="text-muted-foreground">без поставщика</span>
+                    )}
+                  </h2>
+                  <StatusBadge tone={inventoryReceiptStatusTone(receipt.status)}>
+                    {inventoryReceiptStatusLabels[receipt.status]}
+                  </StatusBadge>
+                </div>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {formatDate(receipt.receiptDate)}
                   {receipt.actorName ? ` ${receipt.actorName}` : ''}
@@ -86,6 +106,14 @@ function InventoryReceiptSheetContent({ receiptId, onClose }: { receiptId: strin
                 <span className="font-semibold">{formatMoney(total)} ₽</span>
               </p>
             </div>
+
+            {receipt.status === InventoryReceiptStatus.Draft ? (
+              <EmptyState
+                title="Черновик"
+                description="Этот приход ещё не проведён. Откройте его из списка, чтобы продолжить."
+                className="border-0 bg-transparent py-4"
+              />
+            ) : null}
 
             {receipt.lines.length === 0 ? (
               <EmptyState
