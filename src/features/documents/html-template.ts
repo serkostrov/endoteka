@@ -164,26 +164,6 @@ function promoteMceStyle(el: Element) {
   el.removeAttribute('data-mce-style')
 }
 
-function tableHasExplicitColumnWidths(table: HTMLTableElement) {
-  if ([...table.querySelectorAll(':scope > colgroup col, :scope > col')].some(hasWidthHint)) {
-    return true
-  }
-  const firstRow = table.rows[0]
-  if (!firstRow) {
-    return false
-  }
-  return [...firstRow.cells].some(hasWidthHint)
-}
-
-function hasWidthHint(el: Element) {
-  const style = el.getAttribute('style') || ''
-  if (/\bwidth\s*:/i.test(style)) {
-    return true
-  }
-  const width = el.getAttribute('width')
-  return Boolean(width && width !== '0')
-}
-
 function ensureColgroupFromCells(table: HTMLTableElement) {
   if (table.querySelector(':scope > colgroup, :scope > col')) {
     return
