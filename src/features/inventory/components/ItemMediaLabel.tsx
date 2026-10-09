@@ -74,7 +74,6 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
   useRegisterItemLabelSnapshot(getSnapshot)
 
   const payload = labelPayload(barcode)
-  const metaLine = itemLabelMetaLine({ code, article })
   const photos = photosQuery.data ?? []
   const lightboxItems: ImageLightboxItem[] = photos
     .filter((photo) => photo.signedUrl)
