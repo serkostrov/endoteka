@@ -2692,6 +2692,15 @@ export type Database = {
         }
         Returns: undefined
       }
+      update_order_service_line_for_order: {
+        Args: {
+          target_line_id: string
+          line_name: string
+          line_description?: string
+          line_unit_price?: number
+        }
+        Returns: undefined
+      }
       set_order_service_line: {
         Args: { target_line_id: string; line_quantity: number; line_unit_price: number }
         Returns: undefined

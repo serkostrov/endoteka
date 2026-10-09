@@ -3,22 +3,35 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { getErrorMessage } from '@/lib/errors'
 
-import { EditServiceTemplateDialog } from './EditServiceTemplateDialog'
+import {
+  EditServiceTemplateDialog,
+  type ServiceOrderLineContext,
+} from './EditServiceTemplateDialog'
 import { useServiceTemplate } from '../hooks/use-services'
 
 export function ServiceTemplateSheet({
   templateId,
   open,
   onOpenChange,
+  orderLine = null,
 }: {
   templateId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Контекст строки заказа — две кнопки сохранения. */
+  orderLine?: ServiceOrderLineContext | null
 }) {
   const templateQuery = useServiceTemplate(open ? templateId : null)
 
   if (templateQuery.data) {
-    return <EditServiceTemplateDialog item={templateQuery.data} open={open} onOpenChange={onOpenChange} />
+    return (
+      <EditServiceTemplateDialog
+        item={templateQuery.data}
+        open={open}
+        onOpenChange={onOpenChange}
+        orderLine={orderLine}
+      />
+    )
   }
 
   return (
@@ -33,7 +46,9 @@ export function ServiceTemplateSheet({
         ) : (
           <ErrorState
             title="Услуга не найдена"
-            description={templateQuery.error ? getErrorMessage(templateQuery.error) : 'Шаблон удалён из справочника.'}
+            description={
+              templateQuery.error ? getErrorMessage(templateQuery.error) : 'Шаблон удалён из справочника.'
+            }
             onRetry={() => void templateQuery.refetch()}
             className="py-12"
           />

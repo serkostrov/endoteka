@@ -538,12 +538,13 @@ function interpolateNode(node: Element, values: Record<string, string>) {
     }
     const dateFormat = element.getAttribute('data-date-format')?.trim() || undefined
     if (!(key in values) && !isResolvablePlaceholderKey(key)) {
-      element.textContent = ''
+      element.replaceChildren()
       continue
     }
     const raw = values[key]
-    element.textContent =
+    const resolved =
       raw == null || raw === '' ? '' : resolvePlaceholderValue(key, raw, dateFormat)
+    setPreservedWhitespaceContent(element, resolved)
   }
 
   const walker = node.ownerDocument.createTreeWalker(node, NodeFilter.SHOW_TEXT)
@@ -555,7 +556,24 @@ function interpolateNode(node: Element, values: Record<string, string>) {
     if (text.parentElement?.closest('.doc-field[data-field]')) {
       continue
     }
-    text.data = interpolateTemplate(text.data, values)
+    const next = interpolateTemplate(text.data, values)
+    if (next === text.data) {
+      continue
+    }
+    if (!next.includes('\n') && !next.includes('\r')) {
+      text.data = next
+      continue
+    }
+    // Плейсхолдер вне .doc-field: переносы → <br>, пробелы через pre-wrap на обёртке.
+    const parent = text.parentNode
+    if (!parent || !text.ownerDocument) {
+      text.data = next
+      continue
+    }
+    const wrap = text.ownerDocument.createElement('span')
+    wrap.style.whiteSpace = 'pre-wrap'
+    setPreservedWhitespaceContent(wrap, next)
+    parent.replaceChild(wrap, text)
   }
 
   for (const element of node.querySelectorAll('[data-code], [src], [alt], [href]')) {
@@ -609,6 +627,25 @@ function inlineHtml(value: string) {
     const token = dateFormat ? `{{${key}|${dateFormat}}}` : `{{${key}}}`
     return `<span class="doc-field" data-field="${escapeAttr(key)}">${token}</span>`
   })
+}
+
+/** Текст поля с переносами строк и пробелами — как в форме (textarea). */
+function setPreservedWhitespaceContent(element: HTMLElement, value: string) {
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
+  if (!normalized.includes('\n')) {
+    element.textContent = normalized
+    return
+  }
+
+  const doc = element.ownerDocument
+  element.replaceChildren()
+  const lines = normalized.split('\n')
+  for (let index = 0; index < lines.length; index += 1) {
+    element.appendChild(doc.createTextNode(lines[index] ?? ''))
+    if (index < lines.length - 1) {
+      element.appendChild(doc.createElement('br'))
+    }
+  }
 }
 
 function escapeHtml(value: string) {

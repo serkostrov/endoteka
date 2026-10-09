@@ -124,7 +124,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const servicesQuery = useOrderServiceLines(orderId)
   const fieldsQuery = useDynamicFields(FieldEntity.OrderWork)
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
-  const [openedTemplateId, setOpenedTemplateId] = useState<string | null>(null)
+  const [openedCatalogService, setOpenedCatalogService] = useState<OrderServiceLine | null>(null)
   const [customPart, setCustomPart] = useState<OrderInventoryUsage | null>(null)
   const [customService, setCustomService] = useState<OrderServiceLine | null>(null)
 
@@ -215,7 +215,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
                     canWriteOff={canWriteOff}
                     canUpdateServices={canUpdateServices}
                     onOpenPart={(itemId) => setOpenedItemId(itemId)}
-                    onOpenService={(templateId) => setOpenedTemplateId(templateId)}
+                    onOpenCatalogService={(service) => setOpenedCatalogService(service)}
                     onOpenCustomPart={(part) => setCustomPart(part)}
                     onOpenCustomService={(service) => setCustomService(service)}
                   />
@@ -250,11 +250,22 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
         }}
       />
       <ServiceTemplateSheet
-        templateId={openedTemplateId}
-        open={Boolean(openedTemplateId)}
+        templateId={openedCatalogService?.templateId ?? null}
+        open={Boolean(openedCatalogService?.templateId)}
+        orderLine={
+          openedCatalogService
+            ? {
+                id: openedCatalogService.id,
+                orderId: openedCatalogService.orderId,
+                name: openedCatalogService.name,
+                description: openedCatalogService.description,
+                unitPrice: openedCatalogService.unitPrice,
+              }
+            : null
+        }
         onOpenChange={(open) => {
           if (!open) {
-            setOpenedTemplateId(null)
+            setOpenedCatalogService(null)
           }
         }}
       />
@@ -433,7 +444,7 @@ function ActorGroupRows({
   canWriteOff,
   canUpdateServices,
   onOpenPart,
-  onOpenService,
+  onOpenCatalogService,
   onOpenCustomPart,
   onOpenCustomService,
 }: {
@@ -442,7 +453,7 @@ function ActorGroupRows({
   canWriteOff: boolean
   canUpdateServices: boolean
   onOpenPart: (itemId: string) => void
-  onOpenService: (templateId: string) => void
+  onOpenCatalogService: (service: OrderServiceLine) => void
   onOpenCustomPart: (part: OrderInventoryUsage) => void
   onOpenCustomService: (service: OrderServiceLine) => void
 }) {
@@ -474,7 +485,7 @@ function ActorGroupRows({
             }
             if (line.kind === 'service' && line.service) {
               if (line.service.templateId) {
-                onOpenService(line.service.templateId)
+                onOpenCatalogService(line.service)
               } else {
                 onOpenCustomService(line.service)
               }

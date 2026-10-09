@@ -99,6 +99,8 @@ const DOCUMENT_BASE_STYLE = `
     color: inherit;
     text-decoration: inherit;
     line-height: inherit;
+    /* Переносы, отступы и пробелы из textarea — как в карточке */
+    white-space: pre-wrap;
   }
   .doc-qr, .doc-barcode {
     display: inline-flex;
@@ -284,6 +286,7 @@ export const DOCUMENT_HTML_BODY_STYLE = `
     font-size: inherit;
     border-radius: 0;
     line-height: inherit;
+    white-space: pre-wrap;
   }
   .document-html-body .doc-qr-image {
     display: inline-block;

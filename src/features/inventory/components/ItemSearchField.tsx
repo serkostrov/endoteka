@@ -74,14 +74,13 @@ export function ItemSearchField({
   const flatItems = useMemo(() => {
     const rows: InventoryItem[] = []
     for (const group of groups) {
-      const groupOpen = Boolean(term) || Boolean(expanded[group.id]) || groups.length === 1
-      if (!groupOpen) {
+      if (!isGroupOpen(expanded, group.id, groups.length)) {
         continue
       }
       rows.push(...group.items)
     }
     return rows
-  }, [expanded, groups, term])
+  }, [expanded, groups])
 
   function requestCreate() {
     setOpen(false)
@@ -89,23 +88,39 @@ export function ItemSearchField({
   }
 
   function toggleFolder(id: string) {
-    setExpanded((current) => ({ ...current, [id]: !current[id] }))
+    setExpanded((current) => ({
+      ...current,
+      [id]: !isGroupOpen(current, id, groups.length),
+    }))
   }
 
   useEffect(() => {
     setActiveIndex(0)
   }, [flatItems])
 
+  // Новый поисковый запрос — раскрыть категории с результатами один раз.
+  const autoExpandTermRef = useRef('')
   useEffect(() => {
     if (!term) {
+      autoExpandTermRef.current = ''
       return
     }
+
+    const isNewTerm = autoExpandTermRef.current !== term
+    autoExpandTermRef.current = term
+
     setExpanded((current) => {
+      let changed = false
       const next = { ...current }
       for (const group of groups) {
-        next[group.id] = true
+        if (isNewTerm || !(group.id in next)) {
+          if (next[group.id] !== true) {
+            next[group.id] = true
+            changed = true
+          }
+        }
       }
-      return next
+      return changed ? next : current
     })
   }, [groups, term])
 
@@ -203,7 +218,7 @@ export function ItemSearchField({
               ) : (
                 <div className="space-y-0.5">
                   {groups.map((group) => {
-                    const groupOpen = Boolean(term) || Boolean(expanded[group.id]) || groups.length === 1
+                    const groupOpen = isGroupOpen(expanded, group.id, groups.length)
                     return (
                       <FolderBlock
                         key={group.id}
@@ -393,6 +408,14 @@ function FolderBlock({
       {open ? <div>{children}</div> : null}
     </div>
   )
+}
+
+function isGroupOpen(expanded: Record<string, boolean>, id: string, groupCount: number) {
+  if (Object.prototype.hasOwnProperty.call(expanded, id)) {
+    return Boolean(expanded[id])
+  }
+  // Пока пользователь не трогал папку — одна категория открыта по умолчанию.
+  return groupCount === 1
 }
 
 function groupByCategory(items: InventoryItem[]): CategoryGroup[] {

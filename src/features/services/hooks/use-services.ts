@@ -14,6 +14,7 @@ import {
   setOrderServiceLine,
   updateServiceTemplate,
   updateOrderCustomServiceLine,
+  updateOrderServiceLineForOrder,
   type ServiceTemplateInput,
 } from '../services/services-service'
 
@@ -131,6 +132,28 @@ export function useUpdateOrderCustomServiceLine(orderId: string) {
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.services.orderLines(orderId) })
+    },
+  })
+}
+
+export function useUpdateOrderServiceLineForOrder(orderId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: {
+      lineId: string
+      name: string
+      description: string
+      unitPrice: number
+    }) =>
+      updateOrderServiceLineForOrder(input.lineId, {
+        name: input.name,
+        description: input.description,
+        unitPrice: input.unitPrice,
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.services.orderLines(orderId) })
+      await queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) })
     },
   })
 }

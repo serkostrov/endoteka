@@ -191,6 +191,23 @@ export async function updateOrderCustomServiceLine(
   }
 }
 
+/** Правки только в строке заказа; справочник не меняется. */
+export async function updateOrderServiceLineForOrder(
+  lineId: string,
+  input: { name: string; description: string; unitPrice: number },
+): Promise<void> {
+  const { error } = await getSupabase().rpc('update_order_service_line_for_order', {
+    target_line_id: lineId,
+    line_name: input.name,
+    line_description: input.description,
+    line_unit_price: input.unitPrice,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось сохранить услугу для заказа.')
+  }
+}
+
 export async function setOrderServiceLine(lineId: string, quantity: number, unitPrice: number): Promise<void> {
   const { error } = await getSupabase().rpc('set_order_service_line', {
     target_line_id: lineId,

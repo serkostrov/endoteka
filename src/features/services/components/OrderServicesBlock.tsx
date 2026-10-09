@@ -39,7 +39,7 @@ export function OrderServicesBlock({
   const add = useAddOrderServiceLine(orderId)
   const [createOpen, setCreateOpen] = useState(false)
   const [createQuery, setCreateQuery] = useState('')
-  const [openedTemplateId, setOpenedTemplateId] = useState<string | null>(null)
+  const [openedCatalogService, setOpenedCatalogService] = useState<OrderServiceLine | null>(null)
   const addInFlight = useRef(false)
   const lines = linesQuery.data ?? []
 
@@ -90,11 +90,22 @@ export function OrderServicesBlock({
       />
       {showLines ? (
         <ServiceTemplateSheet
-          templateId={openedTemplateId}
-          open={Boolean(openedTemplateId)}
+          templateId={openedCatalogService?.templateId ?? null}
+          open={Boolean(openedCatalogService?.templateId)}
+          orderLine={
+            openedCatalogService
+              ? {
+                  id: openedCatalogService.id,
+                  orderId: openedCatalogService.orderId,
+                  name: openedCatalogService.name,
+                  description: openedCatalogService.description,
+                  unitPrice: openedCatalogService.unitPrice,
+                }
+              : null
+          }
           onOpenChange={(open) => {
             if (!open) {
-              setOpenedTemplateId(null)
+              setOpenedCatalogService(null)
             }
           }}
         />
@@ -139,7 +150,7 @@ export function OrderServicesBlock({
                 line={line}
                 orderId={orderId}
                 canUpdate={canUpdate}
-                onOpenTemplate={setOpenedTemplateId}
+                onOpenCatalogService={setOpenedCatalogService}
               />
             </li>
           ))}
@@ -155,12 +166,12 @@ function OrderServiceCard({
   line,
   orderId,
   canUpdate,
-  onOpenTemplate,
+  onOpenCatalogService,
 }: {
   line: OrderServiceLine
   orderId: string
   canUpdate: boolean
-  onOpenTemplate: (templateId: string) => void
+  onOpenCatalogService: (line: OrderServiceLine) => void
 }) {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const remove = useRemoveOrderServiceLine(orderId)
@@ -174,7 +185,7 @@ function OrderServiceCard({
           ? 'group cursor-pointer rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50'
           : 'rounded-lg border bg-card px-2.5 py-2 shadow-xs transition-colors hover:border-primary/40 hover:bg-accent/50'
       }
-      onClick={clickable ? () => onOpenTemplate(line.templateId!) : undefined}
+      onClick={clickable ? () => onOpenCatalogService(line) : undefined}
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">

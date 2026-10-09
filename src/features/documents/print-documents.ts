@@ -20,18 +20,17 @@ export type PrintableDocument = {
 const MAX_PDF_PAGES = 40
 
 function buildPrintStyles(pageSize: 'a4' | 'label', margins: PageMarginsMm) {
-  // Поля листа — только через @page (padding у body в Safari/Chrome часто обрезает верх).
-  // Горизонтальный overflow в Safari лечим явной шириной контента в mm, не убирая @page margin.
-  const pageW = pageSize === 'label' ? 58 : 210
-  const pageH = pageSize === 'label' ? 40 : 297
-  const contentW = Math.max(8, pageW - margins.left - margins.right)
+  // Chrome скрывает «Масштаб» / ориентацию, если задан @page { size: A4|… }.
+  // Для обычных документов — size: auto, масштаб выбирает пользователь в диалоге.
+  // Этикетки оставляем фиксированными (термопринтер).
   const pageMargin = `${margins.top}mm ${margins.right}mm ${margins.bottom}mm ${margins.left}mm`
+  const pageRule =
+    pageSize === 'label'
+      ? `@page { size: 58mm 40mm; margin: ${pageMargin}; }`
+      : `@page { size: auto; margin: ${pageMargin}; }`
 
   return `
-    @page {
-      size: ${pageW}mm ${pageH}mm;
-      margin: ${pageMargin};
-    }
+    ${pageRule}
     html {
       margin: 0;
       padding: 0;
@@ -39,12 +38,12 @@ function buildPrintStyles(pageSize: 'a4' | 'label', margins: PageMarginsMm) {
     body {
       margin: 0;
       padding: 0;
-      width: ${contentW}mm;
+      width: auto;
       max-width: 100%;
       box-sizing: border-box;
       background: white;
       color: #000;
-      overflow-x: hidden;
+      overflow-x: visible;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -53,9 +52,9 @@ function buildPrintStyles(pageSize: 'a4' | 'label', margins: PageMarginsMm) {
       margin: 0;
       padding: 0;
       width: 100%;
-      max-width: ${contentW}mm;
+      max-width: 100%;
       box-sizing: border-box;
-      overflow-x: hidden;
+      overflow-x: visible;
     }
     .document-html-body table {
       width: 100% !important;
@@ -77,6 +76,10 @@ function buildPrintStyles(pageSize: 'a4' | 'label', margins: PageMarginsMm) {
       hyphens: auto;
       white-space: normal !important;
       box-sizing: border-box !important;
+    }
+    /* Поля документа: сохранить Enter / пробелы / отступы (перебивает white-space ячейки). */
+    .document-html-body .doc-field {
+      white-space: pre-wrap !important;
     }
     .document-html-body img {
       max-width: 100% !important;
@@ -139,8 +142,6 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
   const primary = documents[0]!
   const margins = templatePageMargins(primary.body, primary.pageSize)
   const styles = buildPrintStyles(primary.pageSize, margins)
-  const pageWmm = primary.pageSize === 'label' ? 58 : 210
-  const contentWmm = Math.max(8, pageWmm - margins.left - margins.right)
 
   const bodies = await Promise.all(
     documents.map(async (document) => {
@@ -154,7 +155,7 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=${pageWmm}mm, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>&nbsp;</title>
   <style>${styles}</style>
 </head>
@@ -163,7 +164,6 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
   <script>
     (function () {
       var printed = false;
-      var contentWmm = ${contentWmm};
       function whenImagesReady(done) {
         var imgs = Array.prototype.slice.call(document.images || []);
         var pending = imgs.filter(function (img) { return !img.complete; });
@@ -179,37 +179,15 @@ export async function printDocumentsInWindow(popup: Window, documents: Printable
         });
         setTimeout(done, 4000);
       }
-      /**
-       * Safari: ширина popup ≠ ширина A4, поэтому меряем относительно
-       * известной ширины контента листа (mm → CSS px), а не clientWidth окна.
-       */
-      function fitOverflow() {
-        var available = contentWmm * 96 / 25.4;
-        var roots = Array.prototype.slice.call(document.querySelectorAll('.document-html-body'));
-        roots.forEach(function (root) {
-          if (!(root instanceof HTMLElement)) return;
-          root.style.transform = '';
-          root.style.width = '100%';
-          root.style.maxWidth = contentWmm + 'mm';
-          var needed = Math.max(root.scrollWidth, root.offsetWidth);
-          if (!available || !needed || needed <= available + 2) return;
-          var scale = available / needed;
-          if (scale >= 0.995) return;
-          if (scale < 0.85) scale = 0.85;
-          root.style.transformOrigin = 'top left';
-          root.style.transform = 'scale(' + scale + ')';
-          root.style.width = (100 / scale) + '%';
-        });
-      }
       function triggerPrint() {
         if (printed) return;
         printed = true;
         try { window.focus(); } catch (e) {}
+        // Масштаб — только в системном диалоге (Scale / «Вписать в страницу»).
         try { window.print(); } catch (e) {}
       }
       function start() {
         whenImagesReady(function () {
-          fitOverflow();
           setTimeout(triggerPrint, 200);
         });
       }
@@ -341,7 +319,10 @@ async function renderDocumentCanvas(input: PrintableDocument) {
       ${DOCUMENT_HTML_BODY_STYLE}
       [data-pdf-export] .document-html-body { margin: 0; padding: 0; width: 100%; }
       [data-pdf-export] a[href]::after { content: none !important; }
-      [data-pdf-export] .doc-field { background: transparent !important; }
+      [data-pdf-export] .doc-field {
+        background: transparent !important;
+        white-space: pre-wrap !important;
+      }
     </style>
     <div class="pdf-page-shell">
       <div class="document-html-body">${markup}</div>

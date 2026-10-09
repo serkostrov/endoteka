@@ -111,13 +111,12 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
 
   const flatSuggestions = useMemo(() => {
     const rows: SuggestItem[] = []
-    const productsOpen = Boolean(expanded[FOLDER_PRODUCTS]) || Boolean(term)
-    const servicesOpen = Boolean(expanded[FOLDER_SERVICES]) || Boolean(term)
+    const productsOpen = Boolean(expanded[FOLDER_PRODUCTS])
+    const servicesOpen = Boolean(expanded[FOLDER_SERVICES])
 
     if (productsOpen) {
       for (const group of productGroups) {
-        const groupOpen = Boolean(expanded[group.id]) || Boolean(term)
-        if (!groupOpen) {
+        if (!expanded[group.id]) {
           continue
         }
         for (const item of group.items) {
@@ -131,7 +130,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
       }
     }
     return rows
-  }, [expanded, productGroups, serviceItems, term])
+  }, [expanded, productGroups, serviceItems])
 
   const searching =
     (canUpdateOrder && servicesQuery.isFetching) ||
@@ -141,20 +140,43 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
     setActiveIndex(0)
   }, [flatSuggestions])
 
+  // При новом поисковом запросе раскрываем папки с результатами один раз.
+  // Дальше пользователь может сворачивать — повторный refetch не перетирает его выбор.
+  const autoExpandTermRef = useRef('')
   useEffect(() => {
     if (!term) {
+      autoExpandTermRef.current = ''
       return
     }
+
+    const isNewTerm = autoExpandTermRef.current !== term
+    autoExpandTermRef.current = term
+
     setExpanded((current) => {
-      const next: Record<string, boolean> = {
-        ...current,
-        [FOLDER_SERVICES]: true,
-        [FOLDER_PRODUCTS]: true,
+      let changed = false
+      const next = { ...current }
+
+      if (isNewTerm) {
+        if (!next[FOLDER_PRODUCTS]) {
+          next[FOLDER_PRODUCTS] = true
+          changed = true
+        }
+        if (!next[FOLDER_SERVICES]) {
+          next[FOLDER_SERVICES] = true
+          changed = true
+        }
       }
+
       for (const group of productGroups) {
-        next[group.id] = true
+        if (isNewTerm || !(group.id in next)) {
+          if (next[group.id] !== true) {
+            next[group.id] = true
+            changed = true
+          }
+        }
       }
-      return next
+
+      return changed ? next : current
     })
   }, [term, productGroups])
 
@@ -283,8 +305,8 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
 
   const busy = consume.isPending || addService.isPending
   const showPanel = open && !busy
-  const servicesOpen = Boolean(expanded[FOLDER_SERVICES]) || Boolean(term)
-  const productsOpen = Boolean(expanded[FOLDER_PRODUCTS]) || Boolean(term)
+  const servicesOpen = Boolean(expanded[FOLDER_SERVICES])
+  const productsOpen = Boolean(expanded[FOLDER_PRODUCTS])
 
   return (
     <>
@@ -330,7 +352,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
                             </p>
                           ) : (
                             productGroups.map((group) => {
-                              const groupOpen = Boolean(expanded[group.id]) || Boolean(term)
+                              const groupOpen = Boolean(expanded[group.id])
                               return (
                                 <FolderBlock
                                   key={group.id}
