@@ -3,7 +3,6 @@ import QRCode from 'qrcode'
 import { openPrintWindow } from '@/features/documents/print-documents'
 import {
   isBarcodeType,
-  labelPayload,
   renderLinearBarcode,
   type BarcodeType,
 } from '@/lib/constants/barcode'
@@ -14,11 +13,45 @@ const LABEL_H_MM = 40
 /** Внутренние поля — чтобы текст/штрихкод не обрезались принтером. */
 const PAD_MM = 2.5
 
+/**
+ * Данные этикетки позиции склада.
+ * Строго с карточки: name / code / article — текст; barcode — только поле штрихкода.
+ * Без fallback code→barcode и без смешивания полей.
+ */
 export type PrintableItemLabel = {
   name: string
   code: string
+  article: string
   barcode: string
   barcodeType: string
+}
+
+export function toPrintableItemLabel(item: {
+  name: string
+  code?: string | null
+  article?: string | null
+  barcode?: string | null
+  barcodeType?: string | null
+}): PrintableItemLabel {
+  return {
+    name: (item.name ?? '').trim(),
+    code: (item.code ?? '').trim(),
+    article: (item.article ?? '').trim(),
+    barcode: (item.barcode ?? '').trim(),
+    barcodeType: item.barcodeType?.trim() || 'code128',
+  }
+}
+
+/** Строка кода/артикула на этикетке — только заполненные поля карточки. */
+export function itemLabelMetaLine(item: Pick<PrintableItemLabel, 'code' | 'article'>) {
+  const parts: string[] = []
+  if (item.code) {
+    parts.push(`Код ${item.code}`)
+  }
+  if (item.article) {
+    parts.push(`Арт. ${item.article}`)
+  }
+  return parts.join(' · ')
 }
 
 function escapeHtml(value: string) {
@@ -31,7 +64,7 @@ function escapeHtml(value: string) {
 
 async function buildBarcodeMarkup(type: BarcodeType, payload: string) {
   if (!payload) {
-    return `<p class="label-empty">Нет значения</p>`
+    return `<p class="label-empty">Нет штрихкода</p>`
   }
 
   if (type === 'qr') {
@@ -59,13 +92,14 @@ async function buildBarcodeMarkup(type: BarcodeType, payload: string) {
 
 async function buildLabelHtml(item: PrintableItemLabel) {
   const type: BarcodeType = isBarcodeType(item.barcodeType) ? item.barcodeType : 'code128'
-  const payload = labelPayload(item.barcode, item.code)
-  const barcode = await buildBarcodeMarkup(type, payload)
-  const title = escapeHtml(item.name.trim() || item.code || '—')
+  const barcode = await buildBarcodeMarkup(type, item.barcode)
+  const title = escapeHtml(item.name || '—')
+  const meta = itemLabelMetaLine(item)
 
   return `
     <section class="label-sheet">
       <p class="label-title">${title}</p>
+      ${meta ? `<p class="label-meta">${escapeHtml(meta)}</p>` : ''}
       <div class="label-barcode">${barcode}</div>
     </section>
   `
@@ -110,19 +144,34 @@ function buildStyles() {
       margin: 0;
       padding: 0;
       flex: 0 0 auto;
-      max-height: 9mm;
+      max-height: 7.5mm;
       overflow: hidden;
       text-align: center;
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 8.5pt;
+      font-size: 8pt;
       font-weight: 600;
       line-height: 1.15;
       word-break: break-word;
     }
+    .label-meta {
+      margin: 0.6mm 0 0;
+      padding: 0;
+      flex: 0 0 auto;
+      max-height: 4.5mm;
+      overflow: hidden;
+      text-align: center;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 6.5pt;
+      font-weight: 400;
+      line-height: 1.15;
+      color: #111;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
     .label-barcode {
       flex: 1 1 auto;
       min-height: 0;
-      margin-top: 1.2mm;
+      margin-top: 1mm;
       display: flex;
       flex-direction: column;
       align-items: stretch;
@@ -132,16 +181,16 @@ function buildStyles() {
     .label-bars {
       display: block;
       width: 100%;
-      height: 18mm;
+      height: 15mm;
       max-height: 100%;
     }
     .label-payload {
-      margin: 1mm 0 0;
+      margin: 0.8mm 0 0;
       padding: 0;
       flex: 0 0 auto;
       text-align: center;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 7.5pt;
+      font-size: 7pt;
       line-height: 1;
       letter-spacing: 0.02em;
       white-space: nowrap;
@@ -153,7 +202,7 @@ function buildStyles() {
       width: auto;
       height: auto;
       max-width: 100%;
-      max-height: 22mm;
+      max-height: 18mm;
       margin: 0 auto;
       object-fit: contain;
     }
@@ -161,15 +210,15 @@ function buildStyles() {
       margin: 0;
       text-align: center;
       font-family: Arial, Helvetica, sans-serif;
-      font-size: 8pt;
+      font-size: 7.5pt;
       color: #666;
     }
   `
 }
 
 /**
- * Печать этикеток в том же виде, что предпросмотр на карточке позиции
- * (название сверху, штрихкод по центру, значение под ним).
+ * Печать этикеток: те же поля, что на карточке позиции
+ * (название, код/артикул, штрихкод из поля barcode).
  */
 export async function printItemLabels(items: PrintableItemLabel[]) {
   if (items.length === 0) {
@@ -182,7 +231,7 @@ export async function printItemLabels(items: PrintableItemLabel[]) {
   }
 
   try {
-    const sheets = await Promise.all(items.map((item) => buildLabelHtml(item)))
+    const sheets = await Promise.all(items.map((item) => buildLabelHtml(toPrintableItemLabel(item))))
     popup.document.open()
     popup.document.write(`<!DOCTYPE html>
 <html lang="ru">

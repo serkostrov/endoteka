@@ -7,14 +7,16 @@ import { useHasPermission } from '@/features/auth'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 
-import { printItemLabels } from '../lib/print-item-labels'
-import type { InventoryItem } from '../services/inventory-service'
+import { useItemLabelPrint } from '../lib/item-label-print-context'
+import { printItemLabels, toPrintableItemLabel, type PrintableItemLabel } from '../lib/print-item-labels'
 
 type ItemLabelPrintButtonProps = {
-  item: Pick<InventoryItem, 'name' | 'code' | 'barcode' | 'barcodeType'>
+  /** Запасной снимок, если форма ещё не зарегистрировала превью (например, только чтение). */
+  fallback?: PrintableItemLabel
 }
 
-export function ItemLabelPrintButton({ item }: ItemLabelPrintButtonProps) {
+export function ItemLabelPrintButton({ fallback }: ItemLabelPrintButtonProps) {
+  const labelPrint = useItemLabelPrint()
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const canReadDocs = useHasPermission(Permission.DocumentsRead)
   const canCreateDocs = useHasPermission(Permission.DocumentsCreate)
@@ -27,16 +29,15 @@ export function ItemLabelPrintButton({ item }: ItemLabelPrintButtonProps) {
   }
 
   async function handlePrint() {
+    const snapshot = labelPrint?.getSnapshot() ?? (fallback ? toPrintableItemLabel(fallback) : null)
+    if (!snapshot) {
+      toast.error('Нет данных для этикетки')
+      return
+    }
+
     setPending(true)
     try {
-      await printItemLabels([
-        {
-          name: item.name,
-          code: item.code,
-          barcode: item.barcode,
-          barcodeType: item.barcodeType,
-        },
-      ])
+      await printItemLabels([snapshot])
       toast.success('Этикетка отправлена на печать')
     } catch (error) {
       toast.error(getErrorMessage(error))

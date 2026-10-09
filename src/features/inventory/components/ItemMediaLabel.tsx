@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { WandSparkles } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Printer, WandSparkles } from 'lucide-react'
 import QRCode from 'qrcode'
 import { toast } from 'sonner'
 import type { UseFormReturn } from 'react-hook-form'
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { useHasPermission } from '@/features/auth'
 import {
   barcodeTypeLabels,
   BARCODE_TYPES,
@@ -19,6 +20,7 @@ import {
   renderLinearBarcode,
   type BarcodeType,
 } from '@/lib/constants/barcode'
+import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { pickImageFiles } from '@/lib/pick-image-files'
 
@@ -29,6 +31,8 @@ import {
   useSetInventoryItemPhotoCover,
   useUploadInventoryItemPhoto,
 } from '../hooks/use-inventory'
+import { useRegisterItemLabelSnapshot } from '../lib/item-label-print-context'
+import { itemLabelMetaLine, printItemLabels, toPrintableItemLabel } from '../lib/print-item-labels'
 import type { InventoryItemFormValues } from '../schemas'
 import { INVENTORY_ITEM_PHOTO_ACCEPT, type InventoryItem } from '../services/inventory-service'
 
@@ -39,10 +43,13 @@ type ItemMediaLabelProps = {
 }
 
 export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
+  const name = form.watch('name')
+  const code = form.watch('code')
+  const article = form.watch('article')
   const barcode = form.watch('barcode')
-  const [barcodeType, setBarcodeType] = useState<BarcodeType>(() =>
-    isBarcodeType(item.barcodeType) ? item.barcodeType : 'code128',
-  )
+  const barcodeTypeRaw = form.watch('barcodeType')
+  const barcodeType: BarcodeType = isBarcodeType(barcodeTypeRaw) ? barcodeTypeRaw : 'code128'
+
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
 
@@ -52,13 +59,22 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
   const setCover = useSetInventoryItemPhotoCover(item.id)
   const setLabel = useSetInventoryItemLabel(item.id)
 
-  useEffect(() => {
-    if (isBarcodeType(item.barcodeType)) {
-      setBarcodeType(item.barcodeType)
-    }
-  }, [item.barcodeType])
+  const getSnapshot = useCallback(
+    () =>
+      toPrintableItemLabel({
+        name,
+        code,
+        article,
+        barcode,
+        barcodeType,
+      }),
+    [article, barcode, barcodeType, code, name],
+  )
 
-  const payload = labelPayload(barcode, form.watch('code') || item.code)
+  useRegisterItemLabelSnapshot(getSnapshot)
+
+  const payload = labelPayload(barcode)
+  const metaLine = itemLabelMetaLine({ code, article })
   const photos = photosQuery.data ?? []
   const lightboxItems: ImageLightboxItem[] = photos
     .filter((photo) => photo.signedUrl)
@@ -142,9 +158,9 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
           barcodeType={barcodeType}
           barcode={barcode}
           payload={payload}
-          itemName={item.name}
+          snapshot={getSnapshot()}
           onTypeChange={(next) => {
-            setBarcodeType(next)
+            form.setValue('barcodeType', next, { shouldDirty: true })
             void persistLabel(barcode, next)
           }}
           onBarcodeChange={(next) => form.setValue('barcode', next, { shouldDirty: true })}
@@ -206,7 +222,7 @@ function LabelPreviewCard({
   barcodeType,
   barcode,
   payload,
-  itemName,
+  snapshot,
   onTypeChange,
   onBarcodeChange,
   onBarcodeBlur,
@@ -216,12 +232,33 @@ function LabelPreviewCard({
   barcodeType: BarcodeType
   barcode: string
   payload: string
-  itemName: string
+  snapshot: ReturnType<typeof toPrintableItemLabel>
   onTypeChange: (type: BarcodeType) => void
   onBarcodeChange: (value: string) => void
   onBarcodeBlur: () => void
   onGenerate: () => void
 }) {
+  const canReceive = useHasPermission(Permission.InventoryReceive)
+  const canReadDocs = useHasPermission(Permission.DocumentsRead)
+  const canCreateDocs = useHasPermission(Permission.DocumentsCreate)
+  const canPrintDocs = useHasPermission(Permission.DocumentsPrint)
+  const canPrint = canReceive || canReadDocs || canCreateDocs || canPrintDocs
+  const [printPending, setPrintPending] = useState(false)
+  const metaLine = itemLabelMetaLine(snapshot)
+
+  async function handlePrint() {
+    setPrintPending(true)
+    try {
+      // Печать = точная копия превью (те же поля карточки).
+      await printItemLabels([snapshot])
+      toast.success('Этикетка отправлена на печать')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setPrintPending(false)
+    }
+  }
+
   return (
     <div className="flex h-full min-h-[14rem] flex-col gap-2">
       <div className="flex shrink-0 items-center gap-2">
@@ -258,12 +295,30 @@ function LabelPreviewCard({
             <WandSparkles className="size-4" />
           </Button>
         ) : null}
+        {canPrint ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            aria-label={printPending ? 'Подготовка…' : 'Распечатать этикетку'}
+            title="Распечатать этикетку"
+            disabled={printPending}
+            onClick={() => void handlePrint()}
+          >
+            <Printer className="size-4" />
+          </Button>
+        ) : null}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-white p-2 text-black">
         <p className="line-clamp-2 shrink-0 text-center text-[11px] font-medium leading-tight">
-          {itemName}
+          {snapshot.name || '—'}
         </p>
+        {metaLine ? (
+          <p className="mt-0.5 shrink-0 truncate text-center text-[9px] leading-tight text-neutral-700">
+            {metaLine}
+          </p>
+        ) : null}
         <div className="mt-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden">
           <BarcodeGlyph type={barcodeType} payload={payload} />
         </div>
@@ -314,7 +369,7 @@ function BarcodeGlyph({ type, payload }: { type: BarcodeType; payload: string })
   }, [type, payload])
 
   if (!payload) {
-    return <p className="text-[11px] text-neutral-400">Нет значения</p>
+    return <p className="text-[11px] text-neutral-400">Нет штрихкода</p>
   }
 
   if (type === 'qr') {
@@ -358,8 +413,13 @@ export function ItemMediaLabelReadonly({ item }: { item: InventoryItem }) {
   const photosQuery = useInventoryItemPhotos(item.id)
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
-  const barcodeType = isBarcodeType(item.barcodeType) ? item.barcodeType : 'code128'
-  const payload = labelPayload(item.barcode, item.code)
+  const snapshot = toPrintableItemLabel(item)
+  const barcodeType = isBarcodeType(snapshot.barcodeType) ? snapshot.barcodeType : 'code128'
+  const payload = labelPayload(snapshot.barcode)
+  const metaLine = itemLabelMetaLine(snapshot)
+
+  useRegisterItemLabelSnapshot(() => snapshot)
+
   const photos = (photosQuery.data ?? [])
     .filter((photo) => photo.signedUrl)
     .map((photo) => ({
@@ -383,13 +443,18 @@ export function ItemMediaLabelReadonly({ item }: { item: InventoryItem }) {
         <p className="shrink-0 text-xs text-muted-foreground">{barcodeTypeLabels[barcodeType]}</p>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-white p-2 text-black">
           <p className="line-clamp-2 shrink-0 text-center text-[11px] font-medium leading-tight">
-            {item.name}
+            {snapshot.name || '—'}
           </p>
+          {metaLine ? (
+            <p className="mt-0.5 shrink-0 truncate text-center text-[9px] leading-tight text-neutral-700">
+              {metaLine}
+            </p>
+          ) : null}
           <div className="mt-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden">
             <BarcodeGlyph type={barcodeType} payload={payload} />
           </div>
         </div>
-        <p className="truncate font-mono text-xs text-muted-foreground">{item.barcode || '—'}</p>
+        <p className="truncate font-mono text-xs text-muted-foreground">{snapshot.barcode || '—'}</p>
       </div>
       <ImageGalleryGrid
         open={galleryOpen}

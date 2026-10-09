@@ -40,6 +40,7 @@ import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
 import { useHasPermission } from '@/features/auth'
 import { useCreateSale } from '@/features/sales/hooks/use-sales'
+import { isBarcodeType } from '@/lib/constants/barcode'
 import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
 import {
   formatMoney,
@@ -69,6 +70,8 @@ import {
   useInventoryNameMatches,
   useUpdateInventoryItem,
 } from '../hooks/use-inventory'
+import { ItemLabelPrintProvider } from '../lib/item-label-print-context'
+import { toPrintableItemLabel } from '../lib/print-item-labels'
 import { inventoryItemFormSchema, type InventoryItemFormValues } from '../schemas'
 import {
   isInventoryDuplicateError,
@@ -179,58 +182,62 @@ function InventoryItemSheetContent({
     ) : null
 
   return (
-    <SheetContent
-      side="right"
-      className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,44rem)]"
-      onOpenAutoFocus={(event) => event.preventDefault()}
-      actions={
-        item ? (
-          <SheetEntityToolbar
-            leading={<ItemLabelPrintButton item={item} />}
-            onDelete={canReceive ? () => setDeleteOpen(true) : undefined}
-            extra={toolbarExtra}
-          />
-        ) : null
-      }
-    >
-      <SheetHeader className="sr-only">
-        <SheetTitle>Позиция склада</SheetTitle>
-        <SheetDescription>
-          Изменения карточки обновляют цены и название во всех заказах, где эта позиция из справочника.
-        </SheetDescription>
-      </SheetHeader>
-      <div className="space-y-4 p-4 pr-14">
-        {cardQuery.isLoading ? (
-          <LoadingState label="Загрузка позиции" className="min-h-40" />
-        ) : cardQuery.error ? (
-          <ErrorState description={getErrorMessage(cardQuery.error)} />
-        ) : !cardQuery.data ? (
-          <ErrorState description="Позиция не найдена." />
-        ) : (
-          <ItemCardBody
-            item={cardQuery.data.item}
-            batches={cardQuery.data.batches}
-            movements={cardQuery.data.movements}
-            variant="sheet"
-            onDeleted={onClose}
-            hideChromeDelete
-          />
-        )}
-      </div>
-      <ConfirmDialog
-        open={deleteOpen}
-        title="Удалить позицию"
-        description={
-          item
-            ? `${item.name} будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.`
-            : ''
+    <ItemLabelPrintProvider>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,44rem)]"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        actions={
+          item ? (
+            <SheetEntityToolbar
+              leading={
+                <ItemLabelPrintButton fallback={toPrintableItemLabel(item)} />
+              }
+              onDelete={canReceive ? () => setDeleteOpen(true) : undefined}
+              extra={toolbarExtra}
+            />
+          ) : null
         }
-        confirmLabel="Удалить"
-        isPending={remove.isPending}
-        onOpenChange={setDeleteOpen}
-        onConfirm={() => void handleDelete()}
-      />
-    </SheetContent>
+      >
+        <SheetHeader className="sr-only">
+          <SheetTitle>Позиция склада</SheetTitle>
+          <SheetDescription>
+            Изменения карточки обновляют цены и название во всех заказах, где эта позиция из справочника.
+          </SheetDescription>
+        </SheetHeader>
+        <div className="space-y-4 p-4 pr-14">
+          {cardQuery.isLoading ? (
+            <LoadingState label="Загрузка позиции" className="min-h-40" />
+          ) : cardQuery.error ? (
+            <ErrorState description={getErrorMessage(cardQuery.error)} />
+          ) : !cardQuery.data ? (
+            <ErrorState description="Позиция не найдена." />
+          ) : (
+            <ItemCardBody
+              item={cardQuery.data.item}
+              batches={cardQuery.data.batches}
+              movements={cardQuery.data.movements}
+              variant="sheet"
+              onDeleted={onClose}
+              hideChromeDelete
+            />
+          )}
+        </div>
+        <ConfirmDialog
+          open={deleteOpen}
+          title="Удалить позицию"
+          description={
+            item
+              ? `${item.name} будет удалена. Если по ней есть партии, движения или документы, удаление не пройдёт.`
+              : ''
+          }
+          confirmLabel="Удалить"
+          isPending={remove.isPending}
+          onOpenChange={setDeleteOpen}
+          onConfirm={() => void handleDelete()}
+        />
+      </SheetContent>
+    </ItemLabelPrintProvider>
   )
 }
 
@@ -498,6 +505,7 @@ function ItemCardEditor({
       code: item.code,
       article: item.article,
       barcode: item.barcode,
+      barcodeType: isBarcodeType(item.barcodeType) ? item.barcodeType : 'code128',
       description: item.description,
       categoryId: item.categoryId,
       unitId: item.unitId,

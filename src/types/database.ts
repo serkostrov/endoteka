@@ -1522,6 +1522,10 @@ export type Database = {
         Args: { target_entity_code: string; target_record_id: string; field_values: Json }
         Returns: undefined
       }
+      list_dynamic_field_values: {
+        Args: { target_entity_code: string; target_record_id: string }
+        Returns: { field_id: string; value: Json }[]
+      }
       preview_next_order_number: {
         Args: Record<PropertyKey, never>
         Returns: string

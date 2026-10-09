@@ -322,14 +322,20 @@ export async function listDynamicFieldValues(
   const supabase = getSupabase()
   const [fields, valuesResult] = await Promise.all([
     listDynamicFields(entityCode),
-    supabase.from('dynamic_field_values').select('field_id, value').eq('entity_code', entityCode).eq('record_id', recordId),
+    // security definer: order_work читается по orders:read (не order_work:read)
+    supabase.rpc('list_dynamic_field_values', {
+      target_entity_code: entityCode,
+      target_record_id: recordId,
+    }),
   ])
 
   if (valuesResult.error) {
     throw toAppError(valuesResult.error, 'Не удалось загрузить значения полей.')
   }
 
-  const byFieldId = new Map((valuesResult.data ?? []).map((row) => [row.field_id, parseFieldValue(row.value)]))
+  const byFieldId = new Map(
+    (valuesResult.data ?? []).map((row) => [row.field_id, parseFieldValue(row.value)]),
+  )
   const result: Record<string, DynamicFieldValueData> = {}
 
   for (const field of fields) {

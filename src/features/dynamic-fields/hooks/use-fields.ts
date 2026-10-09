@@ -61,11 +61,17 @@ export function useDocumentSettingsFields() {
 }
 
 export function useDynamicFieldValues(entityCode: string | undefined, recordId: string | undefined) {
+  const sharedOnOrder =
+    entityCode === 'order_work' || entityCode === 'orders' || entityCode === 'diagnostics'
+
   return useQuery({
     queryKey:
       entityCode && recordId ? queryKeys.fields.values(entityCode, recordId) : queryKeys.fields.all,
     queryFn: () => listDynamicFieldValues(entityCode ?? '', recordId ?? ''),
     enabled: Boolean(entityCode && recordId),
+    // Карточка заказа может быть открыта у нескольких пользователей — подтягиваем чужие сохранения.
+    refetchOnWindowFocus: true,
+    refetchInterval: sharedOnOrder ? 12_000 : false,
   })
 }
 

@@ -328,7 +328,10 @@ function WorkCompositionFields({
     try {
       await saveDynamicFieldValues(FieldEntity.OrderWork, orderId, parsed.data)
       queryClient.setQueryData(valuesKey, parsed.data)
-      await queryClient.invalidateQueries({ queryKey: valuesKey })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: valuesKey }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) }),
+      ])
       setDraft(null)
       toast.success('Состав работ сохранён')
     } catch (error) {

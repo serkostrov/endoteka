@@ -149,9 +149,12 @@ export function renderLinearBarcode(type: Exclude<BarcodeType, 'qr'>, raw: strin
   return { kind: 'svg', ...path, payload: upcBody }
 }
 
-export function labelPayload(barcode: string, code: string) {
-  const trimmed = barcode.trim()
-  return trimmed || code.trim()
+/**
+ * Значение для штрихкода на этикетке — только поле barcode позиции.
+ * Код/артикул на этикетку не подставляются (они печатаются текстом отдельно).
+ */
+export function labelPayload(barcode: string, _fallbackCode?: string) {
+  return barcode.trim()
 }
 
 function randomDigits(length: number) {

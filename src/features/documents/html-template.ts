@@ -479,7 +479,7 @@ export function prepareDocumentHtml(html: string, context: DocumentContext) {
   }
 
   interpolateNode(root, context.values)
-  // Пустой item.barcode после подстановки → код позиции, иначе остаётся текст «Штрихкод».
+  // Пустой data-code после подстановки — только из явного barcode-поля источника, без подмены кодом.
   fillEmptyBarcodeCodes(root, context.values)
   return root.innerHTML
 }
@@ -487,9 +487,8 @@ export function prepareDocumentHtml(html: string, context: DocumentContext) {
 function fillEmptyBarcodeCodes(root: Element, values: Record<string, string>) {
   const fallback = (
     values['item.barcode'] ||
-    values['item.code'] ||
-    values['part.code'] ||
-    values['line.code'] ||
+    values['part.barcode'] ||
+    values['line.barcode'] ||
     ''
   ).trim()
   if (!fallback) {

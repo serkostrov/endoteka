@@ -24,6 +24,8 @@ export function useOrderJournal(orderId: string | undefined) {
     queryKey: orderId ? queryKeys.orders.history(orderId) : queryKeys.orders.all,
     queryFn: () => getOrderJournal(orderId ?? ''),
     enabled: Boolean(orderId),
+    refetchOnWindowFocus: true,
+    refetchInterval: 12_000,
   })
 }
 

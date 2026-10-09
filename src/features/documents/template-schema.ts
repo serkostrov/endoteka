@@ -379,5 +379,5 @@ export function createBlock(type: TemplateBlockType): TemplateBlock {
   if (type === TemplateBlockType.Qr) {
     return { id, type: 'qr', value: '{{order.number}}' }
   }
-  return { id, type: 'barcode', value: '{{item.code}}' }
+  return { id, type: 'barcode', value: '{{item.barcode}}' }
 }

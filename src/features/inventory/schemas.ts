@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { BARCODE_TYPES } from '@/lib/constants/barcode'
+
 const moneySchema = z.number().min(0, 'Цена не может быть отрицательной')
 const quantitySchema = z
   .number()
@@ -11,6 +13,8 @@ export const inventoryItemFormSchema = z.object({
   code: z.string().trim(),
   article: z.string().trim(),
   barcode: z.string().trim(),
+  /** Тип штрихкода на этикетке — то же значение, что уходит в печать. */
+  barcodeType: z.enum(BARCODE_TYPES),
   description: z.string().trim(),
   categoryId: z.string().min(1, 'Выберите категорию'),
   unitId: z.string().min(1, 'Выберите единицу измерения'),
@@ -27,6 +31,7 @@ export const emptyInventoryItemFormValues: InventoryItemFormValues = {
   code: '',
   article: '',
   barcode: '',
+  barcodeType: 'code128',
   description: '',
   categoryId: '',
   unitId: '',

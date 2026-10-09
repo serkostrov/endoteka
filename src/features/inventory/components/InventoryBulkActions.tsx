@@ -10,7 +10,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { formatInteger } from '@/lib/utils/number'
 
 import { useDeleteInventoryItem } from '../hooks/use-inventory'
-import { printItemLabels } from '../lib/print-item-labels'
+import { printItemLabels, toPrintableItemLabel } from '../lib/print-item-labels'
 import { getInventoryItemCard } from '../services/inventory-service'
 
 type InventoryBulkActionsProps = {
@@ -60,12 +60,7 @@ export function InventoryBulkActions({ selectedIds, onClear }: InventoryBulkActi
         if (!card) {
           continue
         }
-        labels.push({
-          name: card.item.name,
-          code: card.item.code,
-          barcode: card.item.barcode,
-          barcodeType: card.item.barcodeType,
-        })
+        labels.push(toPrintableItemLabel(card.item))
       }
       if (labels.length === 0) {
         toast.error('Не удалось загрузить позиции для печати')

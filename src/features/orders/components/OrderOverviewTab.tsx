@@ -178,7 +178,12 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
 
       if (shouldSaveExtra) {
         await saveDynamicFieldValues(FieldEntity.Orders, order.id, extra)
-        await queryClient.invalidateQueries({ queryKey: queryKeys.fields.values(FieldEntity.Orders, order.id) })
+        await Promise.all([
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.fields.values(FieldEntity.Orders, order.id),
+          }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(order.id) }),
+        ])
       }
 
       setExtraDraft(null)

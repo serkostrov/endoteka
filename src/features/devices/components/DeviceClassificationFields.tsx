@@ -40,9 +40,9 @@ type DeviceClassificationFieldsProps = {
 const NONE_LABEL = 'Не указано'
 
 const headerTriggerClass =
-  'h-auto min-h-[1.45em] w-auto justify-start gap-1 rounded-[2px] border-0 bg-transparent px-1 py-0.5 shadow-none ' +
-  'text-base font-semibold hover:bg-muted/25 focus-visible:border-0 focus-visible:ring-0 ' +
-  'data-[size=default]:h-auto md:text-base [&_svg]:size-3.5 [&_svg]:opacity-40'
+  'h-auto min-h-[1.35em] w-auto justify-start gap-0 rounded-sm border-0 bg-transparent px-0 py-0.5 shadow-none ' +
+  'text-base font-semibold leading-snug hover:bg-muted/25 focus-visible:border-0 focus-visible:ring-0 ' +
+  'data-[size=default]:h-auto md:text-base'
 
 const FIELD_META: Record<
   ClassificationField,
@@ -232,7 +232,8 @@ export function DeviceClassificationFields({
       <div
         className={cn(
           header
-            ? 'flex flex-wrap items-baseline gap-x-1.5 gap-y-1'
+            ? // Одна строка названия: тип производитель модель — только пробелы, без «·» и шевронов.
+              'flex flex-wrap items-baseline gap-x-[0.35em] gap-y-0'
             : parts === 'modification'
               ? 'min-w-0'
               : 'grid gap-3 sm:grid-cols-2',
@@ -250,6 +251,7 @@ export function DeviceClassificationFields({
               triggerSlot={triggerSlot}
               hideLabel={header}
               hideChevron={header}
+              compactMessage={header}
               allowCreate={canCreate}
               onCreate={(query) => {
                 setCreateName(query)
@@ -271,6 +273,7 @@ export function DeviceClassificationFields({
               triggerSlot={triggerSlot}
               hideLabel={header}
               hideChevron={header}
+              compactMessage={header}
               allowCreate={canCreate && groupId !== CLASSIFICATION_NONE}
               onCreate={(query) => {
                 setCreateName(query)
@@ -291,6 +294,7 @@ export function DeviceClassificationFields({
               triggerSlot={triggerSlot}
               hideLabel={header}
               hideChevron={header}
+              compactMessage={header}
               allowCreate={canCreate && brandId !== CLASSIFICATION_NONE}
               onCreate={(query) => {
                 setCreateName(query)
@@ -402,6 +406,7 @@ function RefSelect({
   triggerSlot,
   hideLabel = false,
   hideChevron = false,
+  compactMessage = false,
   allowCreate = false,
   onCreate,
 }: {
@@ -416,6 +421,8 @@ function RefSelect({
   hideLabel?: boolean
   /** В шапке карточки шевроны выглядят как точки между названиями. */
   hideChevron?: boolean
+  /** В шапке не резервируем место под FormMessage — иначе между словами появляются «дыры». */
+  compactMessage?: boolean
   allowCreate?: boolean
   onCreate?: (query: string) => void
 }) {
@@ -439,12 +446,15 @@ function RefSelect({
       name={name as Path<DeviceClassificationFormValues>}
       render={({ field }) => {
         const value = field.value || CLASSIFICATION_NONE
-        const selectedLabel =
+        const rawLabel =
           value === CLASSIFICATION_NONE
             ? NONE_LABEL
             : (items.find((item) => item.id === value)?.name ?? NONE_LABEL)
+        // На случай старых данных со средней точкой в названии.
+        const selectedLabel = rawLabel.replace(/\s*·\s*/g, ' ').replace(/\s+/g, ' ').trim()
         const filtered = items.filter((item) => matchesQuery(item.name, query))
         const showNone = matchesQuery(NONE_LABEL, query)
+        const fieldError = form.getFieldState(name as Path<DeviceClassificationFormValues>).error
 
         function pick(next: string) {
           field.onChange(next)
@@ -453,7 +463,7 @@ function RefSelect({
         }
 
         return (
-          <FormItem className={cn('gap-1.5', hideLabel && 'w-fit')}>
+          <FormItem className={cn(compactMessage ? 'gap-0' : 'gap-1.5', hideLabel && 'w-fit')}>
             {hideLabel ? (
               <FormLabel className="sr-only">{label}</FormLabel>
             ) : (
@@ -482,7 +492,7 @@ function RefSelect({
                       'focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50',
                       'disabled:cursor-not-allowed disabled:opacity-50',
                       '[&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:opacity-50',
-                      hideChevron && 'gap-0 px-0.5',
+                      hideChevron && 'gap-0 px-0',
                       triggerClassName,
                     )}
                   >
@@ -561,7 +571,7 @@ function RefSelect({
                 </div>
               </PopoverContent>
             </Popover>
-            <FormMessage />
+            {compactMessage && !fieldError ? null : <FormMessage />}
           </FormItem>
         )
       }}
