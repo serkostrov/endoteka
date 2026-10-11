@@ -19,7 +19,7 @@ export function TaskOrderPicker({ orderId, orderNumber, onChange }: TaskOrderPic
   const debounced = useDebouncedValue(query, TASK_SEARCH_DEBOUNCE_MS)
   const ordersQuery = useOrders({
     search: debounced,
-    statusId: 'all',
+    statusIds: [],
     responsibleId: 'all',
     deadlineState: 'all',
     customerId: 'all',

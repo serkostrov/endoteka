@@ -12,7 +12,11 @@ import { LoadingState } from '@/components/shared/LoadingState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { useHasPermission, useCurrentUser } from '@/features/auth'
 import { useAddOrderJournalNote, useOrderJournal } from '@/features/diagnostics/hooks/use-diagnostics'
-import { formatJournalValue, type OrderJournalEvent } from '@/features/diagnostics/services/diagnostics-service'
+import {
+  formatJournalEventBody,
+  formatJournalValue,
+  type OrderJournalEvent,
+} from '@/features/diagnostics/services/diagnostics-service'
 import { CreateTaskDialog } from '@/features/tasks/components/CreateTaskDialog'
 import { TaskCompleteControl } from '@/features/tasks/components/TaskCompleteControl'
 import { TaskDetailSheet } from '@/features/tasks/components/TaskDetailSheet'
@@ -175,7 +179,7 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                         <span className="absolute top-1.5 -left-5 size-1.5 rounded-full bg-muted-foreground/50" />
                         <div className="mb-1 flex flex-wrap items-center gap-2">
                           <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                            {orderJournalEventTypeLabel(event.eventType)}
+                            {orderJournalEventTypeLabel(event.eventType, event.summary)}
                           </span>
                           <span className="text-[11px] text-muted-foreground">
                             {toDate(event.createdAt)
@@ -185,24 +189,31 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                         </div>
                         {isTaskJournalEvent(event.eventType) ? null : (
                           <p
-                            className={
-                              event.eventType === OrderJournalEventType.Comment
-                                ? 'whitespace-pre-wrap'
-                                : undefined
-                            }
+                            className={cn(
+                              event.eventType === OrderJournalEventType.Comment && 'whitespace-pre-wrap',
+                              isMoneyJournalEvent(event) && 'font-medium tabular-nums text-foreground',
+                            )}
                           >
-                            {event.summary}
+                            {formatJournalEventBody(event)}
                           </p>
                         )}
                         {eventActorName(event) ? (
                           <p className="mt-0.5 text-[11px] text-muted-foreground">{eventActorName(event)}</p>
                         ) : null}
-                        {event.changes.length > 0 ? (
+                        {event.changes.length > 0 && event.eventType !== 'total_changed' ? (
                           <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
                             {event.changes.map((change) => (
-                              <li key={`${event.id}-${change.field}`}>
-                                {change.label}: {formatJournalValue(change.from)} →{' '}
-                                {formatJournalValue(change.to)}
+                              <li key={`${event.id}-${change.field}`} className="tabular-nums">
+                                {change.label}:{' '}
+                                {formatJournalValue(change.from, {
+                                  field: change.field,
+                                  label: change.label,
+                                })}{' '}
+                                →{' '}
+                                {formatJournalValue(change.to, {
+                                  field: change.field,
+                                  label: change.label,
+                                })}
                               </li>
                             ))}
                           </ul>
@@ -562,6 +573,16 @@ function isTaskJournalEvent(eventType: string) {
     eventType === TaskJournalEvent.Completed ||
     eventType === TaskJournalEvent.Deleted
   )
+}
+
+function isMoneyJournalEvent(event: OrderJournalEvent) {
+  if (event.eventType === 'total_changed') {
+    return true
+  }
+  if (/сумм|итог/i.test(event.summary)) {
+    return true
+  }
+  return event.changes.some((change) => /sum|total|price|amount|сумм|цен|итог/i.test(`${change.field} ${change.label}`))
 }
 
 function eventActorName(event: OrderJournalEvent) {

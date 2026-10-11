@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
+import { Download, Trash2 } from 'lucide-react'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { DataTable } from '@/components/shared/DataTable'
@@ -10,13 +10,16 @@ import { IconActionButton } from '@/components/shared/IconActionButton'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
+import { useReferenceItemsBySetCode } from '@/features/references/hooks/use-references'
 import {
   INVENTORY_SEARCH_DEBOUNCE_MS,
   formatQuantity,
 } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
+import { ReferenceSetCode } from '@/lib/constants/references'
 import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePageSize } from '@/hooks/use-page-size'
@@ -24,7 +27,16 @@ import { usePageSize } from '@/hooks/use-page-size'
 import { InventoryBulkActions } from './InventoryBulkActions'
 import { InventoryItemCoverThumb } from './InventoryItemCoverThumb'
 import { InventoryItemSheet } from './InventoryItemScreen'
-import { useDeleteInventoryItem, useInventoryStock } from '../hooks/use-inventory'
+import {
+  useDeleteInventoryItem,
+  useExportInventoryStock,
+  useInventoryStock,
+} from '../hooks/use-inventory'
+import {
+  buildStockExportWorkbook,
+  downloadBlob,
+  stockExportFilename,
+} from '../lib/stock-export'
 import type { InventoryItem } from '../services/inventory-service'
 
 export function InventoryStockScreen() {
@@ -35,22 +47,39 @@ export function InventoryStockScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const stockParam = searchParams.get('stock')
   const stockFilter = stockParam === 'zero' || stockParam === 'in_stock' ? stockParam : 'all'
+  const categoryId = searchParams.get('category') || null
   const itemId = searchParams.get('item')
-  const filterKey = stockFilter
+  const filterKey = `${stockFilter}|${categoryId ?? ''}`
   const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
   if (seenFilterKey !== filterKey) {
     setSeenFilterKey(filterKey)
     setPage(1)
   }
   const debouncedSearch = useDebouncedValue(search, INVENTORY_SEARCH_DEBOUNCE_MS)
-  const stockQuery = useInventoryStock(debouncedSearch, page, pageSize, stockFilter)
+  const categoriesQuery = useReferenceItemsBySetCode(ReferenceSetCode.InventoryCategories)
+  const categoryOptions = useMemo(
+    () => (categoriesQuery.data ?? []).filter((item) => item.isActive),
+    [categoriesQuery.data],
+  )
+  const categorySelectValue =
+    categoryId && categoryOptions.some((item) => item.id === categoryId) ? categoryId : 'all'
+  const stockQuery = useInventoryStock(
+    debouncedSearch,
+    page,
+    pageSize,
+    stockFilter,
+    categorySelectValue === 'all' ? null : categorySelectValue,
+  )
   const canReceive = useHasPermission(Permission.InventoryReceive)
+  const canRead = useHasPermission(Permission.InventoryRead) || canReceive
+  const exportStock = useExportInventoryStock()
   const remove = useDeleteInventoryItem()
   const [deleteTarget, setDeleteTarget] = useState<InventoryItem | null>(null)
   const items = stockQuery.data?.items ?? []
   const total = stockQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
   const pageIdsKey = items.map((item) => item.id).join('|')
+  const activeCategoryId = categorySelectValue === 'all' ? null : categorySelectValue
 
   useEffect(() => {
     const visible = new Set(pageIdsKey ? pageIdsKey.split('|') : [])
@@ -85,11 +114,43 @@ export function InventoryStockScreen() {
     }
   }
 
+  async function handleExport() {
+    try {
+      const lines = await exportStock.mutateAsync({
+        search: debouncedSearch,
+        stockFilter,
+        categoryId: activeCategoryId,
+      })
+      if (lines.length === 0) {
+        toast.message('Нет позиций для экспорта по выбранным фильтрам')
+        return
+      }
+      const blob = await buildStockExportWorkbook(lines)
+      downloadBlob(blob, stockExportFilename())
+      toast.success(`Экспортировано позиций: ${lines.length}`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Склад"
         description="Текущие остатки запчастей и расходников на складе."
+        actions={
+          canRead ? (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exportStock.isPending}
+              onClick={() => void handleExport()}
+            >
+              <Download />
+              {exportStock.isPending ? 'Экспорт…' : 'Экспорт'}
+            </Button>
+          ) : null
+        }
       />
 
       <FilterBar>
@@ -107,6 +168,48 @@ export function InventoryStockScreen() {
           />
         </div>
         <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Группа деталей</p>
+          <Select
+            value={categorySelectValue}
+            onValueChange={(value) => {
+              const next = new URLSearchParams(searchParams)
+              if (value === 'all') {
+                next.delete('category')
+              } else {
+                next.set('category', value)
+              }
+              setSearchParams(next, { replace: true })
+              setPage(1)
+            }}
+          >
+            <SelectTrigger
+              aria-label="Фильтр по группе деталей"
+              className="h-9 w-52"
+              onClear={
+                categorySelectValue !== 'all'
+                  ? () => {
+                      const next = new URLSearchParams(searchParams)
+                      next.delete('category')
+                      setSearchParams(next, { replace: true })
+                      setPage(1)
+                    }
+                  : undefined
+              }
+              clearLabel="Сбросить фильтр по группе"
+            >
+              <SelectValue placeholder="Группа деталей" />
+            </SelectTrigger>
+            <SelectContent searchable>
+              <SelectItem value="all">Все группы</SelectItem>
+              {categoryOptions.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Остаток</p>
           <Select
             value={stockFilter}
@@ -121,7 +224,21 @@ export function InventoryStockScreen() {
               setPage(1)
             }}
           >
-            <SelectTrigger aria-label="Фильтр по остатку" className="h-9 w-44">
+            <SelectTrigger
+              aria-label="Фильтр по остатку"
+              className="h-9 w-44"
+              onClear={
+                stockFilter !== 'all'
+                  ? () => {
+                      const next = new URLSearchParams(searchParams)
+                      next.delete('stock')
+                      setSearchParams(next, { replace: true })
+                      setPage(1)
+                    }
+                  : undefined
+              }
+              clearLabel="Сбросить фильтр по остатку"
+            >
               <SelectValue placeholder="Остаток" />
             </SelectTrigger>
             <SelectContent searchable>
@@ -217,24 +334,14 @@ export function InventoryStockScreen() {
             header: 'Остаток',
             className: 'w-[1%] whitespace-nowrap text-right',
             cell: (row) => (
-              <div className="inline-flex flex-col items-end gap-0.5">
-                {row.stockQuantity < 0 ? (
-                  <StatusBadge tone="warning">Недостача</StatusBadge>
-                ) : row.stockQuantity <= 0 ? (
-                  <StatusBadge tone="warning">Нет остатка</StatusBadge>
-                ) : (
-                  <StatusBadge tone="success">В наличии</StatusBadge>
-                )}
-                <span
-                  className={
-                    row.stockQuantity < 0
-                      ? 'text-xs font-medium tabular-nums text-destructive'
-                      : 'text-xs tabular-nums text-muted-foreground'
-                  }
-                >
-                  {formatQuantity(row.stockQuantity)} {row.unitName}
-                </span>
-              </div>
+              <StatusBadge
+                tone={
+                  row.stockQuantity < 0 ? 'danger' : row.stockQuantity === 0 ? 'warning' : 'success'
+                }
+                className="tabular-nums"
+              >
+                {`${formatQuantity(row.stockQuantity)} ${row.unitName}`}
+              </StatusBadge>
             ),
           },
           ...(canReceive

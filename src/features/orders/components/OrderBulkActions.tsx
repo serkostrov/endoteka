@@ -7,6 +7,14 @@ import { DatePicker } from '@/components/shared/DatePicker'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -15,7 +23,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useHasPermission } from '@/features/auth'
 import { useWarrantyDefaults } from '@/features/devices/hooks/use-devices'
 import { useCreateDocument, useDocumentTemplates } from '@/features/documents/hooks/use-documents'
@@ -27,7 +34,12 @@ import { getErrorMessage } from '@/lib/errors'
 import { formatInteger } from '@/lib/utils/number'
 
 import { useDeleteOrder, useMoveOrderStatus, useOrderStatusCatalog } from '../hooks/use-orders'
+import {
+  formatCourierPhone,
+  printCourierRouteSheet,
+} from '../lib/print-courier-route-sheet'
 import { groupStatusCatalog, statusBadgeStyle, type OrderStatusCatalogItem } from '../lib/status-catalog'
+import { getOrdersCourierRouteRows } from '../services/orders-service'
 
 type OrderBulkActionsProps = {
   selectedIds: string[]
@@ -51,9 +63,11 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
   const createDoc = useCreateDocument()
 
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [printMenuOpen, setPrintMenuOpen] = useState(false)
   const [printOpen, setPrintOpen] = useState(false)
   const [printSelected, setPrintSelected] = useState<string[]>([])
   const [printPending, setPrintPending] = useState(false)
+  const [listPrintPending, setListPrintPending] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
   const [statusTarget, setStatusTarget] = useState<OrderStatusCatalogItem | null>(null)
   const [warrantyDraft, setWarrantyDraft] = useState<{ start: string; end: string } | null>(null)
@@ -171,6 +185,29 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
     }
   }
 
+  async function handlePrintOrderList() {
+    setListPrintPending(true)
+    try {
+      const rows = await getOrdersCourierRouteRows(selectedIds)
+      await printCourierRouteSheet(
+        rows.map((row) => ({
+          orderNumber: row.orderNumber,
+          deviceLabel: row.deviceLabel,
+          serialNumber: row.serialNumber,
+          phone: formatCourierPhone(row.phone),
+          address: row.address,
+        })),
+      )
+      toast.success(
+        count === 1 ? 'Список заказов отправлен на печать' : `Список: ${formatInteger(count)} заказ.`,
+      )
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    } finally {
+      setListPrintPending(false)
+    }
+  }
+
   return (
     <>
       <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 rounded-lg border bg-background/95 px-3 py-2 shadow-sm backdrop-blur-sm">
@@ -229,65 +266,39 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
         ) : null}
 
         {canPrint ? (
-          <Popover
-            open={printOpen}
-            onOpenChange={(next) => {
-              setPrintOpen(next)
-              if (!next) {
-                setPrintSelected([])
-              }
-            }}
-          >
-            <PopoverTrigger asChild>
-              <Button type="button" variant="outline" size="icon-sm" aria-label="Распечатать">
+          <DropdownMenu open={printMenuOpen} onOpenChange={setPrintMenuOpen}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label="Печать"
+                disabled={listPrintPending}
+              >
                 <Printer className="size-4" />
+                <ChevronDown className="size-3.5" />
               </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-80 p-0">
-              <div className="max-h-72 overflow-y-auto py-1">
-                {templatesQuery.isLoading ? (
-                  <p className="text-muted-foreground px-3 py-4 text-sm">Загрузка шаблонов…</p>
-                ) : templates.length === 0 ? (
-                  <p className="text-muted-foreground px-3 py-4 text-sm">
-                    Шаблонов нет. Добавьте их в Настройках → Шаблоны документов.
-                  </p>
-                ) : (
-                  templates.map((template) => {
-                    const checked = printSelected.includes(template.id)
-                    return (
-                      <label
-                        key={template.id}
-                        className="hover:bg-accent flex cursor-pointer items-start gap-2 px-3 py-1.5 text-sm"
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={() =>
-                            setPrintSelected((current) =>
-                              current.includes(template.id)
-                                ? current.filter((id) => id !== template.id)
-                                : [...current, template.id],
-                            )
-                          }
-                          className="mt-0.5"
-                        />
-                        <span>{template.name}</span>
-                      </label>
-                    )
-                  })
-                )}
-              </div>
-              <div className="border-t p-2">
-                <Button
-                  type="button"
-                  className="w-full"
-                  disabled={!canCreateDocs || printSelected.length === 0 || printPending}
-                  onClick={() => void handlePrint()}
-                >
-                  {printPending ? 'Подготовка…' : `Печать × ${count}`}
-                </Button>
-              </div>
-            </PopoverContent>
-          </Popover>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem
+                disabled={!canCreateDocs}
+                onSelect={() => {
+                  // Defer so dropdown dismiss does not immediately close the dialog.
+                  window.setTimeout(() => setPrintOpen(true), 50)
+                }}
+              >
+                Печать по шаблону
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={listPrintPending}
+                onSelect={() => {
+                  void handlePrintOrderList()
+                }}
+              >
+                {listPrintPending ? 'Подготовка…' : 'Список заказов'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
 
         {canDelete ? (
@@ -307,6 +318,67 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
           Снять выбор
         </Button>
       </div>
+
+      <Dialog
+        open={printOpen}
+        onOpenChange={(next) => {
+          setPrintOpen(next)
+          if (!next) {
+            setPrintSelected([])
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Печать по шаблону</DialogTitle>
+            <DialogDescription>
+              Выберите шаблоны для {formatInteger(count)} заказ.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-72 overflow-y-auto py-1">
+            {templatesQuery.isLoading ? (
+              <p className="text-muted-foreground px-1 py-4 text-sm">Загрузка шаблонов…</p>
+            ) : templates.length === 0 ? (
+              <p className="text-muted-foreground px-1 py-4 text-sm">
+                Шаблонов нет. Добавьте их в Настройках → Шаблоны документов.
+              </p>
+            ) : (
+              templates.map((template) => {
+                const checked = printSelected.includes(template.id)
+                return (
+                  <label
+                    key={template.id}
+                    className="hover:bg-accent flex cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-sm"
+                  >
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() =>
+                        setPrintSelected((current) =>
+                          current.includes(template.id)
+                            ? current.filter((id) => id !== template.id)
+                            : [...current, template.id],
+                        )
+                      }
+                      className="mt-0.5"
+                    />
+                    <span>{template.name}</span>
+                  </label>
+                )
+              })
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              className="w-full sm:w-auto"
+              disabled={!canCreateDocs || printSelected.length === 0 || printPending}
+              onClick={() => void handlePrint()}
+            >
+              {printPending ? 'Подготовка…' : `Печать × ${count}`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={deleteOpen}

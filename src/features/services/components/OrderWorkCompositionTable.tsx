@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useQueryClient } from '@tanstack/react-query'
 import { Briefcase, Trash2, Wrench } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -38,63 +37,29 @@ import {
   DynamicFieldRenderer,
   DynamicFieldValue,
   DynamicFieldsGrid,
-  buildEntityValuesSchema,
-  filledFieldValues,
   groupDynamicFields,
-  saveDynamicFieldValues,
 } from '@/features/dynamic-fields'
 import { useDynamicFieldValues, useDynamicFields } from '@/features/dynamic-fields/hooks/use-fields'
 import { emptyFieldValue } from '@/features/dynamic-fields/schemas'
-import type {
-  DynamicFieldDefinition,
-  DynamicFieldValueData,
-} from '@/features/dynamic-fields/services/fields-service'
+import type { DynamicFieldDefinition } from '@/features/dynamic-fields/services/fields-service'
 import { InventoryItemSheet } from '@/features/inventory/components/InventoryItemScreen'
-import {
-  useOrderInventoryUsage,
-  useRemoveOrderPartLine,
-  useSetOrderPartLine,
-  useUpdateOrderCustomPartLine,
-} from '@/features/inventory/hooks/use-inventory'
-import type { OrderInventoryUsage } from '@/features/inventory/services/inventory-service'
-import { useSheetDirty } from '@/components/ui/sheet'
-import { useRegisterOrderCardSave } from '@/features/orders/lib/order-card-save-context'
+import { useOrderInventoryUsage } from '@/features/inventory/hooks/use-inventory'
 import { FieldEntity, fieldLayoutWidthClass } from '@/lib/constants/fields'
 import { formatMoney, formatQuantity, parseQuantity } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
-import { queryKeys } from '@/lib/query-keys'
 import { cn } from '@/lib/utils'
 
 import { ServiceTemplateSheet } from './ServiceTemplateSheet'
+import { useOrderServiceLines } from '../hooks/use-services'
 import {
-  useOrderServiceLines,
-  useRemoveOrderServiceLine,
-  useSetOrderServiceLine,
-  useUpdateOrderCustomServiceLine,
-} from '../hooks/use-services'
-import type { OrderServiceLine } from '../services/services-service'
-
-type WorkLineKind = 'part' | 'service'
-
-type WorkCompositionLine = {
-  key: string
-  kind: WorkLineKind
-  id: string
-  name: string
-  subtitle: string
-  quantity: number
-  unitPrice: number
-  unitName: string
-  actorName: string
-  createdAt: string
-  part?: OrderInventoryUsage
-  service?: OrderServiceLine
-}
+  useOrderWorkCompositionDraft,
+  type WorkDraftLine,
+} from '../lib/order-work-composition-draft'
 
 type ActorGroup = {
   actorName: string
-  lines: WorkCompositionLine[]
+  lines: WorkDraftLine[]
 }
 
 const cellPad = 'px-2 py-1.5'
@@ -120,16 +85,15 @@ type CustomServiceFormValues = z.infer<typeof customServiceSchema>
 export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const canWriteOff = useHasPermission(Permission.InventoryWriteOff)
   const canUpdateServices = useHasPermission(Permission.OrdersUpdate)
+  const workDraft = useOrderWorkCompositionDraft()
   const partsQuery = useOrderInventoryUsage(orderId)
   const servicesQuery = useOrderServiceLines(orderId)
   const fieldsQuery = useDynamicFields(FieldEntity.OrderWork)
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
-  const [openedCatalogService, setOpenedCatalogService] = useState<OrderServiceLine | null>(null)
-  const [customPart, setCustomPart] = useState<OrderInventoryUsage | null>(null)
-  const [customService, setCustomService] = useState<OrderServiceLine | null>(null)
+  const [openedCatalogServiceId, setOpenedCatalogServiceId] = useState<string | null>(null)
+  const [customPart, setCustomPart] = useState<WorkDraftLine | null>(null)
+  const [customService, setCustomService] = useState<WorkDraftLine | null>(null)
 
-  const parts = partsQuery.data ?? []
-  const services = servicesQuery.data ?? []
   const activeFields = useMemo(
     () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
     [fieldsQuery.data],
@@ -137,7 +101,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const isLoading = partsQuery.isLoading || servicesQuery.isLoading || fieldsQuery.isLoading
   const error = partsQuery.error ?? servicesQuery.error ?? fieldsQuery.error
 
-  const groups = useMemo(() => groupLines(parts, services), [parts, services])
+  const groups = useMemo(() => groupDraftLines(workDraft.visibleLines), [workDraft.visibleLines])
   const hasLines = groups.length > 0
   const hasFields = activeFields.length > 0
 
@@ -211,13 +175,12 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
                   <ActorGroupRows
                     key={group.actorName}
                     group={group}
-                    orderId={orderId}
                     canWriteOff={canWriteOff}
                     canUpdateServices={canUpdateServices}
                     onOpenPart={(itemId) => setOpenedItemId(itemId)}
-                    onOpenCatalogService={(service) => setOpenedCatalogService(service)}
-                    onOpenCustomPart={(part) => setCustomPart(part)}
-                    onOpenCustomService={(service) => setCustomService(service)}
+                    onOpenCatalogService={(templateId) => setOpenedCatalogServiceId(templateId)}
+                    onOpenCustomPart={(line) => setCustomPart(line)}
+                    onOpenCustomService={(line) => setCustomService(line)}
                   />
                 ))}
               </TableBody>
@@ -250,28 +213,16 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
         }}
       />
       <ServiceTemplateSheet
-        templateId={openedCatalogService?.templateId ?? null}
-        open={Boolean(openedCatalogService?.templateId)}
-        orderLine={
-          openedCatalogService
-            ? {
-                id: openedCatalogService.id,
-                orderId: openedCatalogService.orderId,
-                name: openedCatalogService.name,
-                description: openedCatalogService.description,
-                unitPrice: openedCatalogService.unitPrice,
-              }
-            : null
-        }
+        templateId={openedCatalogServiceId}
+        open={Boolean(openedCatalogServiceId)}
         onOpenChange={(open) => {
           if (!open) {
-            setOpenedCatalogService(null)
+            setOpenedCatalogServiceId(null)
           }
         }}
       />
       <EditCustomPartDialog
-        orderId={orderId}
-        part={customPart}
+        line={customPart}
         open={Boolean(customPart)}
         onOpenChange={(open) => {
           if (!open) {
@@ -280,8 +231,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
         }}
       />
       <EditCustomServiceDialog
-        orderId={orderId}
-        service={customService}
+        line={customService}
         open={Boolean(customService)}
         onOpenChange={(open) => {
           if (!open) {
@@ -302,85 +252,17 @@ function WorkCompositionFields({
   fields: DynamicFieldDefinition[]
   canEdit: boolean
 }) {
-  const queryClient = useQueryClient()
+  const workDraft = useOrderWorkCompositionDraft()
+  const { bindFields, fieldValues, fieldErrors, setFieldValue } = workDraft
   const valuesQuery = useDynamicFieldValues(FieldEntity.OrderWork, orderId)
-  const [draft, setDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
-  const [saving, setSaving] = useState(false)
-  const values = draft ?? valuesQuery.data ?? {}
   const fieldGroups = useMemo(() => groupDynamicFields(fields), [fields])
-  const dirty = canEdit && draft !== null
 
-  const valuesKey = queryKeys.fields.values(FieldEntity.OrderWork, orderId)
-
-  const persist = useCallback(async () => {
-    if (!draft || !valuesQuery.isSuccess) {
+  useEffect(() => {
+    if (!valuesQuery.isSuccess) {
       return
     }
-
-    const valuesMerged = { ...(valuesQuery.data ?? {}), ...draft }
-    const filled = filledFieldValues(fields, valuesMerged)
-    const parsed = buildEntityValuesSchema(fields).safeParse(filled)
-    if (!parsed.success) {
-      const nextErrors: Record<string, string> = {}
-      for (const issue of parsed.error.issues) {
-        const code = issue.path[0]
-        if (typeof code === 'string' && !nextErrors[code]) {
-          nextErrors[code] = issue.message
-        }
-      }
-      setFieldErrors(nextErrors)
-      toast.error('Заполните обязательные поля состава работ.')
-      throw new Error('Заполните обязательные поля состава работ.')
-    }
-
-    setFieldErrors({})
-    setSaving(true)
-    try {
-      await saveDynamicFieldValues(FieldEntity.OrderWork, orderId, parsed.data)
-      queryClient.setQueryData(valuesKey, parsed.data)
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: valuesKey }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) }),
-      ])
-      setDraft(null)
-      toast.success('Состав работ сохранён')
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-      throw error
-    } finally {
-      setSaving(false)
-    }
-  }, [draft, fields, orderId, queryClient, valuesKey, valuesQuery.data, valuesQuery.isSuccess])
-
-  useSheetDirty(dirty, dirty ? () => persist() : undefined)
-
-  const saveFromFooter = useCallback(async () => {
-    try {
-      await persist()
-    } catch {
-      // toast already shown
-    }
-  }, [persist])
-
-  useRegisterOrderCardSave('work', {
-    dirty,
-    saving,
-    save: saveFromFooter,
-    enabled: canEdit,
-  })
-
-  function setFieldValue(code: string, value: DynamicFieldValueData) {
-    setFieldErrors((current) => {
-      if (!current[code]) {
-        return current
-      }
-      const next = { ...current }
-      delete next[code]
-      return next
-    })
-    setDraft((current) => ({ ...(current ?? valuesQuery.data ?? {}), [code]: value }))
-  }
+    bindFields(fields, valuesQuery.data ?? {})
+  }, [bindFields, fields, valuesQuery.data, valuesQuery.isSuccess])
 
   if (valuesQuery.isLoading) {
     return (
@@ -412,9 +294,9 @@ function WorkCompositionFields({
                 <DynamicFieldRenderer
                   key={field.id}
                   field={field}
-                  value={values[field.code] ?? emptyFieldValue(field)}
+                  value={fieldValues[field.code] ?? emptyFieldValue(field)}
                   error={fieldErrors[field.code]}
-                  onChange={(value) => setFieldValue(field.code, value)}
+                  onChange={(value) => setFieldValue(field.code, value, valuesQuery.data ?? {})}
                 />
               ) : (
                 <div key={field.id} className={cn('space-y-1.5', fieldLayoutWidthClass(field))}>
@@ -425,7 +307,7 @@ function WorkCompositionFields({
                   <p className="text-sm">
                     <DynamicFieldValue
                       field={field}
-                      value={values[field.code] ?? emptyFieldValue(field)}
+                      value={fieldValues[field.code] ?? emptyFieldValue(field)}
                     />
                   </p>
                 </div>
@@ -440,7 +322,6 @@ function WorkCompositionFields({
 
 function ActorGroupRows({
   group,
-  orderId,
   canWriteOff,
   canUpdateServices,
   onOpenPart,
@@ -449,13 +330,12 @@ function ActorGroupRows({
   onOpenCustomService,
 }: {
   group: ActorGroup
-  orderId: string
   canWriteOff: boolean
   canUpdateServices: boolean
   onOpenPart: (itemId: string) => void
-  onOpenCatalogService: (service: OrderServiceLine) => void
-  onOpenCustomPart: (part: OrderInventoryUsage) => void
-  onOpenCustomService: (service: OrderServiceLine) => void
+  onOpenCatalogService: (templateId: string) => void
+  onOpenCustomPart: (line: WorkDraftLine) => void
+  onOpenCustomService: (line: WorkDraftLine) => void
 }) {
   return (
     <>
@@ -468,27 +348,24 @@ function ActorGroupRows({
         <WorkLineRow
           key={line.key}
           line={line}
-          orderId={orderId}
           canEdit={
             line.kind === 'part'
-              ? canWriteOff || (canUpdateServices && !line.part?.itemId)
+              ? canWriteOff || (canUpdateServices && !line.itemId)
               : canUpdateServices
           }
           onOpen={() => {
-            if (line.kind === 'part' && line.part) {
-              if (line.part.itemId) {
-                onOpenPart(line.part.itemId)
+            if (line.kind === 'part') {
+              if (line.itemId) {
+                onOpenPart(line.itemId)
               } else {
-                onOpenCustomPart(line.part)
+                onOpenCustomPart(line)
               }
               return
             }
-            if (line.kind === 'service' && line.service) {
-              if (line.service.templateId) {
-                onOpenCatalogService(line.service)
-              } else {
-                onOpenCustomService(line.service)
-              }
+            if (line.templateId) {
+              onOpenCatalogService(line.templateId)
+            } else {
+              onOpenCustomService(line)
             }
           }}
         />
@@ -499,19 +376,15 @@ function ActorGroupRows({
 
 function WorkLineRow({
   line,
-  orderId,
   canEdit,
   onOpen,
 }: {
-  line: WorkCompositionLine
-  orderId: string
+  line: WorkDraftLine
   canEdit: boolean
   onOpen: () => void
 }) {
+  const workDraft = useOrderWorkCompositionDraft()
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const removePart = useRemoveOrderPartLine(orderId)
-  const removeService = useRemoveOrderServiceLine(orderId)
-  const removePending = line.kind === 'part' ? removePart.isPending : removeService.isPending
   const amount = line.quantity * line.unitPrice
   const TypeIcon = line.kind === 'part' ? Briefcase : Wrench
 
@@ -554,12 +427,11 @@ function WorkLineRow({
         ) : null}
       </TableCell>
       <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')} data-row-ignore-click>
-        <InlineNumberField line={line} orderId={orderId} field="unitPrice" disabled={!canEdit} />
+        <InlineNumberField line={line} field="unitPrice" disabled={!canEdit} />
       </TableCell>
       <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')} data-row-ignore-click>
         <InlineNumberField
           line={line}
-          orderId={orderId}
           field="quantity"
           disabled={!canEdit}
           suffix={line.unitName}
@@ -575,7 +447,7 @@ function WorkLineRow({
             variant="ghost"
             size="icon-xs"
             className="opacity-0 transition-opacity group-hover/row:opacity-100 focus-visible:opacity-100 text-destructive hover:text-destructive"
-            disabled={removePending}
+            disabled={workDraft.saving}
             onClick={() => setDeleteOpen(true)}
           >
             <Trash2 />
@@ -584,33 +456,19 @@ function WorkLineRow({
 
         <ConfirmDialog
           open={deleteOpen}
-          title={line.kind === 'part' ? 'Удалить из заказа' : 'Удалить услугу'}
+          title={line.kind === 'part' ? 'Удалить из состава' : 'Удалить услугу'}
           description={
             line.kind === 'part'
-              ? `${line.name} вернётся на склад.`
-              : `«${line.name}» будет убрана из заказа.`
+              ? `${line.name} будет убрана из состава. Списание со склада — только после сохранения.`
+              : `«${line.name}» будет убрана из состава.`
           }
           confirmLabel="Удалить"
-          isPending={removePending}
+          isPending={false}
           onOpenChange={setDeleteOpen}
           onConfirm={() => {
-            if (line.kind === 'part') {
-              removePart.mutate(line.id, {
-                onSuccess: () => {
-                  setDeleteOpen(false)
-                  toast.success('Запчасть возвращена на склад')
-                },
-                onError: (error) => toast.error(getErrorMessage(error)),
-              })
-              return
-            }
-            removeService.mutate(line.id, {
-              onSuccess: () => {
-                setDeleteOpen(false)
-                toast.success('Услуга удалена')
-              },
-              onError: (error) => toast.error(getErrorMessage(error)),
-            })
+            workDraft.removeLine(line.key)
+            setDeleteOpen(false)
+            toast.success(line.kind === 'part' ? 'Позиция убрана из состава' : 'Услуга убрана из состава')
           }}
         />
       </TableCell>
@@ -619,64 +477,53 @@ function WorkLineRow({
 }
 
 function EditCustomPartDialog({
-  orderId,
-  part,
+  line,
   open,
   onOpenChange,
 }: {
-  orderId: string
-  part: OrderInventoryUsage | null
+  line: WorkDraftLine | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const update = useUpdateOrderCustomPartLine(orderId)
+  const workDraft = useOrderWorkCompositionDraft()
   const form = useForm<CustomPartFormValues>({
     resolver: zodResolver(customPartSchema),
     defaultValues: { name: '', unitPrice: 0, quantity: 1 },
   })
 
   useEffect(() => {
-    if (!open || !part) {
+    if (!open || !line) {
       return
     }
     form.reset({
-      name: part.itemName,
-      unitPrice: part.unitPrice,
-      quantity: part.quantity,
+      name: line.name,
+      unitPrice: line.unitPrice,
+      quantity: line.quantity,
     })
-  }, [form, open, part])
+  }, [form, open, line])
 
-  if (!part) {
+  if (!line) {
     return null
   }
 
   return (
-    <Sheet
-      open={open}
-      dirty={form.formState.isDirty}
-      onOpenChange={onOpenChange}
-    >
+    <Sheet open={open} dirty={form.formState.isDirty} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Позиция заказа</SheetTitle>
-          <SheetDescription>Создана только для этого заказа, без справочника.</SheetDescription>
+          <SheetDescription>Изменения попадут в заказ после сохранения состава.</SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
             className="flex flex-1 flex-col gap-4 px-4 pb-4"
-            onSubmit={form.handleSubmit(async (values) => {
-              try {
-                await update.mutateAsync({
-                  lineId: part.id,
-                  name: values.name,
-                  quantity: values.quantity,
-                  unitPrice: values.unitPrice,
-                })
-                toast.success('Сохранено')
-                onOpenChange(false)
-              } catch (error) {
-                form.setError('name', { message: getErrorMessage(error) })
-              }
+            onSubmit={form.handleSubmit((values) => {
+              workDraft.updateLine(line.key, {
+                name: values.name,
+                quantity: values.quantity,
+                unitPrice: values.unitPrice,
+              })
+              toast.success('Изменения в составе')
+              onOpenChange(false)
             })}
             noValidate
           >
@@ -743,9 +590,7 @@ function EditCustomPartDialog({
                   Отмена
                 </Button>
               </SheetClose>
-              <Button type="submit" disabled={update.isPending}>
-                {update.isPending ? 'Сохранение…' : 'Сохранить'}
-              </Button>
+              <Button type="submit">Готово</Button>
             </SheetFooter>
           </form>
         </Form>
@@ -755,66 +600,55 @@ function EditCustomPartDialog({
 }
 
 function EditCustomServiceDialog({
-  orderId,
-  service,
+  line,
   open,
   onOpenChange,
 }: {
-  orderId: string
-  service: OrderServiceLine | null
+  line: WorkDraftLine | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
-  const update = useUpdateOrderCustomServiceLine(orderId)
+  const workDraft = useOrderWorkCompositionDraft()
   const form = useForm<CustomServiceFormValues>({
     resolver: zodResolver(customServiceSchema),
     defaultValues: { name: '', description: '', unitPrice: 0, quantity: 1 },
   })
 
   useEffect(() => {
-    if (!open || !service) {
+    if (!open || !line) {
       return
     }
     form.reset({
-      name: service.name,
-      description: service.description,
-      unitPrice: service.unitPrice,
-      quantity: service.quantity,
+      name: line.name,
+      description: line.description,
+      unitPrice: line.unitPrice,
+      quantity: line.quantity,
     })
-  }, [form, open, service])
+  }, [form, open, line])
 
-  if (!service) {
+  if (!line) {
     return null
   }
 
   return (
-    <Sheet
-      open={open}
-      dirty={form.formState.isDirty}
-      onOpenChange={onOpenChange}
-    >
+    <Sheet open={open} dirty={form.formState.isDirty} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Услуга заказа</SheetTitle>
-          <SheetDescription>Создана только для этого заказа, без справочника.</SheetDescription>
+          <SheetDescription>Изменения попадут в заказ после сохранения состава.</SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
             className="flex flex-1 flex-col gap-4 px-4 pb-4"
-            onSubmit={form.handleSubmit(async (values) => {
-              try {
-                await update.mutateAsync({
-                  lineId: service.id,
-                  name: values.name,
-                  description: values.description,
-                  quantity: values.quantity,
-                  unitPrice: values.unitPrice,
-                })
-                toast.success('Сохранено')
-                onOpenChange(false)
-              } catch (error) {
-                form.setError('name', { message: getErrorMessage(error) })
-              }
+            onSubmit={form.handleSubmit((values) => {
+              workDraft.updateLine(line.key, {
+                name: values.name,
+                description: values.description,
+                quantity: values.quantity,
+                unitPrice: values.unitPrice,
+              })
+              toast.success('Изменения в составе')
+              onOpenChange(false)
             })}
             noValidate
           >
@@ -899,9 +733,7 @@ function EditCustomServiceDialog({
                   Отмена
                 </Button>
               </SheetClose>
-              <Button type="submit" disabled={update.isPending}>
-                {update.isPending ? 'Сохранение…' : 'Сохранить'}
-              </Button>
+              <Button type="submit">Готово</Button>
             </SheetFooter>
           </form>
         </Form>
@@ -912,25 +744,24 @@ function EditCustomServiceDialog({
 
 function InlineNumberField({
   line,
-  orderId,
   field,
   disabled,
   suffix,
 }: {
-  line: WorkCompositionLine
-  orderId: string
+  line: WorkDraftLine
   field: 'quantity' | 'unitPrice'
   disabled: boolean
   suffix?: string
 }) {
-  const setPart = useSetOrderPartLine(orderId)
-  const setService = useSetOrderServiceLine(orderId)
-  const setPending = line.kind === 'part' ? setPart.isPending : setService.isPending
+  const workDraft = useOrderWorkCompositionDraft()
   const current = field === 'quantity' ? line.quantity : line.unitPrice
   const isQty = field === 'quantity'
   const stockCap =
-    isQty && line.kind === 'part' && line.part?.itemId != null && line.part.stockQuantity != null
-      ? Math.max(1, Math.round(line.part.stockQuantity) + Math.round(line.quantity))
+    isQty && line.kind === 'part' && line.itemId != null && line.stockQuantity != null
+      ? Math.max(
+          1,
+          Math.round(line.stockQuantity) + (line.serverId ? Math.round(line.baseline?.quantity ?? 0) : 0),
+        )
       : null
 
   const [draft, setDraft] = useState(String(current))
@@ -1000,13 +831,7 @@ function InlineNumberField({
     if (!persist || next === current) {
       return
     }
-
-    const payload = { lineId: line.id, quantity: next, unitPrice: line.unitPrice }
-    if (line.kind === 'part') {
-      setPart.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
-      return
-    }
-    setService.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
+    workDraft.updateLine(line.key, { quantity: next })
   }
 
   function commitPrice(raw: string) {
@@ -1018,18 +843,7 @@ function InlineNumberField({
       toast.error('Цена не может быть отрицательной')
       return
     }
-
-    const payload = {
-      lineId: line.id,
-      quantity: line.quantity,
-      unitPrice: parsed,
-    }
-
-    if (line.kind === 'part') {
-      setPart.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
-      return
-    }
-    setService.mutate(payload, { onError: (error) => toast.error(getErrorMessage(error)) })
+    workDraft.updateLine(line.key, { unitPrice: parsed })
   }
 
   if (isQty) {
@@ -1054,7 +868,7 @@ function InlineNumberField({
               flash && 'animate-stock-cap',
             )}
             value={draft}
-            disabled={setPending}
+            disabled={workDraft.saving}
             onClick={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             onFocus={(event) => event.target.select()}
@@ -1096,7 +910,7 @@ function InlineNumberField({
         'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
       )}
       defaultValue={current}
-      disabled={setPending}
+      disabled={workDraft.saving}
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
       onFocus={(event) => event.target.select()}
@@ -1110,41 +924,8 @@ function InlineNumberField({
   )
 }
 
-function groupLines(parts: OrderInventoryUsage[], services: OrderServiceLine[]): ActorGroup[] {
-  const lines: WorkCompositionLine[] = [
-    ...parts.map(
-      (part): WorkCompositionLine => ({
-        key: `part:${part.id}`,
-        kind: 'part',
-        id: part.id,
-        name: part.itemName,
-        subtitle: [part.itemCode, part.itemArticle].filter(Boolean).join(' '),
-        quantity: part.quantity,
-        unitPrice: part.unitPrice,
-        unitName: part.unitName || 'шт',
-        actorName: part.actorName.trim() || 'Без исполнителя',
-        createdAt: part.createdAt,
-        part,
-      }),
-    ),
-    ...services.map(
-      (service): WorkCompositionLine => ({
-        key: `service:${service.id}`,
-        kind: 'service',
-        id: service.id,
-        name: service.name,
-        subtitle: service.description,
-        quantity: service.quantity,
-        unitPrice: service.unitPrice,
-        unitName: 'шт',
-        actorName: service.actorName.trim() || 'Без исполнителя',
-        createdAt: service.createdAt,
-        service,
-      }),
-    ),
-  ]
-
-  const byActor = new Map<string, WorkCompositionLine[]>()
+function groupDraftLines(lines: WorkDraftLine[]): ActorGroup[] {
+  const byActor = new Map<string, WorkDraftLine[]>()
   for (const line of lines) {
     const bucket = byActor.get(line.actorName) ?? []
     bucket.push(line)

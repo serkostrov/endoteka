@@ -358,12 +358,14 @@ export async function searchInventoryItems(
   page: number,
   pageSize: number,
   stockFilter = 'all',
+  categoryId: string | null = null,
 ): Promise<InventoryListResult> {
   const { data, error } = await getSupabase().rpc('search_inventory_items', {
     search_query: search,
     page_number: page,
     page_size: pageSize,
     stock_filter: stockFilter,
+    ...(categoryId ? { category_filter: categoryId } : {}),
   })
 
   if (error) {
@@ -387,6 +389,62 @@ export async function searchInventoryItems(
     }),
     total: Number(rows[0]?.total_count ?? 0),
   }
+}
+
+export type InventoryStockExportFilters = {
+  search?: string
+  stockFilter?: string
+  categoryId?: string | null
+}
+
+export type InventoryStockExportLine = {
+  itemCode: string
+  itemArticle: string
+  manufacturerCode: string
+  itemBarcode: string
+  itemName: string
+  categoryName: string
+  description: string
+  stockQuantity: number
+  orderedQuantity: number
+  unitCode: string
+  expiresAt: string
+  serialNumbers: string
+  purchasePrice: number
+  repairPrice: number
+  retailPrice: number
+}
+
+export async function exportInventoryStockItems(
+  filters: InventoryStockExportFilters = {},
+): Promise<InventoryStockExportLine[]> {
+  const { data, error } = await getSupabase().rpc('export_inventory_stock_items', {
+    search_query: filters.search ?? '',
+    stock_filter: filters.stockFilter && filters.stockFilter !== 'all' ? filters.stockFilter : 'all',
+    ...(filters.categoryId ? { category_filter: filters.categoryId } : {}),
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось выгрузить остатки.')
+  }
+
+  return (data ?? []).map((row) => ({
+    itemCode: row.item_code ?? '',
+    itemArticle: row.item_article ?? '',
+    manufacturerCode: row.manufacturer_code ?? '',
+    itemBarcode: row.item_barcode ?? '',
+    itemName: row.item_name ?? '',
+    categoryName: row.category_name ?? '',
+    description: row.description ?? '',
+    stockQuantity: asNumber(row.stock_quantity),
+    orderedQuantity: asNumber(row.ordered_quantity),
+    unitCode: row.unit_code || 'pcs',
+    expiresAt: row.expires_at ?? '',
+    serialNumbers: row.serial_numbers ?? '',
+    purchasePrice: asNumber(row.purchase_price),
+    repairPrice: asNumber(row.repair_price),
+    retailPrice: asNumber(row.retail_price),
+  }))
 }
 
 export type InventoryRegistryFolder = {
@@ -872,10 +930,23 @@ export async function adjustInventory(input: {
   return data
 }
 
-export async function listInventoryReceipts(page: number, pageSize: number) {
+export type InventoryReceiptListFilters = {
+  status?: string
+  createdFrom?: string | null
+  createdTo?: string | null
+}
+
+export async function listInventoryReceipts(
+  page: number,
+  pageSize: number,
+  filters: InventoryReceiptListFilters = {},
+) {
   const { data, error } = await getSupabase().rpc('list_inventory_receipts', {
     page_number: page,
     page_size: pageSize,
+    status_filter: filters.status && filters.status !== 'all' ? filters.status : 'all',
+    created_from: filters.createdFrom ?? null,
+    created_to: filters.createdTo ?? null,
   })
 
   if (error) {
@@ -898,6 +969,70 @@ export async function listInventoryReceipts(page: number, pageSize: number) {
     })),
     total: rows[0]?.total_count ?? 0,
   }
+}
+
+export type InventoryReceiptExportLine = {
+  receiptNumber: string
+  createdAt: string
+  createdByName: string
+  updatedAt: string | null
+  updatedByName: string
+  supplier: string
+  invoiceNumber: string
+  warehouseName: string
+  categoryName: string
+  itemCode: string
+  itemArticle: string
+  itemBarcode: string
+  itemName: string
+  supplierWarranty: number
+  warrantyPeriod: string
+  expiresAt: string
+  serialNumber: string
+  quantity: number
+  unitCode: string
+  unitPrice: number
+  lineAmount: number
+  taxAmount: number
+}
+
+export async function exportInventoryReceiptLines(
+  filters: InventoryReceiptListFilters = {},
+): Promise<InventoryReceiptExportLine[]> {
+  const { data, error } = await getSupabase().rpc('export_inventory_receipt_lines', {
+    status_filter: filters.status && filters.status !== 'all' ? filters.status : 'all',
+    created_from: filters.createdFrom ?? null,
+    created_to: filters.createdTo ?? null,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось выгрузить приходы.')
+  }
+
+  return (data ?? []).map((row) => ({
+    receiptNumber: row.receipt_number,
+    createdAt: row.created_at,
+    createdByName: row.created_by_name,
+    updatedAt: row.updated_at,
+    updatedByName: row.updated_by_name ?? '',
+    supplier: row.supplier,
+    invoiceNumber: row.invoice_number ?? '',
+    warehouseName: row.warehouse_name,
+    categoryName: row.category_name ?? '',
+    itemCode: row.item_code ?? '',
+    itemArticle: row.item_article ?? '',
+    itemBarcode: row.item_barcode ?? '',
+    itemName: row.item_name ?? '',
+    supplierWarranty: asNumber(row.supplier_warranty),
+    warrantyPeriod: row.warranty_period ?? 'дн',
+    expiresAt: row.expires_at ?? '',
+    serialNumber: row.serial_number ?? '',
+    quantity: asNumber(row.quantity),
+    unitCode: row.unit_code || 'pcs',
+    unitPrice: asNumber(row.unit_price),
+    lineAmount: asNumber(row.line_amount),
+    taxAmount: asNumber(row.tax_amount),
+  }))
 }
 
 export async function getInventoryReceipt(id: string): Promise<InventoryReceiptDetail | null> {

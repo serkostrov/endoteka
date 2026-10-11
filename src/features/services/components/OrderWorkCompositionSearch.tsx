@@ -16,7 +16,6 @@ import {
 import { CreateItemDialog } from '@/features/inventory/components/CreateItemDialog'
 import { InventoryItemCoverThumb } from '@/features/inventory/components/InventoryItemCoverThumb'
 import {
-  useConsumeInventoryForOrder,
   useInventoryBarcodeLookup,
   useInventoryStock,
 } from '@/features/inventory/hooks/use-inventory'
@@ -42,7 +41,8 @@ import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
 import { CreateServiceTemplateDialog } from './CreateServiceTemplateDialog'
-import { useAddOrderServiceLine, useServiceTemplates } from '../hooks/use-services'
+import { useOrderWorkCompositionDraft } from '../lib/order-work-composition-draft'
+import { useServiceTemplates } from '../hooks/use-services'
 import type { ServiceTemplate } from '../services/services-service'
 
 type SuggestItem =
@@ -68,8 +68,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
   const orderQuery = useOrder(orderId)
   const updateOrder = useUpdateOrder(orderId)
   const employees = useActiveEmployees()
-  const consume = useConsumeInventoryForOrder(orderId)
-  const addService = useAddOrderServiceLine(orderId)
+  const workDraft = useOrderWorkCompositionDraft()
 
   const [search, setSearch] = useState('')
   const [open, setOpen] = useState(false)
@@ -199,58 +198,48 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
     setExpanded((current) => ({ ...current, [id]: !current[id] }))
   }
 
-  async function addProduct(item: InventoryItem) {
+  function actorLabel() {
+    return (
+      employees.data?.find((employee) => employee.id === order?.responsibleId)?.fullName ||
+      order?.responsibleName ||
+      'Без исполнителя'
+    )
+  }
+
+  function addProduct(item: InventoryItem) {
     if (addInFlight.current || !canWriteOff) {
-      return
-    }
-    if (item.stockQuantity < 1) {
-      toast.error(`Нет остатка: ${item.name}`)
       return
     }
     addInFlight.current = true
     try {
-      await consume.mutateAsync({
-        itemId: item.id,
-        quantity: 1,
-        unitPrice: item.repairPrice,
-      })
-      toast.success(`Добавлено на заказ, списано со склада: ${item.name}`)
+      workDraft.addCatalogPart(item, actorLabel())
       setSearch('')
       setOpen(false)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
     } finally {
       addInFlight.current = false
     }
   }
 
-  async function addServiceTemplate(template: ServiceTemplate) {
+  function addServiceTemplate(template: ServiceTemplate) {
     if (addInFlight.current || !canUpdateOrder) {
       return
     }
     addInFlight.current = true
     try {
-      await addService.mutateAsync({
-        templateId: template.id,
-        quantity: 1,
-        unitPrice: template.unitPrice,
-      })
-      toast.success(`Добавлено: ${template.name}`)
+      workDraft.addCatalogService(template, actorLabel())
       setSearch('')
       setOpen(false)
-    } catch (error) {
-      toast.error(getErrorMessage(error))
     } finally {
       addInFlight.current = false
     }
   }
 
-  async function choose(row: SuggestItem) {
+  function choose(row: SuggestItem) {
     if (row.kind === 'service') {
-      await addServiceTemplate(row.template)
+      addServiceTemplate(row.template)
       return
     }
-    await addProduct(row.item)
+    addProduct(row.item)
   }
 
   async function handleScan(code: string) {
@@ -261,7 +250,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
       const items = await findInventoryItemsByBarcode(code)
       const match = items[0]
       if (items.length === 1 && match) {
-        await addProduct(match)
+        addProduct(match)
         return
       }
       if (items.length === 0) {
@@ -303,7 +292,7 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
     )
   }
 
-  const busy = consume.isPending || addService.isPending
+  const busy = workDraft.saving
   const showPanel = open && !busy
   const servicesOpen = Boolean(expanded[FOLDER_SERVICES])
   const productsOpen = Boolean(expanded[FOLDER_PRODUCTS])
@@ -555,12 +544,13 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
         onOpenChange={setCreateServiceOpen}
         initialQuery={createQuery}
         orderId={orderId}
-        onCreatedForOrder={() => {
+        onDraftForOrder={(input) => {
+          workDraft.addCustomService(input, actorLabel())
           setSearch('')
         }}
         onCreated={(item) => {
           setSearch('')
-          void addServiceTemplate(item)
+          addServiceTemplate(item)
         }}
       />
       <CreateItemDialog
@@ -568,12 +558,13 @@ export function OrderWorkCompositionSearch({ orderId }: { orderId: string }) {
         onOpenChange={setCreateItemOpen}
         initialQuery={createQuery}
         orderId={orderId}
-        onCreatedForOrder={() => {
+        onDraftForOrder={(input) => {
+          workDraft.addCustomPart(input, actorLabel())
           setSearch('')
         }}
         onCreated={(item) => {
           setSearch('')
-          void addProduct(item)
+          addProduct(item)
         }}
       />
     </>

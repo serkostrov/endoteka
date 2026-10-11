@@ -75,8 +75,13 @@ export const queryKeys = {
   },
   inventory: {
     all: ['inventory'] as const,
-    stock: (filters: { search: string; page: number; pageSize: number; stock?: string }) =>
-      ['inventory', 'stock', filters] as const,
+    stock: (filters: {
+      search: string
+      page: number
+      pageSize: number
+      stock?: string
+      categoryId?: string | null
+    }) => ['inventory', 'stock', filters] as const,
     items: (filters: { search: string; page: number; pageSize: number }) =>
       ['inventory', 'items', filters] as const,
     registryCategories: (search: string) => ['inventory', 'registry-categories', search] as const,
@@ -86,8 +91,14 @@ export const queryKeys = {
     itemPhotos: (id: string) => ['inventory', 'item-photos', id] as const,
     name: (name: string) => ['inventory', 'name', name] as const,
     barcode: (code: string) => ['inventory', 'barcode', code] as const,
-    receipts: (filters: { page: number; pageSize: number }) =>
-      ['inventory', 'receipts', filters] as const,
+    receipts: (filters: {
+      page: number
+      pageSize: number
+      status?: string
+      period?: string
+      from?: string | null
+      to?: string | null
+    }) => ['inventory', 'receipts', filters] as const,
     receipt: (id: string) => ['inventory', 'receipt', id] as const,
     writeOffs: (filters: { page: number; pageSize: number }) =>
       ['inventory', 'write-offs', filters] as const,

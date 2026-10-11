@@ -4,6 +4,7 @@ import * as React from "react"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon, SearchIcon } from "lucide-react"
 import { Select as SelectPrimitive } from "radix-ui"
 
+import { FilterClearButton } from "@/components/shared/FilterClearButton"
 import { cn } from "@/lib/utils"
 
 function Select({
@@ -28,9 +29,13 @@ function SelectTrigger({
   className,
   size = "default",
   children,
+  onClear,
+  clearLabel = "Сбросить фильтр",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
   size?: "sm" | "default"
+  onClear?: () => void
+  clearLabel?: string
 }) {
   return (
     <SelectPrimitive.Trigger
@@ -43,9 +48,12 @@ function SelectTrigger({
       {...props}
     >
       {children}
-      <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
-      </SelectPrimitive.Icon>
+      <span className="ml-auto flex shrink-0 items-center gap-1">
+        {onClear ? <FilterClearButton onClear={onClear} label={clearLabel} /> : null}
+        <SelectPrimitive.Icon asChild>
+          <ChevronDownIcon className="size-4 opacity-50" />
+        </SelectPrimitive.Icon>
+      </span>
     </SelectPrimitive.Trigger>
   )
 }

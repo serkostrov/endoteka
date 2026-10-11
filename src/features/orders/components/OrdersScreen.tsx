@@ -39,6 +39,7 @@ import { OrderBulkActions } from './OrderBulkActions'
 import { OrderDetailSheet } from './OrderDetailScreen'
 import { OrderKanbanBoard } from './OrderKanbanBoard'
 import { OrderListTable } from './OrderListTable'
+import { OrderStatusMultiFilter } from './OrderStatusMultiFilter'
 import { OrdersViewSwitcher, type OrdersViewMode } from './OrdersViewSwitcher'
 import { useOrders, useOrderStatusCatalog } from '../hooks/use-orders'
 import type { OrderSortColumn } from '../services/orders-service'
@@ -79,6 +80,21 @@ function parseDeadlineState(value: string | null): DeadlineState | 'all' {
   return value && isDeadlineState(value) ? value : 'all'
 }
 
+/** Коды статусов из URL: `status=a,b` или одиночный `status=a`. Пусто / `all` — все. */
+function parseStatusCodes(value: string | null): string[] {
+  if (!value || value === 'all') {
+    return []
+  }
+  return [
+    ...new Set(
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0 && item !== 'all'),
+    ),
+  ]
+}
+
 const PRESET_FILTER_CLEAR = { attention: null, active: null, deadline: null } as const
 
 export function OrdersScreen() {
@@ -99,7 +115,7 @@ export function OrdersScreen() {
   const attentionOnly = searchParams.get('attention') === '1'
   const activeOnly = searchParams.get('active') === '1' && !attentionOnly
   const deadlineState = parseDeadlineState(searchParams.get('deadline'))
-  const statusCode = searchParams.get('status') ?? 'all'
+  const statusCodes = parseStatusCodes(searchParams.get('status'))
   const customerId = searchParams.get('customer') ?? 'all'
   const groupId = searchParams.get('group') ?? 'all'
   const brandId = searchParams.get('brand') ?? 'all'
@@ -133,12 +149,18 @@ export function OrdersScreen() {
   const responsibleId = responsibleParam === 'me' ? (user?.id ?? '') : responsibleParam
   const filtersReady =
     (responsibleParam !== 'me' || Boolean(user?.id)) &&
-    !(isList && statusCode !== 'all' && catalogQuery.isLoading)
+    !(isList && statusCodes.length > 0 && catalogQuery.isLoading)
   const responsibleSelectValue = responsibleParam === 'me' ? (user?.id ?? 'me') : responsibleParam
-  const statusId =
-    statusCode !== 'all'
-      ? (catalogQuery.data?.find((item) => item.code === statusCode)?.id ?? 'all')
-      : 'all'
+  const statusIds = useMemo(() => {
+    if (statusCodes.length === 0 || !catalogQuery.data) {
+      return [] as string[]
+    }
+    const byCode = new Map(catalogQuery.data.map((item) => [item.code, item.id]))
+    return statusCodes.flatMap((code) => {
+      const id = byCode.get(code)
+      return id ? [id] : []
+    })
+  }, [statusCodes, catalogQuery.data])
 
   const brandOptions = useMemo(() => {
     const items = (brandsQuery.data ?? []).filter((item) => item.isActive)
@@ -201,7 +223,7 @@ export function OrdersScreen() {
   const ordersQuery = useOrders(
     {
       search: debouncedSearch,
-      statusId: hasSearch ? 'all' : statusId,
+      statusIds: hasSearch ? [] : statusIds,
       responsibleId: hasSearch ? 'all' : responsibleId || 'all',
       deadlineState: hasSearch ? 'all' : deadlineState,
       customerId: hasSearch ? 'all' : customerId,
@@ -210,7 +232,7 @@ export function OrdersScreen() {
       brandIds: hasSearch || brandId === 'all' ? undefined : matchedBrandIds,
       modelId: hasSearch ? 'all' : modelId,
       modelIds: hasSearch || modelId === 'all' ? undefined : matchedModelIds,
-      activeOnly: hasSearch ? false : activeOnly && statusCode === 'all',
+      activeOnly: hasSearch ? false : activeOnly && statusCodes.length === 0,
       attentionOnly: hasSearch ? false : attentionOnly,
       sort: isList ? listSort : 'updated',
       direction: isList ? listDir : 'desc',
@@ -433,6 +455,12 @@ export function OrdersScreen() {
             <SelectTrigger
               aria-label="Фильтр по ответственному"
               className={activeFilterControlClass(responsibleParam !== 'all', 'w-auto min-w-0 flex-1')}
+              onClear={
+                responsibleParam !== 'all'
+                  ? () => patchFilters({ responsible: null, ...PRESET_FILTER_CLEAR })
+                  : undefined
+              }
+              clearLabel="Сбросить фильтр по ответственному"
             >
               <SelectValue placeholder="Ответственный" />
             </SelectTrigger>
@@ -447,25 +475,17 @@ export function OrdersScreen() {
             </SelectContent>
           </Select>
 
-          <Select
-            value={statusCode}
-            onValueChange={(value) => patchFilters({ status: value, ...PRESET_FILTER_CLEAR })}
-          >
-            <SelectTrigger
-              aria-label="Фильтр по статусу"
-              className={activeFilterControlClass(statusCode !== 'all', 'w-auto min-w-0 flex-1')}
-            >
-              <SelectValue placeholder="Статус" />
-            </SelectTrigger>
-            <SelectContent searchable>
-              <SelectItem value="all">Все статусы</SelectItem>
-              {statusOptions.map((status) => (
-                <SelectItem key={status.id} value={status.code}>
-                  {status.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <OrderStatusMultiFilter
+            options={statusOptions}
+            value={statusCodes}
+            loading={catalogQuery.isLoading}
+            onChange={(codes) =>
+              patchFilters({
+                status: codes.length > 0 ? codes.join(',') : null,
+                ...PRESET_FILTER_CLEAR,
+              })
+            }
+          />
 
           <Select
             value={customerId}
@@ -474,6 +494,12 @@ export function OrdersScreen() {
             <SelectTrigger
               aria-label="Фильтр по клиенту"
               className={activeFilterControlClass(customerId !== 'all', 'w-auto min-w-0 flex-1')}
+              onClear={
+                customerId !== 'all'
+                  ? () => patchFilters({ customer: null, ...PRESET_FILTER_CLEAR })
+                  : undefined
+              }
+              clearLabel="Сбросить фильтр по клиенту"
             >
               <SelectValue placeholder="Клиент" />
             </SelectTrigger>
@@ -497,6 +523,8 @@ export function OrdersScreen() {
             <SelectTrigger
               aria-label="Фильтр по группе прибора"
               className={activeFilterControlClass(groupId !== 'all', 'w-auto min-w-0 flex-1')}
+              onClear={groupId !== 'all' ? () => setGroupFilter('all') : undefined}
+              clearLabel="Сбросить фильтр по группе"
             >
               <SelectValue placeholder="Группа" />
             </SelectTrigger>
@@ -520,6 +548,8 @@ export function OrdersScreen() {
             <SelectTrigger
               aria-label="Фильтр по бренду"
               className={activeFilterControlClass(brandId !== 'all', 'w-auto min-w-0 flex-1')}
+              onClear={brandId !== 'all' ? () => setBrandFilter('all') : undefined}
+              clearLabel="Сбросить фильтр по бренду"
             >
               <SelectValue placeholder="Бренд" />
             </SelectTrigger>
@@ -541,6 +571,12 @@ export function OrdersScreen() {
             <SelectTrigger
               aria-label="Фильтр по модели"
               className={activeFilterControlClass(modelId !== 'all', 'w-auto min-w-0 flex-1')}
+              onClear={
+                modelId !== 'all'
+                  ? () => patchFilters({ model: null, ...PRESET_FILTER_CLEAR })
+                  : undefined
+              }
+              clearLabel="Сбросить фильтр по модели"
             >
               <SelectValue placeholder="Модель" />
             </SelectTrigger>

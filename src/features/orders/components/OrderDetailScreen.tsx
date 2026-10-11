@@ -19,8 +19,10 @@ import {
 } from '@/components/ui/sheet'
 import { useHasPermission } from '@/features/auth'
 import { OrderWorkScopeTab } from '@/features/services'
-import { useOrderServiceLines } from '@/features/services/hooks/use-services'
-import { useOrderInventoryUsage } from '@/features/inventory/hooks/use-inventory'
+import {
+  OrderWorkCompositionProvider,
+  useOrderWorkCompositionDraftOptional,
+} from '@/features/services/lib/order-work-composition-draft'
 import { formatMoney } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { routes } from '@/lib/constants/routes'
@@ -140,111 +142,110 @@ function OrderDetailCard({
 
   return (
     <OrderCardSaveProvider>
-      <div
-        className={cn(
-          inSheet
-            ? 'flex h-full min-h-0 flex-col overflow-hidden bg-background'
-            : 'overflow-hidden rounded-xl border bg-card',
-        )}
-      >
-        <div className={cn('flex flex-col lg:flex-row', inSheet && 'h-full min-h-0')}>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <header className="border-b px-4 py-2.5">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
-                <h1 className="truncate text-lg font-semibold tracking-tight">Заказ {order.number}</h1>
-                <OrderStatusMenu
-                  compact
-                  orderId={order.id}
-                  statusCode={order.statusCode}
-                  statusName={order.statusName}
-                />
-                <OrderDeadlineHint order={order} className="h-6" />
-                <div className="ml-auto flex shrink-0 items-center gap-1.5">
-                  <OrderPrintMenu orderId={order.id} />
-                  {showHeaderDelete ? (
-                    <IconActionButton
-                      label="Удалить заказ"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      onClick={() => setDeleteOpen(true)}
-                    >
-                      <Trash2 />
-                    </IconActionButton>
-                  ) : null}
+      <OrderWorkCompositionProvider orderId={order.id}>
+        <div
+          className={cn(
+            inSheet
+              ? 'flex h-full min-h-0 flex-col overflow-hidden bg-background'
+              : 'overflow-hidden rounded-xl border bg-card',
+          )}
+        >
+          <div className={cn('flex flex-col lg:flex-row', inSheet && 'h-full min-h-0')}>
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <header className="border-b px-4 py-2.5">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-2">
+                  <h1 className="truncate text-lg font-semibold tracking-tight">Заказ {order.number}</h1>
+                  <OrderStatusMenu
+                    compact
+                    orderId={order.id}
+                    statusCode={order.statusCode}
+                    statusName={order.statusName}
+                  />
+                  <OrderDeadlineHint order={order} className="h-6" />
+                  <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                    <OrderPrintMenu orderId={order.id} />
+                    {showHeaderDelete ? (
+                      <IconActionButton
+                        label="Удалить заказ"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setDeleteOpen(true)}
+                      >
+                        <Trash2 />
+                      </IconActionButton>
+                    ) : null}
+                  </div>
                 </div>
+              </header>
+
+              <div className="flex gap-1 overflow-x-auto border-b px-2">
+                {tabs.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={cn(
+                      'shrink-0 border-b-2 px-3 py-2.5 text-sm',
+                      tab === item.id
+                        ? 'border-primary font-medium text-foreground'
+                        : 'border-transparent text-muted-foreground hover:text-foreground',
+                    )}
+                    onClick={() => onTabChange(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
               </div>
-            </header>
 
-            <div className="flex gap-1 overflow-x-auto border-b px-2">
-              {tabs.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={cn(
-                    'shrink-0 border-b-2 px-3 py-2.5 text-sm',
-                    tab === item.id
-                      ? 'border-primary font-medium text-foreground'
-                      : 'border-transparent text-muted-foreground hover:text-foreground',
-                  )}
-                  onClick={() => onTabChange(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
+                <KeepAliveTab active={tab === 'overview'}>
+                  <OrderOverviewTab order={order} />
+                </KeepAliveTab>
+                <KeepAliveTab active={tab === 'diagnostics'}>
+                  <OrderDiagnosticsTab orderId={order.id} />
+                </KeepAliveTab>
+                <KeepAliveTab active={tab === 'work'}>
+                  <OrderWorkScopeTab orderId={order.id} />
+                </KeepAliveTab>
+                <KeepAliveTab active={tab === 'files'}>
+                  <OrderAttachmentsTab orderId={order.id} />
+                </KeepAliveTab>
+              </div>
+
+              <OrderCardFooter />
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 sm:px-5 sm:py-4">
-              <KeepAliveTab active={tab === 'overview'}>
-                <OrderOverviewTab order={order} />
-              </KeepAliveTab>
-              <KeepAliveTab active={tab === 'diagnostics'}>
-                <OrderDiagnosticsTab orderId={order.id} />
-              </KeepAliveTab>
-              <KeepAliveTab active={tab === 'work'}>
-                <OrderWorkScopeTab orderId={order.id} />
-              </KeepAliveTab>
-              <KeepAliveTab active={tab === 'files'}>
-                <OrderAttachmentsTab orderId={order.id} />
-              </KeepAliveTab>
-            </div>
-
-            <OrderCardFooter orderId={order.id} />
+            <aside
+              className={cn(
+                'border-t bg-secondary/80 lg:w-80 lg:shrink-0 lg:border-t-0 lg:border-l xl:w-96',
+                inSheet && 'flex min-h-72 flex-col lg:h-auto',
+              )}
+            >
+              <div className={inSheet ? 'min-h-0 flex-1' : 'lg:h-[calc(100dvh-8rem)]'}>
+                <OrderActivityFeed orderId={order.id} orderNumber={order.number} />
+              </div>
+            </aside>
           </div>
 
-          <aside
-            className={cn(
-              'border-t bg-secondary/80 lg:w-80 lg:shrink-0 lg:border-t-0 lg:border-l xl:w-96',
-              inSheet && 'flex min-h-72 flex-col lg:h-auto',
-            )}
-          >
-            <div className={inSheet ? 'min-h-0 flex-1' : 'lg:h-[calc(100dvh-8rem)]'}>
-              <OrderActivityFeed orderId={order.id} orderNumber={order.number} />
-            </div>
-          </aside>
+          {!hideChromeDelete ? (
+            <ConfirmDialog
+              open={deleteOpen}
+              title="Удалить заказ"
+              description={`Заказ ${order.number} будет удалён безвозвратно. Списания со склада останутся в журнале.`}
+              confirmLabel="Удалить"
+              isPending={remove.isPending}
+              onOpenChange={setDeleteOpen}
+              onConfirm={() => void handleDelete()}
+            />
+          ) : null}
         </div>
-
-        {!hideChromeDelete ? (
-          <ConfirmDialog
-            open={deleteOpen}
-            title="Удалить заказ"
-            description={`Заказ ${order.number} будет удалён безвозвратно. Списания со склада останутся в журнале.`}
-            confirmLabel="Удалить"
-            isPending={remove.isPending}
-            onOpenChange={setDeleteOpen}
-            onConfirm={() => void handleDelete()}
-          />
-        ) : null}
-      </div>
+      </OrderWorkCompositionProvider>
     </OrderCardSaveProvider>
   )
 }
 
-function OrderCardFooter({ orderId }: { orderId: string }) {
+function OrderCardFooter() {
   const cardSave = useOrderCardSave()
-  const usageQuery = useOrderInventoryUsage(orderId)
-  const servicesQuery = useOrderServiceLines(orderId)
-  const partsTotal = (usageQuery.data ?? []).reduce((sum, row) => sum + Math.abs(row.quantity) * row.unitPrice, 0)
-  const servicesTotal = (servicesQuery.data ?? []).reduce((sum, row) => sum + row.quantity * row.unitPrice, 0)
-  const total = partsTotal + servicesTotal
+  const workDraft = useOrderWorkCompositionDraftOptional()
+  const total = workDraft?.total ?? 0
   const showSave = Boolean(cardSave && (cardSave.dirty || cardSave.saving))
 
   return (

@@ -20,6 +20,7 @@ import 'tinymce/skins/content/default/content.js'
 
 import { DocumentPageSize, type DocumentPageSize as PageSize } from '@/lib/constants/documents'
 import { cn } from '@/lib/utils'
+import { toIsoDate } from '@/lib/utils/date'
 
 import { documentEditorContentStyle } from '../document-content-style'
 import { DEFAULT_DOCUMENT_DATE_FORMAT, documentDateFormats } from '../date-formats'
@@ -754,7 +755,7 @@ function fieldPreviewText(
   dateFormat: string | undefined,
   settingsFields: PlaceholderDefinition[],
 ) {
-  const raw = SAMPLE_PLACEHOLDER_VALUES[key]
+  const raw = key === 'document.today' ? toIsoDate(new Date()) : SAMPLE_PLACEHOLDER_VALUES[key]
   if (raw != null && raw !== '') {
     return resolvePlaceholderValue(key, raw, dateFormat)
   }

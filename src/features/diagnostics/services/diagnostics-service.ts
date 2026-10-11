@@ -1,6 +1,7 @@
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 import { toAppError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase/client'
+import { formatMoney, parseMoney } from '@/lib/utils/number'
 import type { Json, OrderDiagnosticsItemRow } from '@/types/database'
 
 export type OrderDiagnostics = {
@@ -146,15 +147,92 @@ export async function getOrderJournal(orderId: string): Promise<OrderJournalEven
   }))
 }
 
-export function formatJournalValue(value: Json | undefined): string {
+function isMoneyJournalField(field?: string, label?: string) {
+  const hay = `${field ?? ''} ${label ?? ''}`.toLowerCase()
+  return /sum|total|price|amount|unit_price|сумм|цен|стоим|итог/.test(hay)
+}
+
+function formatJournalNumber(value: number, asMoney: boolean) {
+  if (!Number.isFinite(value)) {
+    return '—'
+  }
+  if (asMoney) {
+    return `${formatMoney(value)} ₽`
+  }
+  return String(value)
+}
+
+/** Значение в diff журнала: суммы — с пробелом тысяч и ₽. */
+export function formatJournalValue(
+  value: Json | undefined,
+  options?: { field?: string; label?: string; money?: boolean },
+): string {
+  const asMoney = options?.money ?? isMoneyJournalField(options?.field, options?.label)
+
   if (value === undefined || value === null) {
     return '—'
   }
-  if (typeof value === 'string') {
-    return value.trim() || '—'
+  if (typeof value === 'number') {
+    return formatJournalNumber(value, asMoney)
   }
-  if (typeof value === 'number' || typeof value === 'boolean') {
+  if (typeof value === 'boolean') {
     return String(value)
   }
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return '—'
+    }
+    if (asMoney) {
+      const parsed = parseMoney(trimmed)
+      if (parsed != null && /^-?\d+([.,]\d+)?$/.test(trimmed.replace(/\s/g, ''))) {
+        return formatJournalNumber(parsed, true)
+      }
+    }
+    return trimmed
+  }
   return JSON.stringify(value)
+}
+
+/**
+ * Текст summary журнала: суммы вроде «0 → 15000» или «Сумма: 12500.5»
+ * приводим к «0,00 ₽ → 15 000,00 ₽».
+ */
+export function formatJournalSummary(summary: string): string {
+  const text = summary.trim()
+  if (!text) {
+    return text
+  }
+
+  const looksLikeMoneyEvent =
+    /сумм|итог|₽|руб/i.test(text) ||
+    /^-?\d[\d\s.,]*\s*(→|->|—|-)\s*-?\d/.test(text)
+
+  if (!looksLikeMoneyEvent) {
+    return text
+  }
+
+  return text.replace(/-?\d+(?:[.,]\d+)?(?:\s*₽)?/g, (raw) => {
+    const numPart = raw.replace(/\s*₽/g, '').trim()
+    const parsed = parseMoney(numPart)
+    if (parsed == null) {
+      return raw
+    }
+    return `${formatMoney(parsed)} ₽`
+  })
+}
+
+/** Основной текст события: для смены суммы — сразу «0,00 ₽ → 15 000,00 ₽». */
+export function formatJournalEventBody(event: {
+  eventType: string
+  summary: string
+  changes: DiagnosticChange[]
+}): string {
+  if (event.eventType === 'total_changed') {
+    const change = event.changes.find((item) => item.field === 'total') ?? event.changes[0]
+    if (change) {
+      return `${formatJournalValue(change.from, { field: 'total', label: 'Сумма заказа' })} → ${formatJournalValue(change.to, { field: 'total', label: 'Сумма заказа' })}`
+    }
+  }
+  return formatJournalSummary(event.summary)
 }

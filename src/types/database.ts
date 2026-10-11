@@ -1734,6 +1734,10 @@ export type Database = {
         Args: { target_order_id: string; p_body: string }
         Returns: string
       }
+      log_order_total_change: {
+        Args: { target_order_id: string; old_total: number; new_total: number }
+        Returns: undefined
+      }
       add_order_attachment_url: {
         Args: { target_order_id: string; target_url: string; caption?: string }
         Returns: string
@@ -1962,7 +1966,13 @@ export type Database = {
         Returns: undefined
       }
       search_inventory_items: {
-        Args: { search_query?: string; page_number?: number; page_size?: number; stock_filter?: string }
+        Args: {
+          search_query?: string
+          page_number?: number
+          page_size?: number
+          stock_filter?: string
+          category_filter?: string | null
+        }
         Returns: {
           id: string
           code: string
@@ -2175,7 +2185,13 @@ export type Database = {
         Returns: Json
       }
       list_inventory_receipts: {
-        Args: { page_number?: number; page_size?: number }
+        Args: {
+          page_number?: number
+          page_size?: number
+          status_filter?: string
+          created_from?: string | null
+          created_to?: string | null
+        }
         Returns: {
           id: string
           supplier: string
@@ -2188,6 +2204,61 @@ export type Database = {
           line_count: number
           total_quantity: number
           total_count: number
+        }[]
+      }
+      export_inventory_receipt_lines: {
+        Args: {
+          status_filter?: string
+          created_from?: string | null
+          created_to?: string | null
+        }
+        Returns: {
+          receipt_number: string
+          created_at: string
+          created_by_name: string
+          updated_at: string | null
+          updated_by_name: string
+          supplier: string
+          invoice_number: string
+          warehouse_name: string
+          category_name: string
+          item_code: string
+          item_article: string
+          item_barcode: string
+          item_name: string
+          supplier_warranty: number
+          warranty_period: string
+          expires_at: string
+          serial_number: string
+          quantity: number
+          unit_code: string
+          unit_price: number
+          line_amount: number
+          tax_amount: number
+        }[]
+      }
+      export_inventory_stock_items: {
+        Args: {
+          search_query?: string
+          stock_filter?: string
+          category_filter?: string | null
+        }
+        Returns: {
+          item_code: string
+          item_article: string
+          manufacturer_code: string
+          item_barcode: string
+          item_name: string
+          category_name: string
+          description: string
+          stock_quantity: number
+          ordered_quantity: number
+          unit_code: string
+          expires_at: string
+          serial_numbers: string
+          purchase_price: number
+          repair_price: number
+          retail_price: number
         }[]
       }
       get_inventory_receipt: {

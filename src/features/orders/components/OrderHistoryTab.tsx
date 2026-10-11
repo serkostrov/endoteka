@@ -3,7 +3,10 @@ import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { useOrderJournal } from '@/features/diagnostics/hooks/use-diagnostics'
-import { formatJournalValue } from '@/features/diagnostics/services/diagnostics-service'
+import {
+  formatJournalEventBody,
+  formatJournalValue,
+} from '@/features/diagnostics/services/diagnostics-service'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDateTime } from '@/lib/utils/date'
 import type { Json } from '@/types/database'
@@ -38,18 +41,20 @@ export function OrderHistoryTab({ orderId }: OrderHistoryTabProps) {
         <ol className="space-y-3">
           {events.map((event) => (
             <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
-              <p className="text-sm font-medium">{event.summary}</p>
+              <p className="text-sm font-medium tabular-nums">{formatJournalEventBody(event)}</p>
               <p className="text-xs text-muted-foreground">
-                {orderJournalEventTypeLabel(event.eventType)}
+                {orderJournalEventTypeLabel(event.eventType, event.summary)}
                 {' · '}
                 {formatDateTime(event.createdAt)}
                 {actorLine(event.actorName, event.payload)}
               </p>
-              {event.changes.length > 0 ? (
+              {event.changes.length > 0 && event.eventType !== 'total_changed' ? (
                 <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
                   {event.changes.map((change) => (
-                    <li key={`${event.id}-${change.field}`}>
-                      {change.label}: {formatJournalValue(change.from)} → {formatJournalValue(change.to)}
+                    <li key={`${event.id}-${change.field}`} className="tabular-nums">
+                      {change.label}:{' '}
+                      {formatJournalValue(change.from, { field: change.field, label: change.label })} →{' '}
+                      {formatJournalValue(change.to, { field: change.field, label: change.label })}
                     </li>
                   ))}
                 </ul>

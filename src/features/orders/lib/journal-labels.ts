@@ -2,7 +2,10 @@ import { DiagnosticJournalEvent } from '@/features/diagnostics/constants'
 import { OrderJournalEventType } from '@/lib/constants/orders'
 import { TaskJournalEvent } from '@/lib/constants/tasks'
 
-export function orderJournalEventTypeLabel(eventType: string) {
+export function orderJournalEventTypeLabel(eventType: string, summary = '') {
+  if (eventType === 'total_changed' || /^сумма\b/i.test(summary.trim()) || /изменена сумма/i.test(summary)) {
+    return 'Сумма'
+  }
   if (eventType === DiagnosticJournalEvent.Created || eventType === DiagnosticJournalEvent.Updated) {
     return 'Диагностика'
   }

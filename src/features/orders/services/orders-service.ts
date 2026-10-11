@@ -26,7 +26,8 @@ export type OrderSortColumn =
 
 export type OrderListFilters = {
   search: string
-  statusId: string
+  /** Пустой массив — все статусы; иначе фильтр по списку id. */
+  statusIds: string[]
   responsibleId: string
   deadlineState: string
   customerId: string
@@ -255,8 +256,8 @@ export async function listOrders(filters: OrderListFilters): Promise<OrderListRe
     )
   }
 
-  if (filters.statusId !== 'all') {
-    query = query.eq('status_id', filters.statusId)
+  if (filters.statusIds.length > 0) {
+    query = query.in('status_id', filters.statusIds)
   }
 
   if (filters.responsibleId === 'unassigned') {
@@ -319,6 +320,74 @@ export async function listOrders(filters: OrderListFilters): Promise<OrderListRe
     items: (data ?? []).map(mapListItem),
     total: count ?? 0,
   }
+}
+
+export type OrderCourierRouteRow = {
+  id: string
+  orderNumber: string
+  deviceLabel: string
+  serialNumber: string
+  phone: string
+  address: string
+}
+
+/** Данные выбранных заказов для маршрутного листа курьера (порядок = orderIds). */
+export async function getOrdersCourierRouteRows(orderIds: string[]): Promise<OrderCourierRouteRow[]> {
+  if (orderIds.length === 0) {
+    return []
+  }
+
+  const supabase = getSupabase()
+  const { data: orders, error } = await supabase
+    .from('order_list_items')
+    .select('id, number, device_label, serial_number, customer_id')
+    .in('id', orderIds)
+
+  if (error) {
+    throw toAppError(error, 'Не удалось загрузить заказы для печати.')
+  }
+
+  const rows = orders ?? []
+  const customerIds = [...new Set(rows.map((row) => row.customer_id).filter(Boolean))]
+  const customersById = new Map<string, { phone: string; city: string }>()
+
+  if (customerIds.length > 0) {
+    const { data: customers, error: customersError } = await supabase
+      .from('customers')
+      .select('id, phone, city')
+      .in('id', customerIds)
+
+    if (customersError) {
+      throw toAppError(customersError, 'Не удалось загрузить клиентов для печати.')
+    }
+
+    for (const customer of customers ?? []) {
+      customersById.set(customer.id, {
+        phone: customer.phone ?? '',
+        city: customer.city ?? '',
+      })
+    }
+  }
+
+  const byId = new Map(rows.map((row) => [row.id, row]))
+
+  return orderIds.flatMap((id) => {
+    const row = byId.get(id)
+    if (!row) {
+      return []
+    }
+    const customer = customersById.get(row.customer_id) ?? { phone: '', city: '' }
+    return [
+      {
+        id: row.id,
+        orderNumber: row.number,
+        deviceLabel: row.device_label,
+        serialNumber: row.serial_number,
+        phone: customer.phone,
+        address: customer.city.trim(),
+      },
+    ]
+  })
 }
 
 export async function getOrder(id: string): Promise<OrderDetail | null> {

@@ -32,6 +32,8 @@ type CreateItemDialogProps = {
   /** Если задан — можно создать строку только в этот заказ, без справочника. */
   orderId?: string
   onCreatedForOrder?: () => void
+  /** Если задан — позиция только для заказа уходит в черновик, без немедленного сохранения. */
+  onDraftForOrder?: (input: { name: string; unitPrice: number; quantity: number }) => void
   initialQuery?: string
 }
 
@@ -41,6 +43,7 @@ export function CreateItemDialog({
   onCreated,
   orderId,
   onCreatedForOrder,
+  onDraftForOrder,
   initialQuery = '',
 }: CreateItemDialogProps) {
   const create = useCreateInventoryItem()
@@ -51,7 +54,7 @@ export function CreateItemDialog({
     defaultValues: emptyInventoryItemFormValues,
   })
   const canSaveCatalog = Boolean(onCreated) || !orderId
-  const pending = create.isPending || addCustom.isPending
+  const pending = create.isPending || (!onDraftForOrder && addCustom.isPending)
 
   useEffect(() => {
     if (!open) {
@@ -103,6 +106,11 @@ export function CreateItemDialog({
     }
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
       form.setError('repairPrice', { message: 'Цена не может быть отрицательной' })
+      return
+    }
+    if (onDraftForOrder) {
+      onDraftForOrder({ name, unitPrice, quantity: 1 })
+      closeOnly()
       return
     }
     await addCustom.mutateAsync({ name, unitPrice, quantity: 1 })

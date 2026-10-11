@@ -63,7 +63,7 @@ function OrderSourcePicker({
   const debounced = useDebouncedValue(query, 300)
   const ordersQuery = useOrders({
     search: debounced,
-    statusId: 'all',
+    statusIds: [],
     responsibleId: 'all',
     deadlineState: 'all',
     customerId: 'all',

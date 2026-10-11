@@ -12,7 +12,8 @@ export function FilterBar({ children, end, className }: FilterBarProps) {
   return (
     <div
       className={cn(
-        'flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-x-auto',
+        // py/px: место под focus-ring (overflow-x-auto иначе обрезает)
+        'flex w-full min-w-0 flex-nowrap items-center gap-2 overflow-x-auto px-0.5 py-1',
         '[&_[data-slot=input]]:h-9',
         '[&_[data-slot=select-trigger]]:h-9!',
         '[&_[data-slot=select-trigger]]:shrink-0',

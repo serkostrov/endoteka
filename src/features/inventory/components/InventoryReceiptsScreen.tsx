@@ -1,17 +1,29 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Download } from 'lucide-react'
+import { toast } from 'sonner'
 
+import { CreatedPeriodFilter } from '@/components/shared/CreatedPeriodFilter'
 import { DataTable } from '@/components/shared/DataTable'
+import { FilterBar } from '@/components/shared/FilterBar'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { SupplierLink } from '@/components/shared/SupplierLink'
+import { activeFilterControlClass } from '@/components/shared/active-filter-style'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
+import {
+  DatePeriodPreset,
+  isDatePeriodPreset,
+  resolveDatePeriodBounds,
+} from '@/lib/constants/date-period'
 import {
   formatQuantity,
   InventoryReceiptStatus,
   inventoryReceiptStatusLabels,
   inventoryReceiptStatusTone,
+  isInventoryReceiptStatus,
 } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
@@ -22,7 +34,12 @@ import { InventoryReceiptSheet } from './InventoryReceiptSheet'
 import { ReceiveStockSheet } from './ReceiveStockSheet'
 import { ReceiptBulkActions } from './ReceiptBulkActions'
 import { ReceiptDeleteControl } from './ReceiptDeleteControl'
-import { useInventoryReceipts } from '../hooks/use-inventory'
+import { useExportInventoryReceipts, useInventoryReceipts } from '../hooks/use-inventory'
+import {
+  buildReceiptExportWorkbook,
+  downloadBlob,
+  receiptExportFilename,
+} from '../lib/receipt-export'
 import type { InventoryReceiptListItem } from '../services/inventory-service'
 
 export function InventoryReceiptsScreen() {
@@ -33,10 +50,77 @@ export function InventoryReceiptsScreen() {
   const [editDraftId, setEditDraftId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const canReceive = useHasPermission(Permission.InventoryReceive)
-  const receiptsQuery = useInventoryReceipts(page, pageSize)
+  const canRead = useHasPermission(Permission.InventoryRead) || canReceive
+  const exportReceipts = useExportInventoryReceipts()
+
+  const statusParam = searchParams.get('status')
+  const statusFilter =
+    statusParam && isInventoryReceiptStatus(statusParam) ? statusParam : 'all'
+  const periodParam = searchParams.get('period')
+  const period = periodParam && isDatePeriodPreset(periodParam) ? periodParam : DatePeriodPreset.All
+  const periodFrom = searchParams.get('from')
+  const periodTo = searchParams.get('to')
+
+  const filterKey = `${statusFilter}|${period}|${periodFrom ?? ''}|${periodTo ?? ''}`
+  const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
+  if (seenFilterKey !== filterKey) {
+    setSeenFilterKey(filterKey)
+    setPage(1)
+    setSelectedIds([])
+  }
+
+  const periodBounds = useMemo(
+    () => resolveDatePeriodBounds(period, periodFrom, periodTo),
+    [period, periodFrom, periodTo],
+  )
+
+  const listFilters = useMemo(
+    () => ({
+      status: statusFilter,
+      period,
+      from: periodFrom,
+      to: periodTo,
+      createdFrom: periodBounds.fromIso,
+      createdTo: periodBounds.toExclusiveIso,
+    }),
+    [statusFilter, period, periodFrom, periodTo, periodBounds.fromIso, periodBounds.toExclusiveIso],
+  )
+
+  const receiptsQuery = useInventoryReceipts(page, pageSize, listFilters)
   const receiptId = searchParams.get('receipt')
   const total = receiptsQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  async function handleExport() {
+    try {
+      const lines = await exportReceipts.mutateAsync({
+        status: listFilters.status,
+        createdFrom: listFilters.createdFrom,
+        createdTo: listFilters.createdTo,
+      })
+      if (lines.length === 0) {
+        toast.message('Нет строк для экспорта по выбранным фильтрам')
+        return
+      }
+      const blob = await buildReceiptExportWorkbook(lines)
+      downloadBlob(blob, receiptExportFilename())
+      toast.success(`Экспортировано строк: ${lines.length}`)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
+  function patchFilters(patch: Record<string, string | null>) {
+    const next = new URLSearchParams(searchParams)
+    for (const [key, value] of Object.entries(patch)) {
+      if (!value || value === 'all') {
+        next.delete(key)
+      } else {
+        next.set(key, value)
+      }
+    }
+    setSearchParams(next, { replace: true })
+  }
 
   function openReceipt(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -84,13 +168,72 @@ export function InventoryReceiptsScreen() {
         title="Приходы"
         description="Документы поступления товара на склад."
         actions={
-          canReceive ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
-              Новый приход
-            </Button>
-          ) : null
+          <div className="flex flex-wrap items-center gap-2">
+            {canRead ? (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={exportReceipts.isPending}
+                onClick={() => void handleExport()}
+              >
+                <Download />
+                {exportReceipts.isPending ? 'Экспорт…' : 'Экспорт'}
+              </Button>
+            ) : null}
+            {canReceive ? (
+              <Button type="button" onClick={() => setCreateOpen(true)}>
+                Новый приход
+              </Button>
+            ) : null}
+          </div>
         }
       />
+
+      <FilterBar>
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => patchFilters({ status: value === 'all' ? null : value })}
+        >
+          <SelectTrigger
+            aria-label="Фильтр по статусу"
+            className={activeFilterControlClass(statusFilter !== 'all', 'w-auto min-w-40')}
+            onClear={
+              statusFilter !== 'all' ? () => patchFilters({ status: null }) : undefined
+            }
+            clearLabel="Сбросить фильтр по статусу"
+          >
+            <SelectValue placeholder="Статус" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Все статусы</SelectItem>
+            <SelectItem value={InventoryReceiptStatus.Draft}>
+              <StatusBadge tone={inventoryReceiptStatusTone(InventoryReceiptStatus.Draft)}>
+                {inventoryReceiptStatusLabels.draft}
+              </StatusBadge>
+            </SelectItem>
+            <SelectItem value={InventoryReceiptStatus.Posted}>
+              <StatusBadge tone={inventoryReceiptStatusTone(InventoryReceiptStatus.Posted)}>
+                {inventoryReceiptStatusLabels.posted}
+              </StatusBadge>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
+        <CreatedPeriodFilter
+          value={{
+            preset: period,
+            from: periodFrom,
+            to: periodTo,
+          }}
+          onChange={(next) =>
+            patchFilters({
+              period: next.preset === DatePeriodPreset.All ? null : next.preset,
+              from: next.preset === DatePeriodPreset.Custom ? next.from : null,
+              to: next.preset === DatePeriodPreset.Custom ? next.to : null,
+            })
+          }
+        />
+      </FilterBar>
 
       {selectedIds.length > 0 ? (
         <ReceiptBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
@@ -103,7 +246,11 @@ export function InventoryReceiptsScreen() {
         data={receiptsQuery.data?.items ?? []}
         getRowId={(row) => row.id}
         emptyTitle="Приходов нет"
-        emptyDescription="Оформите поступление, чтобы появились партии."
+        emptyDescription={
+          statusFilter !== 'all' || period !== DatePeriodPreset.All
+            ? 'Нет приходов по выбранным фильтрам.'
+            : 'Оформите поступление, чтобы появились партии.'
+        }
         onRowClick={handleRowClick}
         selection={{
           selectedIds,

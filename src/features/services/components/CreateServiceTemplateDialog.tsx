@@ -35,6 +35,13 @@ type CreateServiceTemplateDialogProps = {
   /** Если задан — можно создать строку только в этот заказ, без справочника. */
   orderId?: string
   onCreatedForOrder?: () => void
+  /** Если задан — услуга только для заказа уходит в черновик, без немедленного сохранения. */
+  onDraftForOrder?: (input: {
+    name: string
+    description: string
+    unitPrice: number
+    quantity: number
+  }) => void
   initialQuery?: string
 }
 
@@ -44,6 +51,7 @@ export function CreateServiceTemplateDialog({
   onCreated,
   orderId,
   onCreatedForOrder,
+  onDraftForOrder,
   initialQuery = '',
 }: CreateServiceTemplateDialogProps) {
   const create = useCreateServiceTemplate()
@@ -89,6 +97,16 @@ export function CreateServiceTemplateDialog({
     if (!orderId) {
       return
     }
+    if (onDraftForOrder) {
+      onDraftForOrder({
+        name: values.name,
+        description: values.description,
+        unitPrice: values.unitPrice,
+        quantity: 1,
+      })
+      closeOnly()
+      return
+    }
     await addCustom.mutateAsync({
       name: values.name,
       description: values.description,
@@ -100,7 +118,7 @@ export function CreateServiceTemplateDialog({
     onCreatedForOrder?.()
   }
 
-  const pending = create.isPending || addCustom.isPending
+  const pending = create.isPending || (!onDraftForOrder && addCustom.isPending)
 
   return (
     <Sheet

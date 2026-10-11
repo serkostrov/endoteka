@@ -1,6 +1,8 @@
 import DOMPurify from 'dompurify'
 import QRCode from 'qrcode'
 
+import { toIsoDate } from '@/lib/utils/date'
+
 import { buildCode128Path } from './barcode'
 import { interpolateTemplate, isResolvablePlaceholderKey, resolvePlaceholderValue } from './interpolate'
 import type { DocumentContext, PageMarginsMm, TemplateBlock } from './template-schema'
@@ -463,24 +465,34 @@ export function embedVisualCodes(html: string, qrMap: Record<string, string>) {
   return root.innerHTML
 }
 
+function withLiveDocumentValues(values: Record<string, string>): Record<string, string> {
+  return {
+    ...values,
+    'document.today': toIsoDate(new Date()),
+  }
+}
+
 export function prepareDocumentHtml(html: string, context: DocumentContext) {
+  const values = withLiveDocumentValues(context.values)
+  const liveContext: DocumentContext = { ...context, values }
+
   if (typeof DOMParser === 'undefined') {
-    return interpolateTemplate(html, context.values)
+    return interpolateTemplate(html, values)
   }
 
   const parsed = new DOMParser().parseFromString(`<div id="doc-root">${html}</div>`, 'text/html')
   const root = parsed.getElementById('doc-root')
   if (!root) {
-    return interpolateTemplate(html, context.values)
+    return interpolateTemplate(html, values)
   }
 
   for (const table of root.querySelectorAll('table')) {
-    expandRepeatingTable(table, context)
+    expandRepeatingTable(table, liveContext)
   }
 
-  interpolateNode(root, context.values)
+  interpolateNode(root, values)
   // Пустой data-code после подстановки — только из явного barcode-поля источника, без подмены кодом.
-  fillEmptyBarcodeCodes(root, context.values)
+  fillEmptyBarcodeCodes(root, values)
   return root.innerHTML
 }
 
@@ -502,36 +514,81 @@ function fillEmptyBarcodeCodes(root: Element, values: Record<string, string>) {
   }
 }
 
-function expandRepeatingTable(table: HTMLTableElement, context: DocumentContext) {
-  const body = table.tBodies[0]
-  if (!body) {
-    return
+function rowUsesRepeatingPrefix(row: HTMLTableRowElement, prefix: 'part' | 'line') {
+  if (row.querySelector(`.doc-field[data-field^="${prefix}."]`)) {
+    return true
   }
-  const templateRow = body.rows[0]
+  return new RegExp(`\\{\\{\\s*${prefix}\\.`).test(row.innerHTML)
+}
+
+function expandRepeatingTable(table: HTMLTableElement, context: DocumentContext) {
+  // Первая строка с полями part.* / line.* — шаблон повтора (в thead или tbody).
+  let templateRow: HTMLTableRowElement | null = null
+  let usesParts = false
+  let usesLines = false
+  for (const row of Array.from(table.rows)) {
+    const parts = rowUsesRepeatingPrefix(row, 'part')
+    const lines = rowUsesRepeatingPrefix(row, 'line')
+    if (parts || lines) {
+      templateRow = row
+      usesParts = parts
+      usesLines = lines
+      break
+    }
+  }
+
   if (!templateRow) {
     return
   }
 
-  const sample = templateRow.innerHTML
-  const usesParts = /\{\{\s*part\./.test(sample)
-  const usesLines = /\{\{\s*line\./.test(sample)
-  if (!usesParts && !usesLines) {
-    interpolateNode(templateRow, context.values)
+  const section = templateRow.parentElement
+  if (!section) {
     return
   }
 
-  const source = usesParts ? context.parts : context.lines
-  const rows = source.length > 0 ? source : [{}]
-  body.replaceChildren()
-  for (const row of rows) {
-    const clone = templateRow.cloneNode(true) as HTMLTableRowElement
-    interpolateNode(clone, { ...context.values, ...row })
-    body.append(clone)
+  // Для заказа «строка накладной» часто ставят по ошибке — подставляем состав запчастей.
+  let source = usesParts ? context.parts : context.lines
+  if (usesLines && !usesParts && source.length === 0 && context.parts.length > 0) {
+    source = context.parts.map((part) => ({
+      'line.name': part['part.name'] ?? '',
+      'line.code': part['part.code'] ?? '',
+      'line.article': part['part.article'] ?? '',
+      'line.quantity': part['part.quantity'] ?? '',
+      'line.unitName': part['part.unitName'] ?? '',
+      'line.price': part['part.price'] ?? '',
+      'line.amount': part['part.amount'] ?? part['part.price'] ?? '',
+    }))
   }
+
+  const templateClone = templateRow.cloneNode(true) as HTMLTableRowElement
+  let cursor: Element | null = templateRow
+  while (cursor) {
+    const next = cursor.nextElementSibling
+    cursor.remove()
+    cursor = next
+  }
+
+  const rows = source.length > 0 ? source : [{}]
+  rows.forEach((row, index) => {
+    const clone = templateClone.cloneNode(true) as HTMLTableRowElement
+    interpolateNode(clone, {
+      ...context.values,
+      ...row,
+      'part.index': String(index + 1),
+      'line.index': String(index + 1),
+    })
+    // После заполнения: финальный проход по документу не должен затирать строки
+    // снимком первой позиции из context.values.
+    clone.setAttribute('data-doc-repeat', '1')
+    section.append(clone)
+  })
 }
 
 function interpolateNode(node: Element, values: Record<string, string>) {
   for (const element of node.querySelectorAll<HTMLElement>('.doc-field[data-field]')) {
+    if (element.closest('tr[data-doc-repeat]')) {
+      continue
+    }
     const key = element.getAttribute('data-field')?.trim() ?? ''
     if (!key) {
       continue
@@ -554,6 +611,9 @@ function interpolateNode(node: Element, values: Record<string, string>) {
   }
   for (const text of texts) {
     if (text.parentElement?.closest('.doc-field[data-field]')) {
+      continue
+    }
+    if (text.parentElement?.closest('tr[data-doc-repeat]')) {
       continue
     }
     const next = interpolateTemplate(text.data, values)

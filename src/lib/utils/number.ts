@@ -21,6 +21,27 @@ export function formatInteger(value: number) {
 }
 
 /**
+ * Десятичные в документах: пробел тысяч, запятая в дробной части, без хвоста нулей.
+ * 1250.5 → «1 250,5», 4 → «4», 4.000 → «4».
+ */
+export function formatDocumentDecimal(value: number, maxFractionDigits = 3) {
+  if (!Number.isFinite(value)) {
+    return '0'
+  }
+  const { sign, abs } = splitSigned(value)
+  const factor = 10 ** maxFractionDigits
+  const rounded = Math.round(abs * factor) / factor
+  const whole = Math.trunc(rounded)
+  const frac = Math.round((rounded - whole) * factor)
+  const wholeStr = groupThousands(String(whole), '\u00a0')
+  if (frac === 0) {
+    return `${sign}${wholeStr}`
+  }
+  const fracStr = String(frac).padStart(maxFractionDigits, '0').replace(/0+$/, '')
+  return `${sign}${wholeStr},${fracStr}`
+}
+
+/**
  * Количества и остатки — строго целые (округление до ближайшего).
  * 4003 → «4003», 1.003 → «1», 4.6 → «5».
  */

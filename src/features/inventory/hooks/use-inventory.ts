@@ -32,6 +32,8 @@ import {
   deleteInventoryItemPhoto,
   deleteInventoryReceipt,
   deleteInventoryWriteOff,
+  exportInventoryReceiptLines,
+  exportInventoryStockItems,
   findInventoryItemByName,
   findInventoryItemsByBarcode,
   getInventoryItemCard,
@@ -57,6 +59,8 @@ import {
   uploadInventoryItemPhoto,
   type InventoryItemInput,
   type InventoryReceiptDeleteMode,
+  type InventoryReceiptListFilters,
+  type InventoryStockExportFilters,
   type InventoryWriteOffDeleteMode,
   type ReceiptLineInput,
   type WriteOffLineInput,
@@ -64,10 +68,16 @@ import {
 
 export type { InventoryReceiptDeleteMode, InventoryWriteOffDeleteMode }
 
-export function useInventoryStock(search: string, page: number, pageSize: number, stockFilter = 'all') {
+export function useInventoryStock(
+  search: string,
+  page: number,
+  pageSize: number,
+  stockFilter = 'all',
+  categoryId: string | null = null,
+) {
   return useQuery({
-    queryKey: queryKeys.inventory.stock({ search, page, pageSize, stock: stockFilter }),
-    queryFn: () => searchInventoryItems(search, page, pageSize, stockFilter),
+    queryKey: queryKeys.inventory.stock({ search, page, pageSize, stock: stockFilter, categoryId }),
+    queryFn: () => searchInventoryItems(search, page, pageSize, stockFilter, categoryId),
     placeholderData: keepPreviousData,
   })
 }
@@ -119,10 +129,33 @@ export function useInventoryItemCard(id: string | undefined) {
   })
 }
 
-export function useInventoryReceipts(page: number, pageSize: number) {
+export function useInventoryReceipts(
+  page: number,
+  pageSize: number,
+  filters: {
+    status?: string
+    period?: string
+    from?: string | null
+    to?: string | null
+    createdFrom?: string | null
+    createdTo?: string | null
+  } = {},
+) {
   return useQuery({
-    queryKey: queryKeys.inventory.receipts({ page, pageSize }),
-    queryFn: () => listInventoryReceipts(page, pageSize),
+    queryKey: queryKeys.inventory.receipts({
+      page,
+      pageSize,
+      status: filters.status,
+      period: filters.period,
+      from: filters.from,
+      to: filters.to,
+    }),
+    queryFn: () =>
+      listInventoryReceipts(page, pageSize, {
+        status: filters.status,
+        createdFrom: filters.createdFrom,
+        createdTo: filters.createdTo,
+      }),
     placeholderData: keepPreviousData,
   })
 }
@@ -132,6 +165,18 @@ export function useInventoryReceipt(id: string | undefined) {
     queryKey: id ? queryKeys.inventory.receipt(id) : queryKeys.inventory.all,
     queryFn: () => getInventoryReceipt(id ?? ''),
     enabled: Boolean(id),
+  })
+}
+
+export function useExportInventoryReceipts() {
+  return useMutation({
+    mutationFn: (filters: InventoryReceiptListFilters) => exportInventoryReceiptLines(filters),
+  })
+}
+
+export function useExportInventoryStock() {
+  return useMutation({
+    mutationFn: (filters: InventoryStockExportFilters) => exportInventoryStockItems(filters),
   })
 }
 
