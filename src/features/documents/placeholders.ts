@@ -6,7 +6,6 @@ export const placeholderKeys = [
   'company.name',
   'document.number',
   'document.issuedAt',
-  'document.today',
   'order.number',
   'order.createdAt',
   'order.status',
@@ -78,13 +77,6 @@ export const placeholderRegistry: Record<PlaceholderKey, PlaceholderDefinition> 
   'document.issuedAt': {
     key: 'document.issuedAt',
     label: 'Дата выпуска',
-    group: 'Документ',
-    scope: 'document',
-    isDate: true,
-  },
-  'document.today': {
-    key: 'document.today',
-    label: 'Сегодняшняя дата',
     group: 'Документ',
     scope: 'document',
     isDate: true,
@@ -294,8 +286,7 @@ export function groupPlaceholders(items: PlaceholderDefinition[]) {
 export const SAMPLE_PLACEHOLDER_VALUES: Record<string, string> = {
   'company.name': 'Эндотека',
   'document.number': 'ДОК-000001',
-  'document.issuedAt': '2026-08-25T12:00:00',
-  'document.today': '2026-08-25',
+  'document.issuedAt': '2026-08-25',
   'order.number': 'А0001',
   'order.createdAt': '2026-08-25',
   'order.status': 'В ремонте',

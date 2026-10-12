@@ -19,7 +19,7 @@ export type DocumentDateFormat = (typeof documentDateFormats)[number]['value']
 
 const STATIC_DATE_KEYS = new Set([
   'document.issuedAt',
-  'document.today',
+  'document.today', // старые шаблоны — то же, что document.issuedAt
   'order.createdAt',
   'order.deadline',
   'order.readyDate',

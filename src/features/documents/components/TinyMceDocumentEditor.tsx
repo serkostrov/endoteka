@@ -755,7 +755,10 @@ function fieldPreviewText(
   dateFormat: string | undefined,
   settingsFields: PlaceholderDefinition[],
 ) {
-  const raw = key === 'document.today' ? toIsoDate(new Date()) : SAMPLE_PLACEHOLDER_VALUES[key]
+  const raw =
+    key === 'document.issuedAt' || key === 'document.today'
+      ? toIsoDate(new Date())
+      : SAMPLE_PLACEHOLDER_VALUES[key]
   if (raw != null && raw !== '') {
     return resolvePlaceholderValue(key, raw, dateFormat)
   }

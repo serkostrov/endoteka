@@ -466,9 +466,12 @@ export function embedVisualCodes(html: string, qrMap: Record<string, string>) {
 }
 
 function withLiveDocumentValues(values: Record<string, string>): Record<string, string> {
+  const today = toIsoDate(new Date())
   return {
     ...values,
-    'document.today': toIsoDate(new Date()),
+    // Одна дата документа = сегодня (в т.ч. старые шаблоны с document.today).
+    'document.issuedAt': today,
+    'document.today': today,
   }
 }
 
@@ -563,7 +566,7 @@ function expandRepeatingTable(table: HTMLTableElement, context: DocumentContext)
   const templateClone = templateRow.cloneNode(true) as HTMLTableRowElement
   let cursor: Element | null = templateRow
   while (cursor) {
-    const next = cursor.nextElementSibling
+    const next: Element | null = cursor.nextElementSibling
     cursor.remove()
     cursor = next
   }
