@@ -22,7 +22,6 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentUser, useHasPermission } from '@/features/auth'
-import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { Permission } from '@/lib/constants/permissions'
 import { canAccessOwnedOrManagedTask, canMutateTaskAccess } from '../lib/task-access'
 import {
@@ -35,6 +34,7 @@ import {
 import { getErrorMessage } from '@/lib/errors'
 import { formatDateTime, localDateTimeToIso } from '@/lib/utils/date'
 
+import { TaskAssigneeSelect } from './TaskAssigneeSelect'
 import { TaskCompleteControl } from './TaskCompleteControl'
 import { TaskDeleteControl } from './TaskDeleteControl'
 import { useTask, useUpdateTask } from '../hooks/use-tasks'
@@ -68,6 +68,7 @@ function TaskDetailSheetContent({ taskId, onClose }: { taskId: string; onClose: 
     canDelete &&
     canAccessOwnedOrManagedTask({
       assigneeId: task!.assigneeId,
+      createdBy: task!.createdBy,
       currentUserId: user?.id,
       canManageOthers,
     })
@@ -119,6 +120,7 @@ function TaskSheetCard({ task }: { task: Task }) {
   const canManageOthers = useHasPermission(Permission.TasksManageOthers)
   const canMutate = canMutateTaskAccess({
     assigneeId: task.assigneeId,
+    createdBy: task.createdBy,
     currentUserId: user?.id,
     canUpdate,
     canManageOthers,
@@ -149,7 +151,7 @@ function TaskSheetCard({ task }: { task: Task }) {
         </div>
       </SheetHeader>
       {canMutate ? (
-        <TaskSheetForm task={task} canManageOthers={canManageOthers} />
+        <TaskSheetForm task={task} />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="space-y-3 overflow-y-auto px-4 py-4">
@@ -171,9 +173,7 @@ function TaskSheetCard({ task }: { task: Task }) {
   )
 }
 
-function TaskSheetForm({ task, canManageOthers }: { task: Task; canManageOthers: boolean }) {
-  const user = useCurrentUser()
-  const employees = useActiveEmployees()
+function TaskSheetForm({ task }: { task: Task }) {
   const update = useUpdateTask(task.id, task.orderId)
   const [title, setTitle] = useState(task.title)
   const [body, setBody] = useState(task.body)
@@ -235,33 +235,12 @@ function TaskSheetForm({ task, canManageOthers }: { task: Task; canManageOthers:
           />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label>Исполнитель</Label>
-            <Select
-              value={assigneeId}
-              onValueChange={setAssigneeId}
-              disabled={!canManageOthers && Boolean(user?.id)}
-            >
-              <SelectTrigger className="w-full" aria-label="Исполнитель">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent searchable>
-                {canManageOthers ? (
-                  <SelectItem value={TASK_ASSIGNEE_NONE}>Не назначен</SelectItem>
-                ) : null}
-                {task.assigneeId && !(employees.data ?? []).some((employee) => employee.id === task.assigneeId) ? (
-                  <SelectItem value={task.assigneeId}>{task.assigneeName || 'Исполнитель'}</SelectItem>
-                ) : null}
-                {(employees.data ?? [])
-                  .filter((employee) => canManageOthers || employee.id === user?.id)
-                  .map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.fullName}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <TaskAssigneeSelect
+            value={assigneeId}
+            onValueChange={setAssigneeId}
+            currentAssigneeId={task.assigneeId}
+            currentAssigneeName={task.assigneeName}
+          />
           <div className="space-y-2">
             <Label>Приоритет</Label>
             <Select value={priority} onValueChange={(value) => setPriority(isTaskPriority(value) ? value : task.priority)}>

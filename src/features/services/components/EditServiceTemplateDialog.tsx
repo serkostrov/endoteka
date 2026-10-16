@@ -42,6 +42,10 @@ type EditServiceTemplateDialogProps = {
   onOpenChange: (open: boolean) => void
   /** Если открыто из заказа — доступны две кнопки сохранения. */
   orderLine?: ServiceOrderLineContext | null
+  /** После локального сохранения (в т.ч. для ещё не сохранённой строки черновика). */
+  onSavedForOrder?: (values: ServiceTemplateFormValues) => void
+  /** После сохранения шаблона — синхронизировать черновик состава. */
+  onSavedToCatalog?: (values: ServiceTemplateFormValues) => void
 }
 
 export function EditServiceTemplateDialog({
@@ -49,6 +53,8 @@ export function EditServiceTemplateDialog({
   open,
   onOpenChange,
   orderLine = null,
+  onSavedForOrder,
+  onSavedToCatalog,
 }: EditServiceTemplateDialogProps) {
   if (!item) {
     return null
@@ -61,6 +67,8 @@ export function EditServiceTemplateDialog({
       open={open}
       onOpenChange={onOpenChange}
       orderLine={orderLine}
+      onSavedForOrder={onSavedForOrder}
+      onSavedToCatalog={onSavedToCatalog}
     />
   )
 }
@@ -70,11 +78,15 @@ function EditServiceTemplateForm({
   open,
   onOpenChange,
   orderLine,
+  onSavedForOrder,
+  onSavedToCatalog,
 }: {
   item: ServiceTemplate
   open: boolean
   onOpenChange: (open: boolean) => void
   orderLine: ServiceOrderLineContext | null
+  onSavedForOrder?: (values: ServiceTemplateFormValues) => void
+  onSavedToCatalog?: (values: ServiceTemplateFormValues) => void
 }) {
   const canEditCatalog = useHasPermission(Permission.SettingsUpdate)
   const canEditOrder = useHasPermission(Permission.OrdersUpdate)
@@ -97,21 +109,28 @@ function EditServiceTemplateForm({
 
   async function persistCatalog(values: ServiceTemplateFormValues) {
     await updateCatalog.mutateAsync({ ...values, isActive: item.isActive })
+    onSavedToCatalog?.(values)
     toast.success('Сохранено в справочнике')
     form.reset(values)
+    if (fromOrder) {
+      onOpenChange(false)
+    }
   }
 
   async function persistForOrder(values: ServiceTemplateFormValues) {
     if (!orderLine) {
       return
     }
-    await updateOrderLine.mutateAsync({
-      lineId: orderLine.id,
-      name: values.name,
-      description: values.description,
-      unitPrice: values.unitPrice,
-    })
-    toast.success('Сохранено для заказа')
+    if (orderLine.id) {
+      await updateOrderLine.mutateAsync({
+        lineId: orderLine.id,
+        name: values.name,
+        description: values.description,
+        unitPrice: values.unitPrice,
+      })
+    }
+    onSavedForOrder?.(values)
+    toast.success(orderLine.id ? 'Сохранено только для этого заказа' : 'Изменения только в этом заказе')
     form.reset(values)
     onOpenChange(false)
   }
@@ -166,7 +185,7 @@ function EditServiceTemplateForm({
           <SheetTitle>Услуга</SheetTitle>
           <SheetDescription>
             {fromOrder
-              ? '«Для заказа» меняет только эту строку. «В справочнике» — шаблон и все связанные заказы.'
+              ? 'Только для заказа — эта строка. В справочнике — шаблон и все заказы с этой услугой.'
               : 'Изменения обновляют шаблон и все строки заказов, где эта услуга из справочника.'}
           </SheetDescription>
         </SheetHeader>
@@ -180,7 +199,7 @@ function EditServiceTemplateForm({
             noValidate
           >
             <ServiceTemplateFields form={form} />
-            <SheetFooter className="flex-col gap-2 px-0 sm:flex-row sm:justify-end">
+            <SheetFooter className="px-0">
               <SheetClose asChild>
                 <Button type="button" variant="outline">
                   Закрыть
@@ -188,23 +207,22 @@ function EditServiceTemplateForm({
               </SheetClose>
               {fromOrder ? (
                 <>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    disabled={!canEditCatalog || saving || !dirty}
-                    onClick={() => {
-                      void form.handleSubmit((values) =>
-                        persistCatalog(values).catch((error) => toast.error(getErrorMessage(error))),
-                      )()
-                    }}
-                  >
-                    {updateCatalog.isPending ? 'Сохранение…' : 'Сохранить в справочнике'}
-                  </Button>
-                  <Button
-                    type="submit"
-                    disabled={!canEditOrder || saving || !dirty}
-                  >
-                    {updateOrderLine.isPending ? 'Сохранение…' : 'Сохранить для заказа'}
+                  {canEditCatalog ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving || !dirty}
+                      onClick={() => {
+                        void form.handleSubmit((values) =>
+                          persistCatalog(values).catch((error) => toast.error(getErrorMessage(error))),
+                        )()
+                      }}
+                    >
+                      {updateCatalog.isPending ? 'Сохранение…' : 'Сохранить в справочнике'}
+                    </Button>
+                  ) : null}
+                  <Button type="submit" disabled={!canEditOrder || saving || !dirty}>
+                    {updateOrderLine.isPending ? 'Сохранение…' : 'Сохранить только для заказа'}
                   </Button>
                 </>
               ) : (

@@ -8,18 +8,23 @@ import {
   type ServiceOrderLineContext,
 } from './EditServiceTemplateDialog'
 import { useServiceTemplate } from '../hooks/use-services'
+import type { ServiceTemplateFormValues } from '../schemas'
 
 export function ServiceTemplateSheet({
   templateId,
   open,
   onOpenChange,
   orderLine = null,
+  onSavedForOrder,
+  onSavedToCatalog,
 }: {
   templateId: string | null
   open: boolean
   onOpenChange: (open: boolean) => void
   /** Контекст строки заказа — две кнопки сохранения. */
   orderLine?: ServiceOrderLineContext | null
+  onSavedForOrder?: (values: ServiceTemplateFormValues) => void
+  onSavedToCatalog?: (values: ServiceTemplateFormValues) => void
 }) {
   const templateQuery = useServiceTemplate(open ? templateId : null)
 
@@ -30,6 +35,8 @@ export function ServiceTemplateSheet({
         open={open}
         onOpenChange={onOpenChange}
         orderLine={orderLine}
+        onSavedForOrder={onSavedForOrder}
+        onSavedToCatalog={onSavedToCatalog}
       />
     )
   }

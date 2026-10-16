@@ -49,33 +49,38 @@ export function PermissionMatrix({ selected, onChange, readOnly = false }: Permi
             <TableCell className="font-medium">{module.label}</TableCell>
             {matrixColumns.map((column) => {
               const code = module.cells[column.id]
-              if (!code) {
-                return (
-                  <TableCell key={column.id} className="text-center text-muted-foreground">
-                    —
-                  </TableCell>
-                )
-              }
+              const unavailable = !code
 
               return (
                 <TableCell key={column.id} className="text-center">
-                  <label className={cn('inline-flex justify-center', readOnly && 'opacity-70')}>
+                  <label
+                    className={cn(
+                      'inline-flex justify-center',
+                      (readOnly || unavailable) && 'opacity-70',
+                      unavailable && 'cursor-not-allowed',
+                    )}
+                    title={unavailable ? 'Действие не используется в этом разделе' : undefined}
+                  >
                     <span className="sr-only">
                       {module.label}: {column.label}
+                      {unavailable ? ' (не применяется)' : ''}
                     </span>
                     <Checkbox
-                      checked={selectedSet.has(code)}
-                      disabled={readOnly}
-                      onCheckedChange={(value) => toggle(code, value === true)}
+                      checked={code ? selectedSet.has(code) : false}
+                      disabled={readOnly || unavailable}
+                      onCheckedChange={(value) => {
+                        if (!code) {
+                          return
+                        }
+                        toggle(code, value === true)
+                      }}
                     />
                   </label>
                 </TableCell>
               )
             })}
             <TableCell>
-              {module.extras.length === 0 ? (
-                <span className="text-muted-foreground">—</span>
-              ) : (
+              {module.extras.length === 0 ? null : (
                 <div className="flex flex-col gap-2">
                   {module.extras.map((extra) => (
                     <label key={extra.code} className="flex items-center gap-2 text-sm">

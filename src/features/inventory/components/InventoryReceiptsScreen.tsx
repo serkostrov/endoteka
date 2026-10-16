@@ -259,10 +259,7 @@ export function InventoryReceiptsScreen() {
         pagination={{
           page,
           pageCount,
-          onPageChange: (next) => {
-            setPage(next)
-            setSelectedIds([])
-          },
+          onPageChange: setPage,
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}

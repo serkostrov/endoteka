@@ -12,7 +12,6 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentUser, useHasPermission } from '@/features/auth'
-import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { Permission } from '@/lib/constants/permissions'
 import { canMutateTaskAccess } from '../lib/task-access'
 import {
@@ -27,6 +26,7 @@ import { formatDateTime, localDateTimeToIso } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 import { useSheetDirty } from '@/components/ui/sheet'
 
+import { TaskAssigneeSelect } from './TaskAssigneeSelect'
 import { TaskCompleteControl } from './TaskCompleteControl'
 import { TaskDeleteControl } from './TaskDeleteControl'
 import { useUpdateTask } from '../hooks/use-tasks'
@@ -62,6 +62,7 @@ function TaskBody({
   const canManageOthers = useHasPermission(Permission.TasksManageOthers)
   const canMutate = canMutateTaskAccess({
     assigneeId: task.assigneeId,
+    createdBy: task.createdBy,
     currentUserId: user?.id,
     canUpdate,
     canManageOthers,
@@ -120,11 +121,7 @@ function TaskBody({
       </div>
 
       {canMutate ? (
-        <TaskEditForm
-          key={`${task.id}-${task.completed}-${task.completedAt ?? ''}`}
-          task={task}
-          canManageOthers={canManageOthers}
-        />
+        <TaskEditForm key={`${task.id}-${task.completed}-${task.completedAt ?? ''}`} task={task} />
       ) : (
         <SectionCard title="Описание" description={task.assigneeName ? `Исполнитель: ${task.assigneeName}` : 'Без исполнителя'}>
           <p className={cn('whitespace-pre-wrap text-sm', !task.body && 'text-muted-foreground')}>
@@ -139,9 +136,7 @@ function TaskBody({
   )
 }
 
-function TaskEditForm({ task, canManageOthers }: { task: Task; canManageOthers: boolean }) {
-  const user = useCurrentUser()
-  const employees = useActiveEmployees()
+function TaskEditForm({ task }: { task: Task }) {
   const update = useUpdateTask(task.id, task.orderId)
   const [title, setTitle] = useState(task.title)
   const [body, setBody] = useState(task.body)
@@ -197,33 +192,12 @@ function TaskEditForm({ task, canManageOthers }: { task: Task; canManageOthers: 
           <Textarea id="task-edit-body" value={body} onChange={(event) => setBody(event.target.value)} />
         </div>
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="space-y-2">
-            <Label>Исполнитель</Label>
-            <Select
-              value={assigneeId}
-              onValueChange={setAssigneeId}
-              disabled={!canManageOthers && Boolean(user?.id)}
-            >
-              <SelectTrigger className="w-full" aria-label="Исполнитель">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent searchable>
-                {canManageOthers ? (
-                  <SelectItem value={TASK_ASSIGNEE_NONE}>Не назначен</SelectItem>
-                ) : null}
-                {task.assigneeId && !(employees.data ?? []).some((employee) => employee.id === task.assigneeId) ? (
-                  <SelectItem value={task.assigneeId}>{task.assigneeName || 'Исполнитель'}</SelectItem>
-                ) : null}
-                {(employees.data ?? [])
-                  .filter((employee) => canManageOthers || employee.id === user?.id)
-                  .map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      {employee.fullName}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <TaskAssigneeSelect
+            value={assigneeId}
+            onValueChange={setAssigneeId}
+            currentAssigneeId={task.assigneeId}
+            currentAssigneeName={task.assigneeName}
+          />
           <div className="space-y-2">
             <Label>Приоритет</Label>
             <Select value={priority} onValueChange={(value) => setPriority(isTaskPriority(value) ? value : task.priority)}>

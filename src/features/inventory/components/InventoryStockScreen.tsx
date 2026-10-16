@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Download, Trash2 } from 'lucide-react'
@@ -71,6 +71,7 @@ export function InventoryStockScreen() {
     categorySelectValue === 'all' ? null : categorySelectValue,
   )
   const canReceive = useHasPermission(Permission.InventoryReceive)
+  const canDelete = useHasPermission(Permission.InventoryDelete)
   const canRead = useHasPermission(Permission.InventoryRead) || canReceive
   const exportStock = useExportInventoryStock()
   const remove = useDeleteInventoryItem()
@@ -78,16 +79,19 @@ export function InventoryStockScreen() {
   const items = stockQuery.data?.items ?? []
   const total = stockQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
-  const pageIdsKey = items.map((item) => item.id).join('|')
   const activeCategoryId = categorySelectValue === 'all' ? null : categorySelectValue
 
-  useEffect(() => {
-    const visible = new Set(pageIdsKey ? pageIdsKey.split('|') : [])
-    setSelectedIds((current) => {
-      const next = current.filter((id) => visible.has(id))
-      return next.length === current.length ? current : next
-    })
-  }, [pageIdsKey])
+  const selectionResetKey = [
+    debouncedSearch,
+    stockFilter,
+    categorySelectValue,
+    String(pageSize),
+  ].join('|')
+  const [seenSelectionResetKey, setSeenSelectionResetKey] = useState(selectionResetKey)
+  if (seenSelectionResetKey !== selectionResetKey) {
+    setSeenSelectionResetKey(selectionResetKey)
+    setSelectedIds([])
+  }
 
   function openItem(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -344,7 +348,7 @@ export function InventoryStockScreen() {
               </StatusBadge>
             ),
           },
-          ...(canReceive
+          ...(canDelete
             ? [
                 {
                   id: 'actions',

@@ -40,6 +40,7 @@ export function TaskBulkActions({ selectedIds, tasks, onClear }: TaskBulkActions
       selectedTasks.filter((task) =>
         canMutateTaskAccess({
           assigneeId: task.assigneeId,
+          createdBy: task.createdBy,
           currentUserId: user?.id,
           canUpdate,
           canManageOthers,

@@ -78,15 +78,15 @@ export function TasksScreen() {
   const assigneeId = assigneeParam === 'me' ? (user?.id ?? '') : assigneeParam
   const filtersReady = assigneeParam !== 'me' || Boolean(user?.id)
   const filterKey = `${assigneeParam}|${status}|${due}|${fromMe}`
-  const selectionKey = `${filterKey}|${priority}|${linked}|${debouncedSearch}|${page}|${pageSize}`
+  const selectionResetKey = `${filterKey}|${priority}|${linked}|${debouncedSearch}|${pageSize}`
   const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
-  const [seenSelectionKey, setSeenSelectionKey] = useState(selectionKey)
+  const [seenSelectionResetKey, setSeenSelectionResetKey] = useState(selectionResetKey)
   if (seenFilterKey !== filterKey) {
     setSeenFilterKey(filterKey)
     setPage(1)
   }
-  if (seenSelectionKey !== selectionKey) {
-    setSeenSelectionKey(selectionKey)
+  if (seenSelectionResetKey !== selectionResetKey) {
+    setSeenSelectionResetKey(selectionResetKey)
     setSelectedIds([])
   }
   const assigneeSelectValue = assigneeParam === 'me' ? (user?.id ?? 'me') : assigneeParam

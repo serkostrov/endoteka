@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { SectionCard } from '@/components/shared/SectionCard'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
@@ -82,6 +83,10 @@ const customServiceSchema = z.object({
 type CustomPartFormValues = z.infer<typeof customPartSchema>
 type CustomServiceFormValues = z.infer<typeof customServiceSchema>
 
+function isOrderOnlyLine(line: WorkDraftLine) {
+  return line.kind === 'part' ? !line.itemId : !line.templateId
+}
+
 export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const canWriteOff = useHasPermission(Permission.InventoryWriteOff)
   const canUpdateServices = useHasPermission(Permission.OrdersUpdate)
@@ -90,7 +95,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
   const servicesQuery = useOrderServiceLines(orderId)
   const fieldsQuery = useDynamicFields(FieldEntity.OrderWork)
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
-  const [openedCatalogServiceId, setOpenedCatalogServiceId] = useState<string | null>(null)
+  const [openedCatalogService, setOpenedCatalogService] = useState<WorkDraftLine | null>(null)
   const [customPart, setCustomPart] = useState<WorkDraftLine | null>(null)
   const [customService, setCustomService] = useState<WorkDraftLine | null>(null)
 
@@ -178,7 +183,7 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
                     canWriteOff={canWriteOff}
                     canUpdateServices={canUpdateServices}
                     onOpenPart={(itemId) => setOpenedItemId(itemId)}
-                    onOpenCatalogService={(templateId) => setOpenedCatalogServiceId(templateId)}
+                    onOpenCatalogService={(line) => setOpenedCatalogService(line)}
                     onOpenCustomPart={(line) => setCustomPart(line)}
                     onOpenCustomService={(line) => setCustomService(line)}
                   />
@@ -213,11 +218,52 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
         }}
       />
       <ServiceTemplateSheet
-        templateId={openedCatalogServiceId}
-        open={Boolean(openedCatalogServiceId)}
+        templateId={openedCatalogService?.templateId ?? null}
+        open={Boolean(openedCatalogService?.templateId)}
+        orderLine={
+          openedCatalogService
+            ? {
+                id: openedCatalogService.serverId ?? '',
+                orderId,
+                name: openedCatalogService.name,
+                description: openedCatalogService.description,
+                unitPrice: openedCatalogService.unitPrice,
+              }
+            : null
+        }
+        onSavedForOrder={(values) => {
+          if (!openedCatalogService) {
+            return
+          }
+          // Уже сохранённая строка без черновика: API сам обновил заказ, draft не трогаем.
+          if (openedCatalogService.serverId && !workDraft.dirty) {
+            return
+          }
+          workDraft.updateLine(openedCatalogService.key, {
+            name: values.name,
+            description: values.description,
+            unitPrice: values.unitPrice,
+            templateId: null,
+          })
+        }}
+        onSavedToCatalog={(values) => {
+          const templateId = openedCatalogService?.templateId
+          if (!templateId || !workDraft.dirty) {
+            return
+          }
+          for (const line of workDraft.lines) {
+            if (line.kind === 'service' && line.templateId === templateId && !line.deleted) {
+              workDraft.updateLine(line.key, {
+                name: values.name,
+                description: values.description,
+                unitPrice: values.unitPrice,
+              })
+            }
+          }
+        }}
         onOpenChange={(open) => {
           if (!open) {
-            setOpenedCatalogServiceId(null)
+            setOpenedCatalogService(null)
           }
         }}
       />
@@ -333,7 +379,7 @@ function ActorGroupRows({
   canWriteOff: boolean
   canUpdateServices: boolean
   onOpenPart: (itemId: string) => void
-  onOpenCatalogService: (templateId: string) => void
+  onOpenCatalogService: (line: WorkDraftLine) => void
   onOpenCustomPart: (line: WorkDraftLine) => void
   onOpenCustomService: (line: WorkDraftLine) => void
 }) {
@@ -363,7 +409,7 @@ function ActorGroupRows({
               return
             }
             if (line.templateId) {
-              onOpenCatalogService(line.templateId)
+              onOpenCatalogService(line)
             } else {
               onOpenCustomService(line)
             }
@@ -414,6 +460,11 @@ function WorkLineRow({
           <span className="cursor-text select-text truncate text-sm font-medium text-primary">
             {line.name}
           </span>
+          {isOrderOnlyLine(line) ? (
+            <StatusBadge tone="neutral" className="shrink-0 text-[10px]">
+              Только для заказа
+            </StatusBadge>
+          ) : null}
           {line.subtitle ? (
             <span className="hidden min-w-0 cursor-text select-text truncate text-[11px] text-muted-foreground sm:inline">
               {line.subtitle}
@@ -506,17 +557,26 @@ function EditCustomPartDialog({
     return null
   }
 
+  const dirty = form.formState.isDirty
+
   return (
-    <Sheet open={open} dirty={form.formState.isDirty} onOpenChange={onOpenChange}>
+    <Sheet open={open} dirty={dirty} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Позиция заказа</SheetTitle>
-          <SheetDescription>Изменения попадут в заказ после сохранения состава.</SheetDescription>
+          <SheetDescription>
+            Позиция только для этого заказа, в справочник не попадает. Изменения применятся после
+            сохранения состава.
+          </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
             className="flex flex-1 flex-col gap-4 px-4 pb-4"
             onSubmit={form.handleSubmit((values) => {
+              if (!form.formState.isDirty) {
+                onOpenChange(false)
+                return
+              }
               workDraft.updateLine(line.key, {
                 name: values.name,
                 quantity: values.quantity,
@@ -532,7 +592,12 @@ function EditCustomPartDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Наименование</FormLabel>
+                  <FormLabel className="flex items-center gap-2">
+                    Наименование
+                    <StatusBadge tone="neutral" className="text-[10px] font-normal">
+                      Только для заказа
+                    </StatusBadge>
+                  </FormLabel>
                   <FormControl>
                     <Input {...field} autoComplete="off" />
                   </FormControl>
@@ -587,10 +652,12 @@ function EditCustomPartDialog({
             <SheetFooter className="px-0">
               <SheetClose asChild>
                 <Button type="button" variant="outline">
-                  Отмена
+                  {dirty ? 'Отмена' : 'Закрыть'}
                 </Button>
               </SheetClose>
-              <Button type="submit">Готово</Button>
+              {dirty ? (
+                <Button type="submit">Готово</Button>
+              ) : null}
             </SheetFooter>
           </form>
         </Form>
@@ -630,17 +697,26 @@ function EditCustomServiceDialog({
     return null
   }
 
+  const dirty = form.formState.isDirty
+
   return (
-    <Sheet open={open} dirty={form.formState.isDirty} onOpenChange={onOpenChange}>
+    <Sheet open={open} dirty={dirty} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-lg">
         <SheetHeader>
           <SheetTitle>Услуга заказа</SheetTitle>
-          <SheetDescription>Изменения попадут в заказ после сохранения состава.</SheetDescription>
+          <SheetDescription>
+            Услуга только для этого заказа, в справочник не попадает. Изменения применятся после
+            сохранения состава.
+          </SheetDescription>
         </SheetHeader>
         <Form {...form}>
           <form
             className="flex flex-1 flex-col gap-4 px-4 pb-4"
             onSubmit={form.handleSubmit((values) => {
+              if (!form.formState.isDirty) {
+                onOpenChange(false)
+                return
+              }
               workDraft.updateLine(line.key, {
                 name: values.name,
                 description: values.description,
@@ -657,7 +733,12 @@ function EditCustomServiceDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Наименование</FormLabel>
+                  <FormLabel className="flex items-center gap-2">
+                    Наименование
+                    <StatusBadge tone="neutral" className="text-[10px] font-normal">
+                      Только для заказа
+                    </StatusBadge>
+                  </FormLabel>
                   <FormControl>
                     <Input {...field} autoComplete="off" />
                   </FormControl>
@@ -730,10 +811,12 @@ function EditCustomServiceDialog({
             <SheetFooter className="px-0">
               <SheetClose asChild>
                 <Button type="button" variant="outline">
-                  Отмена
+                  {dirty ? 'Отмена' : 'Закрыть'}
                 </Button>
               </SheetClose>
-              <Button type="submit">Готово</Button>
+              {dirty ? (
+                <Button type="submit">Готово</Button>
+              ) : null}
             </SheetFooter>
           </form>
         </Form>

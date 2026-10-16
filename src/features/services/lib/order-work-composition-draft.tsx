@@ -92,7 +92,9 @@ type OrderWorkCompositionDraftContextValue = {
   ) => void
   updateLine: (
     key: string,
-    patch: Partial<Pick<WorkDraftLine, 'name' | 'description' | 'quantity' | 'unitPrice' | 'subtitle'>>,
+    patch: Partial<
+      Pick<WorkDraftLine, 'name' | 'description' | 'quantity' | 'unitPrice' | 'subtitle' | 'templateId'>
+    >,
   ) => void
   removeLine: (key: string) => void
   setFieldValue: (
@@ -390,22 +392,39 @@ export function OrderWorkCompositionProvider({
   const updateLine = useCallback(
     (
       key: string,
-      patch: Partial<Pick<WorkDraftLine, 'name' | 'description' | 'quantity' | 'unitPrice' | 'subtitle'>>,
+      patch: Partial<
+        Pick<WorkDraftLine, 'name' | 'description' | 'quantity' | 'unitPrice' | 'subtitle' | 'templateId'>
+      >,
     ) => {
-      mutateLines((current) =>
-        current.map((line) => {
+      setLineDraft((current) => {
+        const base = current ?? mapServerLines(serverParts, serverServices)
+        let changed = false
+        const next = base.map((line) => {
           if (line.key !== key) {
             return line
           }
-          const next = { ...line, ...patch }
+          const candidate = { ...line, ...patch }
           if (patch.description !== undefined) {
-            next.subtitle = patch.description
+            candidate.subtitle = patch.description
           }
-          return next
-        }),
-      )
+          const same =
+            candidate.name === line.name &&
+            candidate.description === line.description &&
+            candidate.quantity === line.quantity &&
+            candidate.unitPrice === line.unitPrice &&
+            candidate.templateId === line.templateId &&
+            candidate.subtitle === line.subtitle
+          if (same) {
+            return line
+          }
+          changed = true
+          return candidate
+        })
+        // Не открываем черновик, если значения не изменились — иначе в футере лишний «Сохранить».
+        return changed ? next : current
+      })
     },
-    [mutateLines],
+    [serverParts, serverServices],
   )
 
   const removeLine = useCallback(
@@ -435,7 +454,22 @@ export function OrderWorkCompositionProvider({
         delete next[code]
         return next
       })
-      setFieldDraft((current) => ({ ...(current ?? serverValues), [code]: value }))
+      setFieldDraft((current) => {
+        const base = current ?? serverValues
+        const serverValue = serverValues[code]
+        const sameAsServer = JSON.stringify(serverValue ?? null) === JSON.stringify(value ?? null)
+        if (sameAsServer) {
+          if (!current) {
+            return current
+          }
+          const { [code]: _, ...rest } = current
+          const stillDirty = Object.keys(rest).some(
+            (key) => JSON.stringify(rest[key] ?? null) !== JSON.stringify(serverValues[key] ?? null),
+          )
+          return stillDirty ? rest : null
+        }
+        return { ...base, [code]: value }
+      })
     },
     [],
   )

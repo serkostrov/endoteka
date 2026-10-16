@@ -20,7 +20,7 @@ type InventoryBulkActionsProps = {
 
 export function InventoryBulkActions({ selectedIds, onClear }: InventoryBulkActionsProps) {
   const count = selectedIds.length
-  const canDelete = useHasPermission(Permission.InventoryReceive)
+  const canDelete = useHasPermission(Permission.InventoryDelete)
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const canReadDocs = useHasPermission(Permission.DocumentsRead)
   const canCreateDocs = useHasPermission(Permission.DocumentsCreate)

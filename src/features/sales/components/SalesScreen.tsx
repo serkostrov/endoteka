@@ -52,10 +52,12 @@ export function SalesScreen() {
   const items = salesQuery.data?.items ?? []
   const total = salesQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
-  const deletableSelected = useMemo(
-    () => items.filter((row) => selectedIds.includes(row.id) && row.status !== SaleStatus.Confirmed),
+  const selectedOnPage = useMemo(
+    () => items.filter((row) => selectedIds.includes(row.id)),
     [items, selectedIds],
   )
+  const confirmedSelectedOnPage = selectedOnPage.filter((row) => row.status === SaleStatus.Confirmed)
+  const canBulkDelete = selectedIds.length > 0 && confirmedSelectedOnPage.length < selectedIds.length
 
   function openSale(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -94,21 +96,30 @@ export function SalesScreen() {
   }
 
   async function handleBulkDelete() {
-    if (deletableSelected.length === 0) {
+    if (selectedIds.length === 0) {
       return
     }
     setBulkPending(true)
+    let deleted = 0
+    const failedIds: string[] = []
     try {
-      for (const row of deletableSelected) {
-        await remove.mutateAsync(row.id)
+      for (const id of selectedIds) {
+        try {
+          await remove.mutateAsync(id)
+          deleted += 1
+        } catch {
+          failedIds.push(id)
+        }
       }
-      toast.success(
-        deletableSelected.length === 1
-          ? 'Счёт удалён'
-          : `Удалено счетов: ${formatInteger(deletableSelected.length)}`,
-      )
-      setBulkDeleteOpen(false)
-      setSelectedIds([])
+      if (deleted === 0) {
+        toast.error('Не удалось удалить выбранные счета. Подтверждённые продажи не удаляются.')
+      } else {
+        toast.success(
+          deleted === 1 ? 'Счёт удалён' : `Удалено счетов: ${formatInteger(deleted)}`,
+        )
+        setBulkDeleteOpen(false)
+        setSelectedIds(failedIds)
+      }
     } catch (error) {
       toast.error(getErrorMessage(error))
     } finally {
@@ -170,7 +181,7 @@ export function SalesScreen() {
           onClear={() => setSelectedIds([])}
           pending={bulkPending}
         >
-          {canDelete && deletableSelected.length > 0 ? (
+          {canDelete && canBulkDelete ? (
             <Button
               type="button"
               variant="outline"
@@ -202,10 +213,7 @@ export function SalesScreen() {
         pagination={{
           page,
           pageCount,
-          onPageChange: (next) => {
-            setPage(next)
-            setSelectedIds([])
-          },
+          onPageChange: setPage,
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -274,9 +282,13 @@ export function SalesScreen() {
         open={bulkDeleteOpen}
         title="Удалить счета"
         description={
-          deletableSelected.length === 1
-            ? `${deletableSelected[0]?.invoiceNumber} будет удалён без возможности восстановления.`
-            : `Будет удалено счетов: ${formatInteger(deletableSelected.length)}. Подтверждённые продажи не удаляются.`
+          selectedIds.length === 1
+            ? (() => {
+                const row = items.find((item) => item.id === selectedIds[0])
+                const label = row?.invoiceNumber || 'Счёт'
+                return `${label} будет удалён без возможности восстановления.`
+              })()
+            : `Будет удалено счетов: ${formatInteger(selectedIds.length)}. Подтверждённые продажи не удаляются.`
         }
         confirmLabel="Удалить"
         isPending={bulkPending || remove.isPending}

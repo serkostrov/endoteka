@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -247,19 +247,28 @@ export function OrdersScreen() {
   const listBlockedByBoardPlaceholder =
     isList && ordersQuery.isPlaceholderData && (ordersQuery.data?.items.length ?? 0) > pageSize
 
-  const pageOrderIdsKey = items.map((order) => order.id).join('|')
-
-  useEffect(() => {
-    if (!isList) {
-      setSelectedIds([])
-      return
-    }
-    const visible = new Set(pageOrderIdsKey ? pageOrderIdsKey.split('|') : [])
-    setSelectedIds((current) => {
-      const next = current.filter((id) => visible.has(id))
-      return next.length === current.length ? current : next
-    })
-  }, [isList, pageOrderIdsKey])
+  // Выбор держим между страницами; сбрасываем при смене фильтров, сортировки, размера страницы или вида.
+  const selectionResetKey = [
+    isList ? 'list' : 'board',
+    debouncedSearch,
+    responsibleParam,
+    attentionOnly ? '1' : '0',
+    activeOnly ? '1' : '0',
+    deadlineState,
+    statusCodes.join(','),
+    customerId,
+    groupId,
+    brandId,
+    modelId,
+    listSort,
+    listDir,
+    String(pageSize),
+  ].join('|')
+  const [seenSelectionResetKey, setSeenSelectionResetKey] = useState(selectionResetKey)
+  if (seenSelectionResetKey !== selectionResetKey) {
+    setSeenSelectionResetKey(selectionResetKey)
+    setSelectedIds([])
+  }
 
   const createOpen = canCreate && searchParams.get('new') === '1'
 

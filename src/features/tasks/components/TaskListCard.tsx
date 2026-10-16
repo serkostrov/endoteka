@@ -30,6 +30,7 @@ export function TaskListCard({ task, onOpen, selected, onSelectedChange }: TaskL
   const canManageOthers = useHasPermission(Permission.TasksManageOthers)
   const canMutate = canMutateTaskAccess({
     assigneeId: task.assigneeId,
+    createdBy: task.createdBy,
     currentUserId: user?.id,
     canUpdate,
     canManageOthers,

@@ -78,9 +78,11 @@ export const permissionModules: PermissionModule[] = [
     label: 'Склад',
     cells: {
       read: Permission.InventoryRead,
+      create: Permission.InventoryReceive,
+      edit: Permission.InventoryUpdate,
+      delete: Permission.InventoryDelete,
     },
     extras: [
-      { code: Permission.InventoryReceive, label: 'Приход' },
       { code: Permission.InventoryWriteOff, label: 'Списание' },
       { code: Permission.InventoryCount, label: 'Инвентаризация' },
     ],
@@ -113,9 +115,11 @@ export const permissionModules: PermissionModule[] = [
     label: 'Пользователи',
     cells: {
       read: Permission.UsersRead,
+      create: Permission.UsersInvite,
       edit: Permission.UsersUpdate,
+      delete: Permission.UsersDelete,
     },
-    extras: [{ code: Permission.UsersInvite, label: 'Приглашение' }],
+    extras: [],
   },
   {
     resource: 'roles',

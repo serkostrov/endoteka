@@ -32,6 +32,7 @@ export function UsersScreen() {
   const { user } = useAuth()
   const canInvite = useHasPermission(Permission.UsersInvite)
   const canUpdate = useHasPermission(Permission.UsersUpdate)
+  const canDelete = useHasPermission(Permission.UsersDelete)
   const [search, setSearch] = useState('')
   const [roleId, setRoleId] = useState('all')
   const [status, setStatus] = useState<'all' | 'active' | 'inactive'>('all')
@@ -57,9 +58,9 @@ export function UsersScreen() {
   const items = usersQuery.data?.items ?? []
   const total = usersQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
-  const deletableSelected = useMemo(
-    () => items.filter((row) => selectedIds.includes(row.id) && row.id !== user?.id),
-    [items, selectedIds, user?.id],
+  const deletableSelectedIds = useMemo(
+    () => selectedIds.filter((id) => id !== user?.id),
+    [selectedIds, user?.id],
   )
 
   function handlePageSizeChange(size: number) {
@@ -84,18 +85,18 @@ export function UsersScreen() {
   }
 
   async function handleBulkDelete() {
-    if (deletableSelected.length === 0) {
+    if (deletableSelectedIds.length === 0) {
       return
     }
     setBulkPending(true)
     try {
-      for (const row of deletableSelected) {
-        await deleteAccount.mutateAsync(row.id)
+      for (const id of deletableSelectedIds) {
+        await deleteAccount.mutateAsync(id)
       }
       toast.success(
-        deletableSelected.length === 1
+        deletableSelectedIds.length === 1
           ? 'Сотрудник удалён'
-          : `Удалено сотрудников: ${formatInteger(deletableSelected.length)}`,
+          : `Удалено сотрудников: ${formatInteger(deletableSelectedIds.length)}`,
       )
       setBulkDeleteOpen(false)
       setSelectedIds([])
@@ -177,7 +178,7 @@ export function UsersScreen() {
           onClear={() => setSelectedIds([])}
           pending={bulkPending}
         >
-          {canUpdate && deletableSelected.length > 0 ? (
+          {canDelete && deletableSelectedIds.length > 0 ? (
             <Button
               type="button"
               variant="outline"
@@ -208,10 +209,7 @@ export function UsersScreen() {
         pagination={{
           page,
           pageCount,
-          onPageChange: (next) => {
-            setPage(next)
-            setSelectedIds([])
-          },
+          onPageChange: setPage,
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
@@ -229,7 +227,7 @@ export function UsersScreen() {
             ),
           },
           { id: 'created', header: 'Создан', cell: (row) => formatDate(row.createdAt) },
-          ...(canUpdate
+          ...(canUpdate || canDelete
             ? [
                 {
                   id: 'actions',
@@ -239,17 +237,21 @@ export function UsersScreen() {
                     const isSelf = row.id === user?.id
                     return (
                       <div className="flex gap-1">
-                        <IconActionButton label="Изменить" onClick={() => setEditTarget(row)}>
-                          <Pencil />
-                        </IconActionButton>
-                        <IconActionButton
-                          label={isSelf ? 'Нельзя удалить собственную учётную запись' : 'Удалить'}
-                          disabled={isSelf}
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setDeleteTarget(row)}
-                        >
-                          <Trash2 />
-                        </IconActionButton>
+                        {canUpdate ? (
+                          <IconActionButton label="Изменить" onClick={() => setEditTarget(row)}>
+                            <Pencil />
+                          </IconActionButton>
+                        ) : null}
+                        {canDelete ? (
+                          <IconActionButton
+                            label={isSelf ? 'Нельзя удалить собственную учётную запись' : 'Удалить'}
+                            disabled={isSelf}
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTarget(row)}
+                          >
+                            <Trash2 />
+                          </IconActionButton>
+                        ) : null}
                       </div>
                     )
                   },
@@ -291,9 +293,13 @@ export function UsersScreen() {
         open={bulkDeleteOpen}
         title="Удалить сотрудников"
         description={
-          deletableSelected.length === 1
-            ? `Учётная запись ${deletableSelected[0]?.fullName || deletableSelected[0]?.email} будет удалена без возможности восстановления.`
-            : `Будет удалено сотрудников: ${formatInteger(deletableSelected.length)}. Собственную учётную запись удалить нельзя.`
+          deletableSelectedIds.length === 1
+            ? (() => {
+                const row = items.find((item) => item.id === deletableSelectedIds[0])
+                const label = row?.fullName || row?.email || 'сотрудника'
+                return `Учётная запись ${label} будет удалена без возможности восстановления.`
+              })()
+            : `Будет удалено сотрудников: ${formatInteger(deletableSelectedIds.length)}. Собственную учётную запись удалить нельзя.`
         }
         confirmLabel="Удалить"
         isPending={bulkPending || deleteAccount.isPending}

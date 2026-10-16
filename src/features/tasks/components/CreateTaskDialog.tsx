@@ -18,7 +18,6 @@ import {
 } from '@/components/ui/sheet'
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentUser, useHasPermission } from '@/features/auth'
-import { useActiveEmployees } from '@/features/users/hooks/use-users'
 import { Permission } from '@/lib/constants/permissions'
 import {
   TASK_ASSIGNEE_NONE,
@@ -29,6 +28,7 @@ import {
 import { getErrorMessage } from '@/lib/errors'
 import { localDateTimeToIso } from '@/lib/utils/date'
 
+import { TaskAssigneeSelect } from './TaskAssigneeSelect'
 import { TaskOrderPicker } from './TaskOrderPicker'
 import { useCreateTask } from '../hooks/use-tasks'
 
@@ -77,8 +77,6 @@ function CreateTaskForm({
 }) {
   const user = useCurrentUser()
   const canPickOrder = useHasPermission(Permission.OrdersRead) && !presetOrderId
-  const canManageOthers = useHasPermission(Permission.TasksManageOthers)
-  const employees = useActiveEmployees()
   const create = useCreateTask()
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
@@ -151,33 +149,7 @@ function CreateTaskForm({
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label>Исполнитель</Label>
-          <Select
-            value={assigneeId}
-            onValueChange={setAssigneeId}
-            disabled={!canManageOthers && Boolean(user?.id)}
-          >
-            <SelectTrigger className="w-full" aria-label="Исполнитель">
-              <SelectValue placeholder="Исполнитель" />
-            </SelectTrigger>
-            <SelectContent searchable>
-              {canManageOthers ? (
-                <SelectItem value={TASK_ASSIGNEE_NONE}>Не назначен</SelectItem>
-              ) : null}
-              {user && !(employees.data ?? []).some((employee) => employee.id === user.id) ? (
-                <SelectItem value={user.id}>{user.fullName || user.email}</SelectItem>
-              ) : null}
-              {(employees.data ?? [])
-                .filter((employee) => canManageOthers || employee.id === user?.id)
-                .map((employee) => (
-                  <SelectItem key={employee.id} value={employee.id}>
-                    {employee.fullName}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <TaskAssigneeSelect value={assigneeId} onValueChange={setAssigneeId} />
         <div className="space-y-2">
           <Label>Приоритет</Label>
           <Select value={priority} onValueChange={setPriority}>

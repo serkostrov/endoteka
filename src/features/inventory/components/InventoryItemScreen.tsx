@@ -116,7 +116,7 @@ function InventoryItemSheetContent({
 }) {
   const cardQuery = useInventoryItemCard(itemId)
   const openSheet = useOpenEntitySheet()
-  const canReceive = useHasPermission(Permission.InventoryReceive)
+  const canDelete = useHasPermission(Permission.InventoryDelete)
   const canCreateSale = useHasPermission(Permission.SalesCreate)
   const canCount = useHasPermission(Permission.InventoryCount)
   const createSale = useCreateSale()
@@ -193,7 +193,7 @@ function InventoryItemSheetContent({
               leading={
                 <ItemLabelPrintButton fallback={toPrintableItemLabel(item)} />
               }
-              onDelete={canReceive ? () => setDeleteOpen(true) : undefined}
+              onDelete={canDelete ? () => setDeleteOpen(true) : undefined}
               extra={toolbarExtra}
             />
           ) : null
@@ -258,7 +258,8 @@ function ItemCardBody({
 }) {
   const navigate = useNavigate()
   const openSheet = useOpenEntitySheet()
-  const canReceive = useHasPermission(Permission.InventoryReceive)
+  const canUpdate = useHasPermission(Permission.InventoryUpdate)
+  const canDelete = useHasPermission(Permission.InventoryDelete)
   const canCreateSale = useHasPermission(Permission.SalesCreate)
   const canCount = useHasPermission(Permission.InventoryCount)
   const createSale = useCreateSale()
@@ -379,7 +380,7 @@ function ItemCardBody({
         {stockBadge}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {actionButtons}
-          {canReceive && !hideChromeDelete ? (
+          {canDelete && !hideChromeDelete ? (
             <IconActionButton
               label="Удалить"
               className="text-destructive hover:text-destructive"
@@ -405,7 +406,7 @@ function ItemCardBody({
       />
     ) : null
 
-  if (canReceive) {
+  if (canUpdate) {
     return (
       <div className="space-y-4">
         <ItemCardEditor

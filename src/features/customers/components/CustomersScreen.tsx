@@ -279,10 +279,7 @@ export function CustomersScreen() {
         pagination={{
           page,
           pageCount,
-          onPageChange: (next) => {
-            setPage(next)
-            setSelectedIds([])
-          },
+          onPageChange: setPage,
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
