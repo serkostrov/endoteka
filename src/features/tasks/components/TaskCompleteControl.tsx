@@ -16,6 +16,7 @@ type TaskCompleteTarget = {
   completed: boolean
   orderId: string | null
   assigneeId: string | null
+  createdBy: string | null
 }
 
 type TaskCompleteControlProps = {
