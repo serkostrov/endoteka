@@ -1,7 +1,9 @@
 -- Штрихкод и тип этикетки сохраняются вместе с карточкой (кнопка «Сохранить»),
 -- а не отдельным автосейвом. Права на этикетку = inventory:update.
--- Сначала вернуть GRANT на текущую перегрузку (после align_permission_matrix
--- execute мог пропасть, если функция пересоздавалась без grant).
+-- Колонка min_stock обязательна до пересоздания update_inventory_item.
+
+alter table public.inventory_items
+  add column if not exists min_stock numeric(14, 0) not null default 0;
 
 do $grant$
 begin

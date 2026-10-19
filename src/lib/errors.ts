@@ -19,7 +19,7 @@ const AUTH_MESSAGES = {
 } as const
 
 function isInternalErrorMessage(message: string) {
-  return /postgres|sql state|relation |column |permission denied for|violates|rpc/i.test(message)
+  return /postgres|sql state|relation |column |permission denied for|violates|rpc|42703/i.test(message)
 }
 
 function isAuthMessageCode(code: string): code is keyof typeof AUTH_MESSAGES {
@@ -57,6 +57,14 @@ export function toAppError(error: unknown, fallback = 'Не удалось вы�
     return new AppError(code, AUTH_MESSAGES[code], error)
   }
 
+  if (code === '42703') {
+    return new AppError(
+      '42703',
+      'В базе не хватает колонки (часто min_stock). Примените миграцию inventory_items_min_stock_column.',
+      error,
+    )
+  }
+
   if (isRecord(error) && typeof error.message === 'string') {
     const lowered = error.message.toLowerCase()
     if (lowered.includes('invalid login credentials')) {
@@ -83,6 +91,14 @@ export function toAppError(error: unknown, fallback = 'Не удалось вы�
       return new AppError(
         code ?? 'RPC',
         'Функция в базе устарела. Примените миграции Supabase и обновите schema cache.',
+        error,
+      )
+    }
+
+    if (code === '42703' || /column .* does not exist|undefined_column/i.test(error.message)) {
+      return new AppError(
+        '42703',
+        'В базе не хватает колонки (часто min_stock). Примените миграцию inventory_items_min_stock_column.',
         error,
       )
     }

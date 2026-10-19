@@ -412,7 +412,7 @@ function ItemCardBody({
 
   if (canUpdate) {
     return (
-      <>
+      <div className={variant === 'sheet' ? 'flex h-full min-h-0 flex-1 flex-col' : undefined}>
         <ItemCardEditor
           item={item}
           variant={variant}
@@ -427,7 +427,7 @@ function ItemCardBody({
           historyTab={<ItemHistorySection movements={movements} />}
         />
         {deleteDialog}
-      </>
+      </div>
     )
   }
 
@@ -655,7 +655,7 @@ function ItemCardEditor({
   return (
     <Form {...form}>
       <form
-        className={sheet ? 'flex min-h-0 flex-1 flex-col' : 'space-y-4'}
+        className={sheet ? 'flex h-full min-h-0 flex-1 flex-col' : 'space-y-4'}
         onSubmit={form.handleSubmit(onSubmit)}
         noValidate
       >
