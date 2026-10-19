@@ -27,7 +27,6 @@ import { pickImageFiles } from '@/lib/pick-image-files'
 import {
   useDeleteInventoryItemPhoto,
   useInventoryItemPhotos,
-  useSetInventoryItemLabel,
   useSetInventoryItemPhotoCover,
   useUploadInventoryItemPhoto,
 } from '../hooks/use-inventory'
@@ -57,7 +56,6 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
   const upload = useUploadInventoryItemPhoto(item.id)
   const removePhoto = useDeleteInventoryItemPhoto(item.id)
   const setCover = useSetInventoryItemPhotoCover(item.id)
-  const setLabel = useSetInventoryItemLabel(item.id)
 
   const getSnapshot = useCallback(
     () =>
@@ -83,17 +81,6 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
       alt: photo.fileName || 'Фото',
       title: photo.fileName || 'Фото',
     }))
-
-  async function persistLabel(nextBarcode: string, nextType: BarcodeType) {
-    if (!canEdit) {
-      return
-    }
-    try {
-      await setLabel.mutateAsync({ barcode: nextBarcode, barcodeType: nextType })
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
-  }
 
   async function handleAddPhotos() {
     if (!canEdit || upload.isPending) {
@@ -160,14 +147,11 @@ export function ItemMediaLabel({ item, form, canEdit }: ItemMediaLabelProps) {
           snapshot={getSnapshot()}
           onTypeChange={(next) => {
             form.setValue('barcodeType', next, { shouldDirty: true })
-            void persistLabel(barcode, next)
           }}
           onBarcodeChange={(next) => form.setValue('barcode', next, { shouldDirty: true })}
-          onBarcodeBlur={() => void persistLabel(barcode, barcodeType)}
           onGenerate={() => {
             const next = generateBarcodeValue(barcodeType)
             form.setValue('barcode', next, { shouldDirty: true })
-            void persistLabel(next, barcodeType)
           }}
         />
       </div>
@@ -224,7 +208,6 @@ function LabelPreviewCard({
   snapshot,
   onTypeChange,
   onBarcodeChange,
-  onBarcodeBlur,
   onGenerate,
 }: {
   canEdit: boolean
@@ -234,7 +217,6 @@ function LabelPreviewCard({
   snapshot: ReturnType<typeof toPrintableItemLabel>
   onTypeChange: (type: BarcodeType) => void
   onBarcodeChange: (value: string) => void
-  onBarcodeBlur: () => void
   onGenerate: () => void
 }) {
   const canReceive = useHasPermission(Permission.InventoryReceive)
@@ -330,7 +312,6 @@ function LabelPreviewCard({
         className="h-8 shrink-0 truncate font-mono text-xs"
         inputMode={barcodeType === 'code128' || barcodeType === 'qr' ? 'text' : 'numeric'}
         onChange={(event) => onBarcodeChange(event.target.value)}
-        onBlur={onBarcodeBlur}
         aria-label="Значение штрихкода"
       />
     </div>

@@ -49,6 +49,7 @@ export type InventoryItemInput = {
   code: string
   article: string
   barcode: string
+  barcodeType: string
   description: string
   categoryId: string
   unitId: string
@@ -731,6 +732,7 @@ export async function createInventoryItem(input: InventoryItemInput): Promise<st
     item_code: input.code,
     item_article: input.article,
     item_barcode: input.barcode,
+    item_barcode_type: input.barcodeType,
     item_category_id: input.categoryId,
     item_unit_id: input.unitId,
     item_purchase_price: input.purchasePrice,
@@ -754,6 +756,7 @@ export async function updateInventoryItem(itemId: string, input: InventoryItemIn
     item_code: input.code,
     item_article: input.article,
     item_barcode: input.barcode,
+    item_barcode_type: input.barcodeType,
     item_category_id: input.categoryId,
     item_unit_id: input.unitId,
     item_purchase_price: input.purchasePrice,

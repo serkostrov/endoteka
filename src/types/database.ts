@@ -1903,6 +1903,8 @@ export type Database = {
           item_retail_price?: number
           item_description?: string
           item_is_permanent?: boolean
+          item_min_stock?: number
+          item_barcode_type?: string
         }
         Returns: string
       }
@@ -1920,6 +1922,8 @@ export type Database = {
           item_retail_price?: number
           item_description?: string
           item_is_permanent?: boolean
+          item_min_stock?: number | null
+          item_barcode_type?: string | null
         }
         Returns: undefined
       }
