@@ -75,16 +75,12 @@ export function toAppError(error: unknown, fallback = 'Не удалось вы�
       return new AppError('session_missing', 'Сессия не найдена. Войдите ещё раз.', error)
     }
 
-    if (!isInternalErrorMessage(error.message)) {
-      return new AppError(code ?? 'APP', error.message, error)
-    }
-
-    if (/row-level security|violates.*policy/i.test(error.message)) {
-      return new AppError(code ?? 'RLS', 'Нет доступа (политика безопасности).', error)
-    }
-
-    if (/permission denied for/i.test(error.message)) {
-      return new AppError(code ?? 'PERM', 'Недостаточно прав для выполнения операции.', error)
+    if (/Could not choose the best candidate function/i.test(error.message)) {
+      return new AppError(
+        code ?? 'RPC',
+        'Конфликт версий функции в базе. Примените миграцию drop_inventory_item_rpc_overloads.',
+        error,
+      )
     }
 
     if (/Could not find the function|PGRST202/i.test(error.message)) {
@@ -95,12 +91,24 @@ export function toAppError(error: unknown, fallback = 'Не удалось вы�
       )
     }
 
-    if (code === '42703' || /column .* does not exist|undefined_column/i.test(error.message)) {
+    if (/column .* does not exist|undefined_column/i.test(error.message)) {
       return new AppError(
         '42703',
         'В базе не хватает колонки (часто min_stock). Примените миграцию inventory_items_min_stock_column.',
         error,
       )
+    }
+
+    if (!isInternalErrorMessage(error.message)) {
+      return new AppError(code ?? 'APP', error.message, error)
+    }
+
+    if (/row-level security|violates.*policy/i.test(error.message)) {
+      return new AppError(code ?? 'RLS', 'Нет доступа (политика безопасности).', error)
+    }
+
+    if (/permission denied for/i.test(error.message)) {
+      return new AppError(code ?? 'PERM', 'Недостаточно прав для выполнения операции.', error)
     }
 
     if (/mime type|not supported|invalid.*type/i.test(error.message)) {

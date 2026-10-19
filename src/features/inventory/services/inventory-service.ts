@@ -727,6 +727,8 @@ export async function getInventoryItemCard(id: string): Promise<InventoryItemCar
 }
 
 export async function createInventoryItem(input: InventoryItemInput): Promise<string> {
+  // Явно передаём item_barcode_type / item_min_stock — иначе PostgREST
+  // путает перегрузки create_inventory_item с разными default-хвостами.
   const { data, error } = await getSupabase().rpc('create_inventory_item', {
     item_name: input.name,
     item_code: input.code,
@@ -739,20 +741,15 @@ export async function createInventoryItem(input: InventoryItemInput): Promise<st
     item_retail_price: input.retailPrice,
     item_description: input.description,
     item_is_permanent: input.isPermanent,
+    item_min_stock: 0,
+    item_barcode_type: input.barcodeType || 'code128',
   })
 
   if (error) {
     throwIfDuplicate(error, 'Не удалось создать позицию.')
   }
 
-  const itemId = data
-  try {
-    await setInventoryItemLabel(itemId, input.barcode, input.barcodeType)
-  } catch (labelError) {
-    // Карточка уже создана — тип этикетки догоняем отдельно, без отката.
-    console.error('createInventoryItem: label', labelError)
-  }
-  return itemId
+  return data
 }
 
 export async function updateInventoryItem(itemId: string, input: InventoryItemInput): Promise<void> {
@@ -769,17 +766,11 @@ export async function updateInventoryItem(itemId: string, input: InventoryItemIn
     item_retail_price: input.retailPrice,
     item_description: input.description,
     item_is_permanent: input.isPermanent,
+    item_barcode_type: input.barcodeType || 'code128',
   })
 
   if (error) {
     throwIfDuplicate(error, 'Не удалось сохранить позицию.')
-  }
-
-  // Тип штрихкода — отдельный RPC (значение barcode уже ушло в update выше).
-  try {
-    await setInventoryItemLabel(itemId, input.barcode, input.barcodeType)
-  } catch (labelError) {
-    throw toAppError(labelError, 'Позиция сохранена, но тип штрихкода не записался.')
   }
 }
 
