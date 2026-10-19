@@ -215,8 +215,8 @@ function OrderDetailCard({
 
             <aside
               className={cn(
-                'border-t bg-secondary/80 lg:w-80 lg:shrink-0 lg:border-t-0 lg:border-l xl:w-96',
-                inSheet && 'flex min-h-72 flex-col lg:h-auto',
+                'hidden border-t bg-secondary/80 lg:flex lg:w-80 lg:shrink-0 lg:flex-col lg:border-t-0 lg:border-l xl:w-96',
+                inSheet && 'lg:h-auto',
               )}
             >
               <div className={inSheet ? 'min-h-0 flex-1' : 'lg:h-[calc(100dvh-8rem)]'}>
