@@ -732,7 +732,6 @@ export async function createInventoryItem(input: InventoryItemInput): Promise<st
     item_code: input.code,
     item_article: input.article,
     item_barcode: input.barcode,
-    item_barcode_type: input.barcodeType,
     item_category_id: input.categoryId,
     item_unit_id: input.unitId,
     item_purchase_price: input.purchasePrice,
@@ -746,7 +745,14 @@ export async function createInventoryItem(input: InventoryItemInput): Promise<st
     throwIfDuplicate(error, 'Не удалось создать позицию.')
   }
 
-  return data
+  const itemId = data
+  try {
+    await setInventoryItemLabel(itemId, input.barcode, input.barcodeType)
+  } catch (labelError) {
+    // Карточка уже создана — тип этикетки догоняем отдельно, без отката.
+    console.error('createInventoryItem: label', labelError)
+  }
+  return itemId
 }
 
 export async function updateInventoryItem(itemId: string, input: InventoryItemInput): Promise<void> {
@@ -756,7 +762,6 @@ export async function updateInventoryItem(itemId: string, input: InventoryItemIn
     item_code: input.code,
     item_article: input.article,
     item_barcode: input.barcode,
-    item_barcode_type: input.barcodeType,
     item_category_id: input.categoryId,
     item_unit_id: input.unitId,
     item_purchase_price: input.purchasePrice,
@@ -768,6 +773,13 @@ export async function updateInventoryItem(itemId: string, input: InventoryItemIn
 
   if (error) {
     throwIfDuplicate(error, 'Не удалось сохранить позицию.')
+  }
+
+  // Тип штрихкода — отдельный RPC (значение barcode уже ушло в update выше).
+  try {
+    await setInventoryItemLabel(itemId, input.barcode, input.barcodeType)
+  } catch (labelError) {
+    throw toAppError(labelError, 'Позиция сохранена, но тип штрихкода не записался.')
   }
 }
 

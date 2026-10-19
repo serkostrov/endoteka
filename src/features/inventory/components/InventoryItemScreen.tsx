@@ -185,7 +185,7 @@ function InventoryItemSheetContent({
     <ItemLabelPrintProvider>
       <SheetContent
         side="right"
-        className="flex w-full flex-col gap-0 overflow-y-auto p-0 sm:max-w-[min(96vw,44rem)]"
+        className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,44rem)]"
         onOpenAutoFocus={(event) => event.preventDefault()}
         actions={
           item ? (
@@ -205,24 +205,28 @@ function InventoryItemSheetContent({
             Изменения карточки обновляют цены и название во всех заказах, где эта позиция из справочника.
           </SheetDescription>
         </SheetHeader>
-        <div className="space-y-4 p-4 pr-14">
-          {cardQuery.isLoading ? (
+        {cardQuery.isLoading ? (
+          <div className="space-y-4 overflow-y-auto p-4 pr-14">
             <LoadingState label="Загрузка позиции" className="min-h-40" />
-          ) : cardQuery.error ? (
+          </div>
+        ) : cardQuery.error ? (
+          <div className="space-y-4 overflow-y-auto p-4 pr-14">
             <ErrorState description={getErrorMessage(cardQuery.error)} />
-          ) : !cardQuery.data ? (
+          </div>
+        ) : !cardQuery.data ? (
+          <div className="space-y-4 overflow-y-auto p-4 pr-14">
             <ErrorState description="Позиция не найдена." />
-          ) : (
-            <ItemCardBody
-              item={cardQuery.data.item}
-              batches={cardQuery.data.batches}
-              movements={cardQuery.data.movements}
-              variant="sheet"
-              onDeleted={onClose}
-              hideChromeDelete
-            />
-          )}
-        </div>
+          </div>
+        ) : (
+          <ItemCardBody
+            item={cardQuery.data.item}
+            batches={cardQuery.data.batches}
+            movements={cardQuery.data.movements}
+            variant="sheet"
+            onDeleted={onClose}
+            hideChromeDelete
+          />
+        )}
         <ConfirmDialog
           open={deleteOpen}
           title="Удалить позицию"
@@ -408,7 +412,7 @@ function ItemCardBody({
 
   if (canUpdate) {
     return (
-      <div className="space-y-4">
+      <>
         <ItemCardEditor
           item={item}
           variant={variant}
@@ -417,26 +421,24 @@ function ItemCardBody({
           tab={tab}
           tabItems={tabItems}
           onTabChange={setTab}
+          cardExtras={<ItemFieldsSection itemId={item.id} canEdit />}
+          batchesTab={<ItemBatchesSection batches={sortedBatches} />}
+          compatibleTab={<ItemCompatibleTypesTab itemId={item.id} />}
+          historyTab={<ItemHistorySection movements={movements} />}
         />
-        <KeepAliveTab active={tab === 'card'}>
-          <ItemFieldsSection itemId={item.id} canEdit />
-        </KeepAliveTab>
-        <KeepAliveTab active={tab === 'batches'}>
-          <ItemBatchesSection batches={sortedBatches} />
-        </KeepAliveTab>
-        <KeepAliveTab active={tab === 'compatible'}>
-          <ItemCompatibleTypesTab itemId={item.id} />
-        </KeepAliveTab>
-        <KeepAliveTab active={tab === 'history'}>
-          <ItemHistorySection movements={movements} />
-        </KeepAliveTab>
         {deleteDialog}
-      </div>
+      </>
     )
   }
 
   return (
-    <div className="space-y-4">
+    <div
+      className={
+        variant === 'sheet'
+          ? 'min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pr-14'
+          : 'space-y-4'
+      }
+    >
       {variant === 'page' ? (
         <div className="space-y-3">
           <PageHeader title={item.name} description={codeArticleLine} />
@@ -489,6 +491,10 @@ function ItemCardEditor({
   tab,
   tabItems,
   onTabChange,
+  cardExtras,
+  batchesTab,
+  compatibleTab,
+  historyTab,
 }: {
   item: InventoryItem
   variant: 'page' | 'sheet'
@@ -497,6 +503,10 @@ function ItemCardEditor({
   tab: ItemTab
   tabItems: { id: ItemTab; label: string; count?: number }[]
   onTabChange: (tab: ItemTab) => void
+  cardExtras?: ReactNode
+  batchesTab?: ReactNode
+  compatibleTab?: ReactNode
+  historyTab?: ReactNode
 }) {
   const update = useUpdateInventoryItem(item.id)
   const form = useForm<InventoryItemFormValues>({
@@ -521,9 +531,23 @@ function ItemCardEditor({
   const matchesQuery = useInventoryNameMatches(debouncedName, item.id)
   const matches = matchesQuery.data ?? []
   const dirty = form.formState.isDirty
+  const sheet = variant === 'sheet'
 
   async function persist(values: InventoryItemFormValues) {
-    await update.mutateAsync(values)
+    await update.mutateAsync({
+      name: values.name,
+      code: values.code,
+      article: values.article,
+      barcode: values.barcode,
+      barcodeType: values.barcodeType,
+      description: values.description,
+      categoryId: values.categoryId,
+      unitId: values.unitId,
+      purchasePrice: values.purchasePrice,
+      repairPrice: values.repairPrice,
+      retailPrice: values.retailPrice,
+      isPermanent: values.isPermanent,
+    })
     form.reset(values)
     toast.success('Позиция сохранена')
   }
@@ -614,86 +638,112 @@ function ItemCardEditor({
     </div>
   )
 
+  const saveBar = dirty ? (
+    <div
+      className={
+        sheet
+          ? 'flex shrink-0 justify-end border-t bg-background px-4 py-3 pr-14'
+          : 'flex justify-end border-t pt-3'
+      }
+    >
+      <Button type="submit" disabled={update.isPending}>
+        {update.isPending ? 'Сохранение…' : 'Сохранить'}
+      </Button>
+    </div>
+  ) : null
+
   return (
     <Form {...form}>
-      <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
-        {variant === 'page' ? (
-          <div className="space-y-3">
-            <PageHeader title={titleField} className="mb-0" />
-            <div className="min-w-0 pl-9">{codeArticleFields}</div>
-            {actionsRow}
-          </div>
-        ) : (
-          headerBlock
-        )}
-
-        <PageTabs
-          aria-label="Разделы карточки позиции"
-          value={tab}
-          onChange={onTabChange}
-          items={tabItems}
-        />
-
-        <KeepAliveTab active={tab === 'card'}>
-          {matches.length > 0 ? (
-            <Alert>
-              <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
-              <AlertDescription>
-                <ul className="space-y-1">
-                  {matches.map((match) => (
-                    <li key={match.id}>
-                      <EntitySheetLink kind="item" id={match.id}>
-                        Открыть {match.name}
-                        {match.code ? ` (${match.code})` : ''}
-                      </EntitySheetLink>
-                    </li>
-                  ))}
-                </ul>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          <SectionCard>
-            <div className="space-y-4">
-              <ItemMediaLabel item={item} form={form} canEdit />
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem className="min-w-0">
-                    <FormLabel>Описание</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        {...field}
-                        rows={5}
-                        placeholder="Описание позиции"
-                        className="min-h-28 resize-y"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <ItemFields
-                form={form}
-                excludeItemId={item.id}
-                hideName
-                hideCodeArticle
-                hideBarcode
-                hideDescription
-                layout="card"
-              />
+      <form
+        className={sheet ? 'flex min-h-0 flex-1 flex-col' : 'space-y-4'}
+        onSubmit={form.handleSubmit(onSubmit)}
+        noValidate
+      >
+        <div
+          className={
+            sheet ? 'min-h-0 flex-1 space-y-4 overflow-y-auto p-4 pr-14' : 'space-y-4'
+          }
+        >
+          {variant === 'page' ? (
+            <div className="space-y-3">
+              <PageHeader title={titleField} className="mb-0" />
+              <div className="min-w-0 pl-9">{codeArticleFields}</div>
+              {actionsRow}
             </div>
-          </SectionCard>
-        </KeepAliveTab>
+          ) : (
+            headerBlock
+          )}
 
-        {dirty ? (
-          <div className="flex justify-end border-t pt-3">
-            <Button type="submit" disabled={update.isPending}>
-              {update.isPending ? 'Сохранение…' : 'Сохранить'}
-            </Button>
-          </div>
-        ) : null}
+          <PageTabs
+            aria-label="Разделы карточки позиции"
+            value={tab}
+            onChange={onTabChange}
+            items={tabItems}
+          />
+
+          <KeepAliveTab active={tab === 'card'}>
+            <div className="space-y-4">
+              {matches.length > 0 ? (
+                <Alert>
+                  <AlertTitle>Такое наименование уже в справочнике</AlertTitle>
+                  <AlertDescription>
+                    <ul className="space-y-1">
+                      {matches.map((match) => (
+                        <li key={match.id}>
+                          <EntitySheetLink kind="item" id={match.id}>
+                            Открыть {match.name}
+                            {match.code ? ` (${match.code})` : ''}
+                          </EntitySheetLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              <SectionCard>
+                <div className="space-y-4">
+                  <ItemMediaLabel item={item} form={form} canEdit />
+                  <FormField
+                    control={form.control}
+                    name="description"
+                    render={({ field }) => (
+                      <FormItem className="min-w-0">
+                        <FormLabel>Описание</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            {...field}
+                            rows={5}
+                            placeholder="Описание позиции"
+                            className="min-h-28 resize-y"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <ItemFields
+                    form={form}
+                    excludeItemId={item.id}
+                    hideName
+                    hideCodeArticle
+                    hideBarcode
+                    hideDescription
+                    layout="card"
+                  />
+                </div>
+              </SectionCard>
+
+              {cardExtras}
+            </div>
+          </KeepAliveTab>
+
+          <KeepAliveTab active={tab === 'batches'}>{batchesTab}</KeepAliveTab>
+          <KeepAliveTab active={tab === 'compatible'}>{compatibleTab}</KeepAliveTab>
+          <KeepAliveTab active={tab === 'history'}>{historyTab}</KeepAliveTab>
+        </div>
+
+        {saveBar}
       </form>
     </Form>
   )

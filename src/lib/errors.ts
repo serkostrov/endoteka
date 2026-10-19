@@ -75,6 +75,18 @@ export function toAppError(error: unknown, fallback = 'Не удалось вы�
       return new AppError(code ?? 'RLS', 'Нет доступа (политика безопасности).', error)
     }
 
+    if (/permission denied for/i.test(error.message)) {
+      return new AppError(code ?? 'PERM', 'Недостаточно прав для выполнения операции.', error)
+    }
+
+    if (/Could not find the function|PGRST202/i.test(error.message)) {
+      return new AppError(
+        code ?? 'RPC',
+        'Функция в базе устарела. Примените миграции Supabase и обновите schema cache.',
+        error,
+      )
+    }
+
     if (/mime type|not supported|invalid.*type/i.test(error.message)) {
       return new AppError(code ?? 'MIME', 'Этот тип файла не поддерживается.', error)
     }

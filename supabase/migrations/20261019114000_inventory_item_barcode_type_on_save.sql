@@ -1,5 +1,20 @@
 -- Штрихкод и тип этикетки сохраняются вместе с карточкой (кнопка «Сохранить»),
 -- а не отдельным автосейвом. Права на этикетку = inventory:update.
+-- Сначала вернуть GRANT на текущую перегрузку (после align_permission_matrix
+-- execute мог пропасть, если функция пересоздавалась без grant).
+
+do $grant$
+begin
+  execute $sql$
+    grant execute on function public.update_inventory_item(
+      uuid, text, text, text, text, uuid, uuid, numeric, numeric, numeric, text, boolean, numeric
+    ) to authenticated
+  $sql$;
+exception
+  when undefined_function then
+    null;
+end;
+$grant$;
 
 drop function if exists public.create_inventory_item(
   text, text, text, text, uuid, uuid, numeric, numeric, numeric, text, boolean, numeric
