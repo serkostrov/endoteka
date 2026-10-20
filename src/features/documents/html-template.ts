@@ -1,9 +1,9 @@
 import DOMPurify from 'dompurify'
 import QRCode from 'qrcode'
 
+import { isBarcodeType, renderLinearBarcode, type BarcodeType } from '@/lib/constants/barcode'
 import { toIsoDate } from '@/lib/utils/date'
 
-import { buildCode128Path } from './barcode'
 import { interpolateTemplate, isResolvablePlaceholderKey, resolvePlaceholderValue } from './interpolate'
 import type { DocumentContext, PageMarginsMm, TemplateBlock } from './template-schema'
 import { normalizePageMargins } from './template-schema'
@@ -97,7 +97,9 @@ export function sanitizeDocumentHtml(html: string) {
       'data-code',
       'data-field',
       'data-date-format',
+      'data-barcode-type',
       'viewBox',
+      'preserveAspectRatio',
       'd',
       'stroke',
       'stroke-width',
@@ -395,7 +397,7 @@ function stripPrintOverflowHints(el: Element) {
 
 export async function renderFilledDocumentHtml(html: string, context: DocumentContext) {
   const prepared = prepareDocumentHtml(html, context)
-  const qrValues = collectAttrValues(prepared, '.doc-qr')
+  const qrValues = collectDocumentQrValues(prepared)
   const qrMap = qrValues.length > 0 ? await buildQrMap(qrValues) : {}
   return sanitizeDocumentHtml(embedVisualCodes(prepared, qrMap))
 }
@@ -416,6 +418,41 @@ export function collectAttrValues(html: string, selector: string) {
         .filter(Boolean),
     ),
   ]
+}
+
+/** QR из .doc-qr и из .doc-barcode с типом qr (вариация как на карточке). */
+export function collectDocumentQrValues(html: string) {
+  if (typeof DOMParser === 'undefined') {
+    return [] as string[]
+  }
+  const parsed = new DOMParser().parseFromString(`<div id="root">${html}</div>`, 'text/html')
+  const root = parsed.getElementById('root')
+  if (!root) {
+    return []
+  }
+  const values = new Set<string>()
+  for (const node of root.querySelectorAll('.doc-qr')) {
+    const code = node.getAttribute('data-code')?.trim() ?? ''
+    if (code) {
+      values.add(code)
+    }
+  }
+  for (const node of root.querySelectorAll('.doc-barcode')) {
+    const type = resolveBarcodeType(node.getAttribute('data-barcode-type'))
+    if (type !== 'qr') {
+      continue
+    }
+    const code = node.getAttribute('data-code')?.trim() ?? ''
+    if (code) {
+      values.add(code)
+    }
+  }
+  return [...values]
+}
+
+function resolveBarcodeType(raw: string | null | undefined): BarcodeType {
+  const value = raw?.trim() ?? ''
+  return isBarcodeType(value) ? value : 'code128'
 }
 
 export async function buildQrMap(values: string[]) {
@@ -453,7 +490,20 @@ export function embedVisualCodes(html: string, qrMap: Record<string, string>) {
 
   for (const node of root.querySelectorAll('.doc-barcode')) {
     const code = node.getAttribute('data-code')?.trim() ?? ''
-    const svg = barcodeSvgMarkup(code)
+    const type = resolveBarcodeType(node.getAttribute('data-barcode-type'))
+    if (type === 'qr') {
+      const src = qrMap[code]
+      if (!src) {
+        continue
+      }
+      const image = parsed.createElement('img')
+      image.setAttribute('src', src)
+      image.setAttribute('alt', code)
+      image.setAttribute('class', 'doc-qr-image')
+      node.replaceWith(image)
+      continue
+    }
+    const svg = barcodeSvgMarkup(code, type)
     if (!svg) {
       continue
     }
@@ -496,6 +546,8 @@ export function prepareDocumentHtml(html: string, context: DocumentContext) {
   interpolateNode(root, values)
   // Пустой data-code после подстановки — только из явного barcode-поля источника, без подмены кодом.
   fillEmptyBarcodeCodes(root, values)
+  // Тип штрихкода с карточки (EAN-8 / Code128 / …) — как в превью «По умолчанию».
+  applyBarcodeTypes(root, values)
   return root.innerHTML
 }
 
@@ -514,6 +566,19 @@ function fillEmptyBarcodeCodes(root: Element, values: Record<string, string>) {
     if (!code) {
       node.setAttribute('data-code', fallback)
     }
+  }
+}
+
+function applyBarcodeTypes(root: Element, values: Record<string, string>) {
+  const fromContext = resolveBarcodeType(
+    values['item.barcodeType'] || values['barcode.type'] || values['barcodeType'],
+  )
+  for (const node of root.querySelectorAll('.doc-barcode')) {
+    const existing = node.getAttribute('data-barcode-type')?.trim()
+    if (existing && isBarcodeType(existing)) {
+      continue
+    }
+    node.setAttribute('data-barcode-type', fromContext)
   }
 }
 
@@ -722,10 +787,19 @@ function escapeAttr(value: string) {
   return escapeHtml(value).replaceAll('"', '&quot;')
 }
 
-export function barcodeSvgMarkup(value: string) {
-  const path = buildCode128Path(value)
-  if (!path) {
-    return ''
+export function barcodeSvgMarkup(value: string, type: Exclude<BarcodeType, 'qr'> | string = 'code128') {
+  const resolved: Exclude<BarcodeType, 'qr'> =
+    isBarcodeType(type) && type !== 'qr' ? type : 'code128'
+  const rendered = renderLinearBarcode(resolved, value)
+  if (rendered.kind === 'error') {
+    return `<span class="doc-barcode-error">${escapeHtml(rendered.message)}</span>`
   }
-  return `<svg role="img" aria-label="${escapeAttr(path.payload)}" viewBox="0 0 ${path.width} ${path.height + 14}" class="doc-barcode-svg">${`<path d="${path.d}" stroke="black" stroke-width="1" fill="none"></path>`}<text x="${path.width / 2}" y="${path.height + 12}" text-anchor="middle" font-size="10">${escapeHtml(path.payload)}</text></svg>`
+  // Текст вне SVG: preserveAspectRatio=none на viewBox со <text> сжимал цифры по горизонтали.
+  // meet сохраняет пропорции штрихов (иначе код плохо читается сканером).
+  return (
+    `<span class="doc-barcode-block">` +
+    `<svg role="img" aria-label="${escapeAttr(rendered.payload)}" viewBox="0 0 ${rendered.width} ${rendered.height}" class="doc-barcode-svg" preserveAspectRatio="xMidYMid meet"><path d="${rendered.d}" stroke="black" stroke-width="1" fill="none"></path></svg>` +
+    `<span class="doc-barcode-payload">${escapeHtml(rendered.payload)}</span>` +
+    `</span>`
+  )
 }

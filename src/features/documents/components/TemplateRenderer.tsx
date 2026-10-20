@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 import { documentMarginsPadding } from '../document-content-style'
 import {
   buildQrMap,
-  collectAttrValues,
+  collectDocumentQrValues,
   embedVisualCodes,
   prepareDocumentHtml,
   sanitizeDocumentHtml,
@@ -19,7 +19,8 @@ type TemplateRendererProps = {
   blocks: TemplateBlock[]
   context: DocumentContext
   pageSize: 'a4' | 'label'
-  variant?: 'page' | 'canvas'
+  /** card — превью на карточке склада (заполняет контейнер, без листа 58×40). */
+  variant?: 'page' | 'canvas' | 'card'
   className?: string
 }
 
@@ -35,6 +36,19 @@ export function TemplateRenderer({
   const markup = useFilledMarkup(html, context)
   const pages = usePaginatedPages(markup, pageSize, margins, variant)
   const padding = documentMarginsPadding(margins)
+
+  if (variant === 'card') {
+    return (
+      <div
+        className={cn(
+          'document-html item-label-card-preview min-h-0 flex-1 bg-white text-black',
+          className,
+        )}
+      >
+        <div className="document-html-body" dangerouslySetInnerHTML={{ __html: markup }} />
+      </div>
+    )
+  }
 
   if (variant === 'canvas') {
     return (
@@ -72,7 +86,7 @@ export function TemplateRenderer({
 
 function useFilledMarkup(html: string, context: DocumentContext) {
   const prepared = useMemo(() => prepareDocumentHtml(html, context), [html, context])
-  const qrValues = useMemo(() => collectAttrValues(prepared, '.doc-qr'), [prepared])
+  const qrValues = useMemo(() => collectDocumentQrValues(prepared), [prepared])
   const qrQuery = useQuery({
     queryKey: ['document-html-qr', qrValues],
     queryFn: () => buildQrMap(qrValues),
@@ -90,12 +104,12 @@ function usePaginatedPages(
   markup: string,
   pageSize: 'a4' | 'label',
   margins: ReturnType<typeof templatePageMargins>,
-  variant: 'page' | 'canvas',
+  variant: 'page' | 'canvas' | 'card',
 ) {
   const [pages, setPages] = useState<string[]>([markup])
 
   useEffect(() => {
-    if (variant === 'canvas' || pageSize === 'label' || !markup) {
+    if (variant === 'canvas' || variant === 'card' || pageSize === 'label' || !markup) {
       setPages([markup])
       return
     }

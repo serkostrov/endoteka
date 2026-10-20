@@ -10,6 +10,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { formatInteger } from '@/lib/utils/number'
 
 import { useDeleteInventoryItem } from '../hooks/use-inventory'
+import { readItemLabelTemplatePreference } from '../lib/item-label-template-preference'
 import { printItemLabels, toPrintableItemLabel } from '../lib/print-item-labels'
 import { getInventoryItemCard } from '../services/inventory-service'
 
@@ -66,7 +67,7 @@ export function InventoryBulkActions({ selectedIds, onClear }: InventoryBulkActi
         toast.error('Не удалось загрузить позиции для печати')
         return
       }
-      await printItemLabels(labels)
+      await printItemLabels(labels, readItemLabelTemplatePreference())
       toast.success(
         labels.length === 1
           ? 'Этикетка отправлена на печать'

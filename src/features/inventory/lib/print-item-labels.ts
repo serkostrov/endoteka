@@ -1,11 +1,16 @@
 import QRCode from 'qrcode'
 
-import { openPrintWindow } from '@/features/documents/print-documents'
+import { printDocumentsInWindow, openPrintWindow } from '@/features/documents/print-documents'
+import { getDocumentTemplate } from '@/features/documents/services/documents-service'
+import type { DocumentContext, TemplateBlock } from '@/features/documents/template-schema'
 import {
   isBarcodeType,
   renderLinearBarcode,
   type BarcodeType,
 } from '@/lib/constants/barcode'
+import { DocumentPageSize } from '@/lib/constants/documents'
+
+import { isBuiltinItemLabelTemplate } from './item-label-template-preference'
 
 /** Физический размер этикетки (как page_size=label в документах). */
 const LABEL_W_MM = 58
@@ -83,7 +88,7 @@ async function buildBarcodeMarkup(type: BarcodeType, payload: string) {
   }
 
   return `
-    <svg class="label-bars" role="img" aria-label="${escapeHtml(rendered.payload)}" viewBox="0 0 ${rendered.width} ${rendered.height}" preserveAspectRatio="none">
+    <svg class="label-bars" role="img" aria-label="${escapeHtml(rendered.payload)}" viewBox="0 0 ${rendered.width} ${rendered.height}" preserveAspectRatio="xMidYMid meet">
       <path d="${rendered.d}" stroke="#000" stroke-width="1" fill="none"></path>
     </svg>
     <p class="label-payload">${escapeHtml(rendered.payload)}</p>
@@ -180,9 +185,11 @@ function buildStyles() {
     }
     .label-bars {
       display: block;
-      width: 100%;
+      width: auto;
+      max-width: 100%;
       height: 15mm;
       max-height: 100%;
+      margin: 0 auto;
     }
     .label-payload {
       margin: 0.8mm 0 0;
@@ -216,15 +223,75 @@ function buildStyles() {
   `
 }
 
+/** Контекст документа для заполнения шаблона этикетки полями карточки. */
+export function itemLabelDocumentContext(item: PrintableItemLabel): DocumentContext {
+  const label = toPrintableItemLabel(item)
+  const barcodeType = isBarcodeType(label.barcodeType) ? label.barcodeType : 'code128'
+  return {
+    values: {
+      'company.name': 'Эндотека',
+      'item.name': label.name,
+      'item.code': label.code,
+      'item.article': label.article,
+      'item.labelMeta': itemLabelMetaLine(label),
+      'item.barcode': label.barcode,
+      // Вариация штрихкода с карточки — та же, что в «По умолчанию».
+      'item.barcodeType': barcodeType,
+    },
+    parts: [],
+    lines: [],
+  }
+}
+
 /**
- * Печать этикеток: те же поля, что на карточке позиции
- * (название, код/артикул, штрихкод из поля barcode).
+ * Печать этикеток.
+ * Без templateId / builtin — макет как на карточке (с типом штрихкода).
+ * С шаблоном из настроек — HTML-макет 58×40 мм и поля item.*.
  */
-export async function printItemLabels(items: PrintableItemLabel[]) {
+export async function printItemLabels(
+  items: PrintableItemLabel[],
+  templateId?: string | null,
+) {
   if (items.length === 0) {
     return
   }
 
+  if (!isBuiltinItemLabelTemplate(templateId)) {
+    await printItemLabelsWithTemplate(items, templateId as string)
+    return
+  }
+
+  await printBuiltinItemLabels(items)
+}
+
+async function printItemLabelsWithTemplate(items: PrintableItemLabel[], templateId: string) {
+  const template = await getDocumentTemplate(templateId)
+  if (template.kind !== 'label' || template.pageSize !== DocumentPageSize.Label) {
+    throw new Error('Выбранный шаблон не является этикеткой.')
+  }
+
+  const popup = openPrintWindow()
+  if (!popup) {
+    throw new Error('Разрешите всплывающие окна для печати')
+  }
+
+  try {
+    await printDocumentsInWindow(
+      popup,
+      items.map((item) => ({
+        title: template.name,
+        body: template.body as TemplateBlock[],
+        context: itemLabelDocumentContext(item),
+        pageSize: 'label' as const,
+      })),
+    )
+  } catch (error) {
+    popup.close()
+    throw error
+  }
+}
+
+async function printBuiltinItemLabels(items: PrintableItemLabel[]) {
   const popup = openPrintWindow()
   if (!popup) {
     throw new Error('Разрешите всплывающие окна для печати')

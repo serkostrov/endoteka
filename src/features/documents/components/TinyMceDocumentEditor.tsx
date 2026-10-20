@@ -25,6 +25,7 @@ import { toIsoDate } from '@/lib/utils/date'
 import { documentEditorContentStyle } from '../document-content-style'
 import { DEFAULT_DOCUMENT_DATE_FORMAT, documentDateFormats } from '../date-formats'
 import { resolvePlaceholderValue } from '../interpolate'
+import { ITEM_LABEL_TEMPLATE_HTML } from '../samples/item-label-template'
 import {
   groupPlaceholders,
   mergePlaceholderCatalog,
@@ -137,6 +138,7 @@ function createInit(
   getMargins: () => PageMarginsMm,
 ): Record<string, unknown> {
   const size = pageSize === DocumentPageSize.Label ? 'label' : 'a4'
+  const isLabel = size === 'label'
   const margins = getMargins()
   return {
     language: 'ru',
@@ -149,11 +151,14 @@ function createInit(
     height: '100%',
     min_height: 240,
     plugins: 'table image lists link code fullscreen preview searchreplace',
-    toolbar:
-      'undo redo | fontfamily fontsize doclineheight blockspacing | forecolor backcolor | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist | table image hr | placeholders tablefields logo qrcode barcode | code fullscreen',
+    toolbar: isLabel
+      ? 'undo redo | fontfamily fontsize doclineheight | bold italic underline | alignleft aligncenter alignright | placeholders logo qrcode barcode labelpreset | code fullscreen'
+      : 'undo redo | fontfamily fontsize doclineheight blockspacing | forecolor backcolor | bold italic underline strikethrough | alignleft aligncenter alignright alignjustify | bullist numlist | table image hr | placeholders tablefields logo qrcode barcode | code fullscreen',
     font_family_formats:
       'Sans-Serif=Arial,Helvetica,sans-serif; Serif=Times New Roman,Times,serif; Narrow=Arial Narrow,sans-serif; Consolas=Consolas,monospace',
-    font_size_formats: '8pt 10pt 11pt 12pt 14pt 18pt 24pt 36pt',
+    font_size_formats: isLabel
+      ? '6pt 6.5pt 7pt 8pt 9pt 10pt 11pt 12pt 14pt'
+      : '8pt 10pt 11pt 12pt 14pt 18pt 24pt 36pt',
     line_height_formats: '1 1.15 1.5 2 2.5 3',
     toolbar_mode: 'sliding',
     contextmenu: 'blockspacing table image link',
@@ -181,7 +186,7 @@ function createInit(
       registerLineHeightControl(editor)
       registerBlockSpacingControl(editor)
       registerDocFieldGuards(editor)
-      registerExtras(editor, getSettingsFields)
+      registerExtras(editor, getSettingsFields, isLabel)
       registerPageGapGuards(editor)
       const refreshPreviews = () => hydrateFieldPreviews(editor, getSettingsFields())
       const refreshPages = () => syncPageGuides(editor, pageSize, getMargins())
@@ -589,14 +594,25 @@ function mmToPx(doc: Document, mm: number) {
   return px || mm * 3.7795
 }
 
-function registerExtras(editor: TinyMCEEditor, getSettingsFields: () => PlaceholderDefinition[]) {
+function registerExtras(
+  editor: TinyMCEEditor,
+  getSettingsFields: () => PlaceholderDefinition[],
+  isLabel: boolean,
+) {
   editor.ui.registry.addMenuButton('placeholders', {
     text: 'Поле',
-    tooltip: 'Вставить поле документа',
+    tooltip: isLabel ? 'Поля номенклатуры для этикетки' : 'Вставить поле документа',
     fetch: (callback) => {
-      const items = groupPlaceholders(
-        mergePlaceholderCatalog(placeholdersForContext('document'), getSettingsFields()),
-      ).flatMap((group) => [
+      const catalog = mergePlaceholderCatalog(placeholdersForContext('document'), getSettingsFields())
+      const filtered = isLabel
+        ? catalog.filter(
+            (item) =>
+              item.key.startsWith('item.') ||
+              item.key === 'company.name' ||
+              item.key.startsWith('field.inventory.'),
+          )
+        : catalog
+      const items = groupPlaceholders(filtered).flatMap((group) => [
         { type: 'separator' as const },
         {
           type: 'menuitem' as const,
@@ -609,23 +625,25 @@ function registerExtras(editor: TinyMCEEditor, getSettingsFields: () => Placehol
     },
   })
 
-  editor.ui.registry.addMenuButton('tablefields', {
-    text: 'Строка',
-    tooltip: 'Поля таблицы запчастей или накладной',
-    fetch: (callback) => {
-      callback([
-        { type: 'menuitem', text: 'Запчасть заказа', enabled: false },
-        ...placeholdersForContext('parts')
-          .filter((item) => item.scope === 'row')
-          .map((item) => insertFieldItem(editor, item, getSettingsFields)),
-        { type: 'separator' },
-        { type: 'menuitem', text: 'Строка накладной', enabled: false },
-        ...placeholdersForContext('lines')
-          .filter((item) => item.scope === 'row')
-          .map((item) => insertFieldItem(editor, item, getSettingsFields)),
-      ])
-    },
-  })
+  if (!isLabel) {
+    editor.ui.registry.addMenuButton('tablefields', {
+      text: 'Строка',
+      tooltip: 'Поля таблицы запчастей или накладной',
+      fetch: (callback) => {
+        callback([
+          { type: 'menuitem', text: 'Запчасть заказа', enabled: false },
+          ...placeholdersForContext('parts')
+            .filter((item) => item.scope === 'row')
+            .map((item) => insertFieldItem(editor, item, getSettingsFields)),
+          { type: 'separator' },
+          { type: 'menuitem', text: 'Строка накладной', enabled: false },
+          ...placeholdersForContext('lines')
+            .filter((item) => item.scope === 'row')
+            .map((item) => insertFieldItem(editor, item, getSettingsFields)),
+        ])
+      },
+    })
+  }
 
   editor.ui.registry.addButton('logo', {
     text: 'Логотип',
@@ -633,26 +651,43 @@ function registerExtras(editor: TinyMCEEditor, getSettingsFields: () => Placehol
     tooltip: 'Вставить логотип',
     onAction: () => openUrlDialog(editor, 'Логотип', 'Адрес картинки', (src) => {
       editor.insertContent(
-        `<img src="${escapeAttr(src)}" alt="Логотип" style="max-height: 72px; width: auto;">`,
+        `<img src="${escapeAttr(src)}" alt="Логотип" style="max-height: ${isLabel ? '28px' : '72px'}; width: auto;">`,
       )
     }),
   })
 
+  const codeField = isLabel ? 'item.barcode' : 'order.number'
   editor.ui.registry.addButton('qrcode', {
     text: 'QR',
-    tooltip: 'QR-код из поля',
+    tooltip: isLabel ? 'QR из штрихкода позиции' : 'QR-код из поля',
     onAction: () => {
-      editor.insertContent('<span class="doc-qr" data-code="{{order.number}}" contenteditable="false">QR {{order.number}}</span>&nbsp;')
+      editor.insertContent(
+        `<span class="doc-qr" data-code="{{${codeField}}}" contenteditable="false">QR {{${codeField}}}</span>&nbsp;`,
+      )
     },
   })
 
   editor.ui.registry.addButton('barcode', {
     text: 'Штрихкод',
-    tooltip: 'Штрихкод из поля',
+    tooltip: isLabel
+      ? 'Штрихкод позиции — тип (EAN-8, Code128…) берётся с карточки склада'
+      : 'Штрихкод из поля',
     onAction: () => {
-      editor.insertContent('<span class="doc-barcode" data-code="{{item.barcode}}" contenteditable="false">Штрихкод {{item.barcode}}</span>&nbsp;')
+      editor.insertContent(
+        '<span class="doc-barcode" data-code="{{item.barcode}}" contenteditable="false">Штрихкод</span>&nbsp;',
+      )
     },
   })
+
+  if (isLabel) {
+    editor.ui.registry.addButton('labelpreset', {
+      text: 'Макет',
+      tooltip: 'Вставить макет как на карточке склада',
+      onAction: () => {
+        editor.setContent(ITEM_LABEL_TEMPLATE_HTML)
+      },
+    })
+  }
 }
 
 function insertFieldItem(

@@ -178,10 +178,232 @@
 
 .document-sheet-label {
   width: 58mm;
+  height: 40mm;
   min-height: 40mm;
-  padding: 3mm;
+  padding: 2.5mm;
   box-sizing: border-box;
   border: 1px dashed #bbb;
+  overflow: hidden;
+}
+
+.document-sheet-label .document-html-body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-stretch: normal;
+  letter-spacing: normal;
+}
+
+.document-sheet-label .document-html-body,
+.document-sheet-label .document-html-body * {
+  font-stretch: normal;
+}
+
+.document-sheet-label .document-html-body .doc-barcode-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6mm;
+  margin: 0.5mm 0 0;
+  width: 100%;
+}
+
+.document-sheet-label .document-html-body .doc-barcode-svg,
+.document-sheet-label .document-html-body svg.doc-barcode-svg {
+  display: block;
+  width: auto;
+  height: 14mm;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.document-sheet-label .document-html-body .doc-barcode-payload {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 7pt;
+  font-stretch: normal;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #000;
+}
+
+.document-sheet-label .document-html-body .doc-barcode-error {
+  display: block;
+  margin: 0.5mm 0 0;
+  text-align: center;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 6.5pt;
+  color: #b91c1c;
+}
+
+.document-sheet-label .document-html-body .doc-qr-image {
+  display: block;
+  width: auto;
+  height: 18mm;
+  max-width: 100%;
+  margin: 0.5mm auto 0;
+}
+
+.document-sheet-label .document-html-body .item-label-layout {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+}
+
+.document-sheet-label .document-html-body .item-label-barcode {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  width: 100%;
+}
+
+.document-sheet-label .document-html-body .item-label-barcode .doc-barcode-block {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+}
+
+/**
+ * Превью шаблона на карточке склада — тот же каркас, что у «По умолчанию»:
+ * текст сверху, штрихкод растягивается на оставшуюся высоту.
+ */
+.item-label-card-preview {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.item-label-card-preview .document-html-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-stretch: normal;
+  letter-spacing: normal;
+  color: #000;
+  text-align: center;
+}
+
+.item-label-card-preview .document-html-body > *,
+.item-label-card-preview .document-html-body .item-label-layout {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.item-label-card-preview .document-html-body p {
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.item-label-card-preview .document-html-body > * > p:first-child,
+.item-label-card-preview .document-html-body .item-label-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  line-height: 1.25 !important;
+  color: #000 !important;
+  white-space: normal !important;
+  word-break: break-word;
+}
+
+.item-label-card-preview .document-html-body > * > p:nth-child(2):not(:has(.doc-barcode-block)):not(:has(.doc-qr-image)),
+.item-label-card-preview .document-html-body .item-label-meta {
+  margin-top: 2px !important;
+  overflow: hidden;
+  font-size: 9px !important;
+  font-weight: 400 !important;
+  line-height: 1.25 !important;
+  color: #404040 !important;
+  text-overflow: ellipsis;
+  white-space: nowrap !important;
+}
+
+.item-label-card-preview .document-html-body p:has(.doc-barcode-block),
+.item-label-card-preview .document-html-body p:has(.doc-qr-image),
+.item-label-card-preview .document-html-body .item-label-barcode {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 0;
+  margin-top: 4px !important;
+}
+
+.item-label-card-preview .document-html-body .doc-barcode-block {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+}
+
+.item-label-card-preview .document-html-body .doc-barcode-svg,
+.item-label-card-preview .document-html-body svg.doc-barcode-svg {
+  display: block;
+  flex: 1 1 auto;
+  width: 100% !important;
+  max-width: 100%;
+  height: auto !important;
+  min-height: 3.5rem;
+  max-height: none !important;
+  margin: 0 auto;
+}
+
+.item-label-card-preview .document-html-body .doc-barcode-payload {
+  display: block;
+  flex-shrink: 0;
+  max-width: 100%;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  font-stretch: normal;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #000;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-label-card-preview .document-html-body .doc-qr-image {
+  display: block;
+  flex: 1 1 auto;
+  width: auto;
+  max-width: 100%;
+  height: auto !important;
+  max-height: 100%;
+  min-height: 3.5rem;
+  margin: 0 auto;
+  object-fit: contain;
 }
 
 .document-sheet-canvas {
@@ -311,12 +533,36 @@
   vertical-align: middle;
 }
 
+.document-html-body .doc-barcode-block {
+  display: inline-flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  vertical-align: middle;
+}
+
 .document-html-body .doc-barcode-svg,
 .document-html-body svg.doc-barcode-svg {
-  display: inline-block;
+  display: block;
   height: 3rem;
+  width: auto;
   max-width: 16rem;
-  vertical-align: middle;
+}
+
+.document-html-body .doc-barcode-payload {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.7rem;
+  font-stretch: normal;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: #000;
 }
 
 .document-tinymce .tox-tinymce {

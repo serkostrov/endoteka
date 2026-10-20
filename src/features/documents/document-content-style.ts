@@ -155,6 +155,12 @@ export function documentEditorContentStyle(
         background: transparent;
         border: none;
         box-shadow: none;
+        font-family: Arial, Helvetica, sans-serif;
+        font-stretch: normal;
+        letter-spacing: normal;
+      }
+      body, body * {
+        font-stretch: normal;
       }
       [data-doc-page-gap] {
         display: block;
@@ -294,11 +300,33 @@ export const DOCUMENT_HTML_BODY_STYLE = `
     height: 4.5rem;
     vertical-align: middle;
   }
+  .document-html-body .doc-barcode-block {
+    display: inline-flex;
+    max-width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    vertical-align: middle;
+  }
   .document-html-body .doc-barcode-svg,
   .document-html-body svg.doc-barcode-svg {
-    display: inline-block;
+    display: block;
     height: 3rem;
+    width: auto;
     max-width: 16rem;
-    vertical-align: middle;
+  }
+  .document-html-body .doc-barcode-payload {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    font-stretch: normal;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    color: #000;
   }
 `

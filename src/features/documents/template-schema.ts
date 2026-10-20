@@ -1,6 +1,7 @@
 import type { Json } from '@/types/database'
 
 import { isPlaceholderKey, type PlaceholderKey } from './placeholders'
+import { ITEM_LABEL_TEMPLATE_HTML } from './samples/item-label-template'
 
 export const TemplateBlockType = {
   Heading: 'heading',
@@ -92,11 +93,12 @@ export const DEFAULT_PAGE_MARGINS_MM: PageMarginsMm = {
   left: 10,
 }
 
+/** Поля этикетки 58×40 мм — как печать с карточки склада. */
 export const DEFAULT_LABEL_MARGINS_MM: PageMarginsMm = {
-  top: 3,
-  right: 3,
-  bottom: 3,
-  left: 3,
+  top: 2.5,
+  right: 2.5,
+  bottom: 2.5,
+  left: 2.5,
 }
 
 export type HtmlBlock = {
@@ -312,6 +314,11 @@ export function parseDocumentContext(value: Json | unknown): DocumentContext {
 
 export function emptyTemplateBody(): TemplateBlock[] {
   return [createHtmlBlock(DEFAULT_TEMPLATE_HTML)]
+}
+
+/** Стартовый макет этикетки номенклатуры (как на карточке склада). */
+export function emptyLabelTemplateBody(): TemplateBlock[] {
+  return [createHtmlBlock(ITEM_LABEL_TEMPLATE_HTML, DEFAULT_LABEL_MARGINS_MM)]
 }
 
 export function createHtmlBlock(html: string, margins?: PageMarginsMm): HtmlBlock {

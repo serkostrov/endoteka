@@ -113,7 +113,11 @@ function TemplateEditorForm({ template }: { template: DocumentTemplate }) {
       <PageHeader
         className="mb-0 shrink-0 print:hidden sm:items-center"
         title={name || 'Шаблон'}
-        description="Редактирование макета. Поля подставляются при печати."
+        description={
+          kind === DocumentKind.Label
+            ? 'Этикетка 58×40 мм. Вставляйте поля номенклатуры — они подставляются при печати с карточки склада.'
+            : 'Редактирование макета. Поля подставляются при печати.'
+        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="outline" size="sm">
@@ -197,7 +201,11 @@ function SettingsDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Свойства шаблона</DialogTitle>
-          <DialogDescription>Название и формат листа. Поля страницы фиксированы: 10 мм со всех сторон.</DialogDescription>
+          <DialogDescription>
+            {kind === DocumentKind.Label
+              ? 'Этикетка 58×40 мм, поля 2,5 мм. Печать с карточки склада по выбранному шаблону.'
+              : 'Название и формат листа. Поля страницы фиксированы: 10 мм со всех сторон.'}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-2">
@@ -219,7 +227,15 @@ function SettingsDialog({
               </SelectContent>
             </Select>
           </div>
-          {kind !== DocumentKind.Label ? (
+          {kind === DocumentKind.Label ? (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              Формат: <span className="font-medium text-foreground">этикетка 58×40 мм</span>. Поля:{' '}
+              <span className="font-medium text-foreground">item.name</span>,{' '}
+              <span className="font-medium text-foreground">item.code</span>,{' '}
+              <span className="font-medium text-foreground">item.article</span>,{' '}
+              <span className="font-medium text-foreground">item.barcode</span>.
+            </div>
+          ) : (
             <div className="space-y-2">
               <Label>Формат</Label>
               <Select value={pageSize} onValueChange={(value) => onPageSizeChange(value as DocumentPageSize)}>
@@ -235,7 +251,7 @@ function SettingsDialog({
                 </SelectContent>
               </Select>
             </div>
-          ) : null}
+          )}
         </div>
         <DialogFooter>
           <Button type="button" onClick={() => onOpenChange(false)}>

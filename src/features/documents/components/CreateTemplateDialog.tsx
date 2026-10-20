@@ -24,7 +24,7 @@ import { routes } from '@/lib/constants/routes'
 import { getErrorMessage } from '@/lib/errors'
 
 import { useCreateDocumentTemplate } from '../hooks/use-documents'
-import { emptyTemplateBody } from '../template-schema'
+import { emptyLabelTemplateBody, emptyTemplateBody } from '../template-schema'
 
 export function CreateTemplateDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const create = useCreateDocumentTemplate()
@@ -35,36 +35,62 @@ export function CreateTemplateDialog({ open, onOpenChange }: { open: boolean; on
 
   async function submit() {
     try {
+      const isLabel = kind === DocumentKind.Label
       const id = await create.mutateAsync({
-        name,
+        name: name.trim() || (isLabel ? 'Этикетка' : 'Новый шаблон'),
         kind,
-        pageSize: kind === DocumentKind.Label ? DocumentPageSize.Label : pageSize,
-        body: emptyTemplateBody(),
+        pageSize: isLabel ? DocumentPageSize.Label : pageSize,
+        body: isLabel ? emptyLabelTemplateBody() : emptyTemplateBody(),
       })
-      toast.success('Шаблон создан')
+      toast.success(isLabel ? 'Шаблон этикетки создан' : 'Шаблон создан')
       onOpenChange(false)
       setName('Новый шаблон')
+      setKind(DocumentKind.Custom)
+      setPageSize(DocumentPageSize.A4)
       navigate(routes.documentTemplate.replace(':id', id))
     } catch (error) {
       toast.error(getErrorMessage(error))
     }
   }
 
+  const isLabel = kind === DocumentKind.Label
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Новый шаблон</DialogTitle>
-          <DialogDescription>Дальше оформите документ в редакторе и вставьте поля из панели.</DialogDescription>
+          <DialogDescription>
+            {isLabel
+              ? 'Этикетка 58×40 мм. Стартовый макет как на карточке склада — название, код, артикул и штрихкод. Дальше правьте поля в редакторе.'
+              : 'Дальше оформите документ в редакторе и вставьте поля из панели.'}
+          </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-2">
             <Label htmlFor="tpl-name">Название</Label>
-            <Input id="tpl-name" value={name} onChange={(event) => setName(event.target.value)} />
+            <Input
+              id="tpl-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder={isLabel ? 'Этикетка запчасти' : 'Новый шаблон'}
+            />
           </div>
           <div className="space-y-2">
             <Label>Тип</Label>
-            <Select value={kind} onValueChange={(value) => setKind(value as DocumentKind)}>
+            <Select
+              value={kind}
+              onValueChange={(value) => {
+                const next = value as DocumentKind
+                setKind(next)
+                if (next === DocumentKind.Label) {
+                  setPageSize(DocumentPageSize.Label)
+                  if (!name.trim() || name === 'Новый шаблон') {
+                    setName('Этикетка')
+                  }
+                }
+              }}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -77,7 +103,12 @@ export function CreateTemplateDialog({ open, onOpenChange }: { open: boolean; on
               </SelectContent>
             </Select>
           </div>
-          {kind !== DocumentKind.Label ? (
+          {isLabel ? (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              Формат: <span className="font-medium text-foreground">этикетка 58×40 мм</span>. Печать с
+              карточки склада и из списка позиций.
+            </div>
+          ) : (
             <div className="space-y-2">
               <Label>Формат</Label>
               <Select value={pageSize} onValueChange={(value) => setPageSize(value as DocumentPageSize)}>
@@ -93,7 +124,7 @@ export function CreateTemplateDialog({ open, onOpenChange }: { open: boolean; on
                 </SelectContent>
               </Select>
             </div>
-          ) : null}
+          )}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

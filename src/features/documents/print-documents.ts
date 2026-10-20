@@ -89,13 +89,38 @@ function buildPrintStyles(pageSize: 'a4' | 'label', margins: PageMarginsMm) {
       max-width: 100% !important;
       height: auto !important;
     }
+    .document-html-body .doc-barcode-block {
+      display: ${pageSize === 'label' ? 'flex' : 'inline-flex'} !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      gap: ${pageSize === 'label' ? '0.6mm' : '0.25rem'} !important;
+      width: ${pageSize === 'label' ? '100%' : 'auto'} !important;
+      max-width: 100% !important;
+      margin: ${pageSize === 'label' ? '0.5mm 0 0' : '0'} !important;
+      vertical-align: middle;
+    }
     .document-html-body .doc-barcode-svg,
     .document-html-body svg.doc-barcode-svg {
-      display: inline-block !important;
-      height: 3rem !important;
+      display: block !important;
+      height: ${pageSize === 'label' ? '14mm' : '3rem'} !important;
       max-width: 100% !important;
       width: auto !important;
+      margin: 0 auto !important;
       vertical-align: middle;
+    }
+    .document-html-body .doc-barcode-payload {
+      display: block !important;
+      max-width: 100% !important;
+      overflow: hidden !important;
+      text-align: center !important;
+      text-overflow: ellipsis !important;
+      white-space: nowrap !important;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+      font-size: ${pageSize === 'label' ? '7pt' : '0.7rem'} !important;
+      font-stretch: normal !important;
+      letter-spacing: 0.02em !important;
+      line-height: 1 !important;
+      color: #000 !important;
     }
     .document-html-body tr {
       break-inside: auto;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Printer, WandSparkles } from 'lucide-react'
 import QRCode from 'qrcode'
 import { toast } from 'sonner'
@@ -9,8 +9,18 @@ import { ImageLightbox, ImageGalleryGrid, type ImageLightboxItem } from '@/compo
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
+import { TemplateRenderer } from '@/features/documents/components/TemplateRenderer'
+import { useDocumentTemplate, useDocumentTemplates } from '@/features/documents/hooks/use-documents'
 import {
   barcodeTypeLabels,
   BARCODE_TYPES,
@@ -20,6 +30,11 @@ import {
   renderLinearBarcode,
   type BarcodeType,
 } from '@/lib/constants/barcode'
+import {
+  DocumentKind,
+  DocumentSourceType,
+  sourceTypeForTemplate,
+} from '@/lib/constants/documents'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { pickImageFiles } from '@/lib/pick-image-files'
@@ -30,8 +45,18 @@ import {
   useSetInventoryItemPhotoCover,
   useUploadInventoryItemPhoto,
 } from '../hooks/use-inventory'
-import { useRegisterItemLabelSnapshot } from '../lib/item-label-print-context'
-import { itemLabelMetaLine, printItemLabels, toPrintableItemLabel } from '../lib/print-item-labels'
+import { useItemLabelPrint, useRegisterItemLabelSnapshot } from '../lib/item-label-print-context'
+import {
+  BUILTIN_ITEM_LABEL_TEMPLATE_ID,
+  isBuiltinItemLabelTemplate,
+} from '../lib/item-label-template-preference'
+import {
+  itemLabelDocumentContext,
+  itemLabelMetaLine,
+  printItemLabels,
+  toPrintableItemLabel,
+  type PrintableItemLabel,
+} from '../lib/print-item-labels'
 import type { InventoryItemFormValues } from '../schemas'
 import { INVENTORY_ITEM_PHOTO_ACCEPT, type InventoryItem } from '../services/inventory-service'
 
@@ -219,19 +244,36 @@ function LabelPreviewCard({
   onBarcodeChange: (value: string) => void
   onGenerate: () => void
 }) {
+  const labelPrint = useItemLabelPrint()
+  const templatesQuery = useDocumentTemplates(DocumentKind.Label, '')
   const canReceive = useHasPermission(Permission.InventoryReceive)
   const canReadDocs = useHasPermission(Permission.DocumentsRead)
   const canCreateDocs = useHasPermission(Permission.DocumentsCreate)
   const canPrintDocs = useHasPermission(Permission.DocumentsPrint)
   const canPrint = canReceive || canReadDocs || canCreateDocs || canPrintDocs
   const [printPending, setPrintPending] = useState(false)
-  const metaLine = itemLabelMetaLine(snapshot)
+
+  const itemLabelTemplates = useMemo(
+    () =>
+      (templatesQuery.data ?? []).filter(
+        (template) => sourceTypeForTemplate(template.kind, template.code) === DocumentSourceType.Item,
+      ),
+    [templatesQuery.data],
+  )
+
+  const templateId = labelPrint?.templateId ?? BUILTIN_ITEM_LABEL_TEMPLATE_ID
+  const resolvedTemplateId = useResolvedItemLabelTemplateId(templateId, itemLabelTemplates)
+
+  useEffect(() => {
+    if (labelPrint && resolvedTemplateId !== templateId) {
+      labelPrint.setTemplateId(resolvedTemplateId)
+    }
+  }, [labelPrint, resolvedTemplateId, templateId])
 
   async function handlePrint() {
     setPrintPending(true)
     try {
-      // Печать = точная копия превью (те же поля карточки).
-      await printItemLabels([snapshot])
+      await printItemLabels([snapshot], resolvedTemplateId)
       toast.success('Этикетка отправлена на печать')
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -242,56 +284,164 @@ function LabelPreviewCard({
 
   return (
     <div className="flex h-full min-h-[14rem] flex-col gap-2">
-      <div className="flex shrink-0 items-center gap-2">
-        <Label className="sr-only">Тип</Label>
-        <Select
-          value={barcodeType}
-          disabled={!canEdit}
-          onValueChange={(value) => {
-            if (isBarcodeType(value)) {
-              onTypeChange(value)
-            }
-          }}
-        >
-          <SelectTrigger className="h-8 min-w-0 flex-1 text-xs" aria-label="Тип штрихкода">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent searchable>
-            {BARCODE_TYPES.map((type) => (
-              <SelectItem key={type} value={type}>
-                {barcodeTypeLabels[type]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {canEdit ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label="Сгенерировать код"
-            title="Сгенерировать код"
-            onClick={onGenerate}
+      <div className="flex shrink-0 flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <Label className="sr-only">Тип штрихкода</Label>
+          <Select
+            value={barcodeType}
+            disabled={!canEdit}
+            onValueChange={(value) => {
+              if (isBarcodeType(value)) {
+                onTypeChange(value)
+              }
+            }}
           >
-            <WandSparkles className="size-4" />
-          </Button>
-        ) : null}
-        {canPrint ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            aria-label={printPending ? 'Подготовка…' : 'Распечатать этикетку'}
-            title="Распечатать этикетку"
-            disabled={printPending}
-            onClick={() => void handlePrint()}
-          >
-            <Printer className="size-4" />
-          </Button>
-        ) : null}
+            <SelectTrigger className="h-8 min-w-0 flex-1 text-xs" aria-label="Тип штрихкода">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent searchable>
+              {BARCODE_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {barcodeTypeLabels[type]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {canEdit ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label="Сгенерировать код"
+              title="Сгенерировать код"
+              onClick={onGenerate}
+            >
+              <WandSparkles className="size-4" />
+            </Button>
+          ) : null}
+          {canPrint ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label={printPending ? 'Подготовка…' : 'Распечатать этикетку'}
+              title="Распечатать этикетку"
+              disabled={printPending}
+              onClick={() => void handlePrint()}
+            >
+              <Printer className="size-4" />
+            </Button>
+          ) : null}
+        </div>
+        <ItemLabelTemplateSelect
+          value={resolvedTemplateId}
+          templates={itemLabelTemplates}
+          onChange={(value) => labelPrint?.setTemplateId(value)}
+        />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-white p-2 text-black">
+      <ItemLabelLivePreview
+        templateId={resolvedTemplateId}
+        snapshot={snapshot}
+        barcodeType={barcodeType}
+        payload={payload}
+      />
+
+      <Input
+        value={barcode}
+        disabled={!canEdit}
+        placeholder="Значение штрихкода"
+        className="h-8 shrink-0 truncate font-mono text-xs"
+        inputMode={barcodeType === 'code128' || barcodeType === 'qr' ? 'text' : 'numeric'}
+        onChange={(event) => onBarcodeChange(event.target.value)}
+        aria-label="Значение штрихкода"
+      />
+    </div>
+  )
+}
+
+type ItemLabelTemplateOption = {
+  id: string
+  name: string
+}
+
+function useResolvedItemLabelTemplateId(
+  templateId: string,
+  templates: ItemLabelTemplateOption[],
+) {
+  return useMemo(() => {
+    if (isBuiltinItemLabelTemplate(templateId)) {
+      return BUILTIN_ITEM_LABEL_TEMPLATE_ID
+    }
+    if (templates.some((template) => template.id === templateId)) {
+      return templateId
+    }
+    return BUILTIN_ITEM_LABEL_TEMPLATE_ID
+  }, [templateId, templates])
+}
+
+function ItemLabelTemplateSelect({
+  value,
+  templates,
+  onChange,
+}: {
+  value: string
+  templates: ItemLabelTemplateOption[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Label className="sr-only">Шаблон этикетки</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-8 min-w-0 flex-1 text-xs" aria-label="Шаблон этикетки">
+          <SelectValue placeholder="Шаблон этикетки" />
+        </SelectTrigger>
+        <SelectContent searchable>
+          <SelectItem value={BUILTIN_ITEM_LABEL_TEMPLATE_ID}>По умолчанию</SelectItem>
+          {templates.length > 0 ? (
+            <SelectGroup>
+              <SelectLabel className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+                Шаблоны
+              </SelectLabel>
+              {templates.map((template) => (
+                <SelectItem key={template.id} value={template.id}>
+                  {template.name}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ) : null}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function ItemLabelLivePreview({
+  templateId,
+  snapshot,
+  barcodeType,
+  payload,
+}: {
+  templateId: string
+  snapshot: PrintableItemLabel
+  barcodeType: BarcodeType
+  payload: string
+}) {
+  const builtin = isBuiltinItemLabelTemplate(templateId)
+  const templateQuery = useDocumentTemplate(builtin ? undefined : templateId)
+  const snapshotWithType = useMemo(
+    () => ({ ...snapshot, barcodeType }),
+    [snapshot, barcodeType],
+  )
+  const context = useMemo(() => itemLabelDocumentContext(snapshotWithType), [snapshotWithType])
+  const metaLine = itemLabelMetaLine(snapshot)
+
+  const shellClass =
+    'flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-white p-2 text-black'
+
+  if (builtin || templateQuery.isError || (!templateQuery.isLoading && !templateQuery.data)) {
+    return (
+      <div className={shellClass}>
         <p className="line-clamp-2 shrink-0 text-center text-[11px] font-medium leading-tight">
           {snapshot.name || '—'}
         </p>
@@ -304,15 +454,25 @@ function LabelPreviewCard({
           <BarcodeGlyph type={barcodeType} payload={payload} />
         </div>
       </div>
+    )
+  }
 
-      <Input
-        value={barcode}
-        disabled={!canEdit}
-        placeholder="Значение штрихкода"
-        className="h-8 shrink-0 truncate font-mono text-xs"
-        inputMode={barcodeType === 'code128' || barcodeType === 'qr' ? 'text' : 'numeric'}
-        onChange={(event) => onBarcodeChange(event.target.value)}
-        aria-label="Значение штрихкода"
+  if (templateQuery.isLoading || !templateQuery.data) {
+    return (
+      <div className={`${shellClass} items-center justify-center text-[11px] text-muted-foreground`}>
+        Загрузка макета…
+      </div>
+    )
+  }
+
+  return (
+    <div className={shellClass}>
+      <TemplateRenderer
+        key={`${templateId}-${barcodeType}-${snapshot.barcode}`}
+        blocks={templateQuery.data.body}
+        context={context}
+        pageSize="label"
+        variant="card"
       />
     </div>
   )
@@ -371,13 +531,13 @@ function BarcodeGlyph({ type, payload }: { type: BarcodeType; payload: string })
   }
 
   return (
-    <div className="flex h-full w-full min-h-0 flex-col items-stretch justify-center gap-1 px-0.5">
+    <div className="flex h-full w-full min-h-0 flex-col items-center justify-center gap-1 px-0.5">
       <svg
         role="img"
         aria-label={rendered.payload}
         viewBox={`0 0 ${rendered.width} ${rendered.height}`}
-        className="min-h-0 w-full flex-1"
-        preserveAspectRatio="none"
+        className="min-h-0 w-full max-w-full flex-1"
+        preserveAspectRatio="xMidYMid meet"
       >
         <path d={rendered.d} stroke="black" strokeWidth={1} fill="none" />
       </svg>
@@ -391,14 +551,31 @@ function BarcodeGlyph({ type, payload }: { type: BarcodeType; payload: string })
 /** Read-only media strip for viewers without edit rights. */
 export function ItemMediaLabelReadonly({ item }: { item: InventoryItem }) {
   const photosQuery = useInventoryItemPhotos(item.id)
+  const labelPrint = useItemLabelPrint()
+  const templatesQuery = useDocumentTemplates(DocumentKind.Label, '')
   const [viewerIndex, setViewerIndex] = useState<number | null>(null)
   const [galleryOpen, setGalleryOpen] = useState(false)
   const snapshot = toPrintableItemLabel(item)
   const barcodeType = isBarcodeType(snapshot.barcodeType) ? snapshot.barcodeType : 'code128'
   const payload = labelPayload(snapshot.barcode)
-  const metaLine = itemLabelMetaLine(snapshot)
 
   useRegisterItemLabelSnapshot(() => snapshot)
+
+  const itemLabelTemplates = useMemo(
+    () =>
+      (templatesQuery.data ?? []).filter(
+        (template) => sourceTypeForTemplate(template.kind, template.code) === DocumentSourceType.Item,
+      ),
+    [templatesQuery.data],
+  )
+  const templateId = labelPrint?.templateId ?? BUILTIN_ITEM_LABEL_TEMPLATE_ID
+  const resolvedTemplateId = useResolvedItemLabelTemplateId(templateId, itemLabelTemplates)
+
+  useEffect(() => {
+    if (labelPrint && resolvedTemplateId !== templateId) {
+      labelPrint.setTemplateId(resolvedTemplateId)
+    }
+  }, [labelPrint, resolvedTemplateId, templateId])
 
   const photos = (photosQuery.data ?? [])
     .filter((photo) => photo.signedUrl)
@@ -421,19 +598,17 @@ export function ItemMediaLabelReadonly({ item }: { item: InventoryItem }) {
       />
       <div className="flex h-full min-h-[14rem] flex-col gap-2">
         <p className="shrink-0 text-xs text-muted-foreground">{barcodeTypeLabels[barcodeType]}</p>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border bg-white p-2 text-black">
-          <p className="line-clamp-2 shrink-0 text-center text-[11px] font-medium leading-tight">
-            {snapshot.name || '—'}
-          </p>
-          {metaLine ? (
-            <p className="mt-0.5 shrink-0 truncate text-center text-[9px] leading-tight text-neutral-700">
-              {metaLine}
-            </p>
-          ) : null}
-          <div className="mt-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-            <BarcodeGlyph type={barcodeType} payload={payload} />
-          </div>
-        </div>
+        <ItemLabelTemplateSelect
+          value={resolvedTemplateId}
+          templates={itemLabelTemplates}
+          onChange={(value) => labelPrint?.setTemplateId(value)}
+        />
+        <ItemLabelLivePreview
+          templateId={resolvedTemplateId}
+          snapshot={snapshot}
+          barcodeType={barcodeType}
+          payload={payload}
+        />
         <p className="truncate font-mono text-xs text-muted-foreground">{snapshot.barcode || '—'}</p>
       </div>
       <ImageGalleryGrid

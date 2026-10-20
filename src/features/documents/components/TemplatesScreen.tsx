@@ -55,7 +55,7 @@ export function TemplatesScreen() {
     <div className="space-y-4">
       <PageHeader
         title="Шаблоны документов"
-        description="Макеты печатных форм для заказов и склада."
+        description="Макеты печатных форм для заказов и склада. Этикетки 58×40 мм выбираются на карточке номенклатуры."
       />
 
       <FilterBar

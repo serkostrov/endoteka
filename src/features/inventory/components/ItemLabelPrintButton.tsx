@@ -8,6 +8,7 @@ import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 
 import { useItemLabelPrint } from '../lib/item-label-print-context'
+import { BUILTIN_ITEM_LABEL_TEMPLATE_ID } from '../lib/item-label-template-preference'
 import { printItemLabels, toPrintableItemLabel, type PrintableItemLabel } from '../lib/print-item-labels'
 
 type ItemLabelPrintButtonProps = {
@@ -37,7 +38,10 @@ export function ItemLabelPrintButton({ fallback }: ItemLabelPrintButtonProps) {
 
     setPending(true)
     try {
-      await printItemLabels([snapshot])
+      await printItemLabels(
+        [snapshot],
+        labelPrint?.templateId ?? BUILTIN_ITEM_LABEL_TEMPLATE_ID,
+      )
       toast.success('Этикетка отправлена на печать')
     } catch (error) {
       toast.error(getErrorMessage(error))
