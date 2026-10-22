@@ -2,11 +2,9 @@ import { toAppError } from '@/lib/errors'
 import { getSupabase } from '@/lib/supabase/client'
 
 const BUCKET = 'document-template-assets'
-const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'] as const
-const MAX_BYTES = 5 * 1024 * 1024
 
-export const DOCUMENT_TEMPLATE_ASSET_ACCEPT =
-  'image/jpeg,image/png,image/webp,image/jpg,.jpg,.jpeg,.png,.webp'
+/** Без ограничения формата — любой файл с компьютера. */
+export const DOCUMENT_TEMPLATE_ASSET_ACCEPT = '*/*'
 
 export type UploadedDocumentAsset = {
   url: string
@@ -14,32 +12,55 @@ export type UploadedDocumentAsset = {
   fileName: string
 }
 
-function resolveImageMime(file: File): string | null {
-  const type = file.type.trim().toLowerCase()
-  if ((ALLOWED_MIME as readonly string[]).includes(type)) {
-    return type === 'image/jpg' ? 'image/jpeg' : type
+function extensionFromFile(file: File) {
+  const fromName = file.name.match(/(\.[a-zA-Z0-9]+)$/)?.[1]?.toLowerCase()
+  if (fromName && fromName.length <= 8) {
+    return fromName
   }
-  const name = file.name.toLowerCase()
-  if (name.endsWith('.jpg') || name.endsWith('.jpeg')) {
-    return 'image/jpeg'
-  }
-  if (name.endsWith('.png')) {
-    return 'image/png'
-  }
-  if (name.endsWith('.webp')) {
-    return 'image/webp'
-  }
-  return null
-}
-
-function extensionForMime(mime: string) {
+  const mime = file.type.trim().toLowerCase()
   if (mime === 'image/png') {
     return '.png'
   }
   if (mime === 'image/webp') {
     return '.webp'
   }
+  if (mime === 'image/gif') {
+    return '.gif'
+  }
+  if (mime === 'image/svg+xml') {
+    return '.svg'
+  }
+  if (mime === 'image/bmp') {
+    return '.bmp'
+  }
+  if (mime === 'image/tiff') {
+    return '.tiff'
+  }
+  if (mime === 'image/heic' || mime === 'image/heif') {
+    return '.heic'
+  }
   return '.jpg'
+}
+
+function contentTypeForUpload(file: File) {
+  const mime = file.type.trim().toLowerCase()
+  if (mime.startsWith('image/')) {
+    return mime === 'image/jpg' ? 'image/jpeg' : mime
+  }
+  const ext = extensionFromFile(file)
+  if (ext === '.png') {
+    return 'image/png'
+  }
+  if (ext === '.webp') {
+    return 'image/webp'
+  }
+  if (ext === '.gif') {
+    return 'image/gif'
+  }
+  if (ext === '.svg') {
+    return 'image/svg+xml'
+  }
+  return 'application/octet-stream'
 }
 
 /** Публичный URL загруженной картинки шаблона. */
@@ -50,18 +71,11 @@ export function publicDocumentAssetUrl(path: string): string {
 
 /**
  * Загрузка логотипа / картинки для шаблона документа.
- * Нужно право documents:edit_templates.
+ * Без лимита размера и формата на клиенте — принимает любой выбранный файл.
  */
 export async function uploadDocumentTemplateAsset(file: File): Promise<UploadedDocumentAsset> {
-  const mime = resolveImageMime(file)
-  if (!mime) {
-    throw toAppError(
-      { message: 'Можно загрузить только JPEG, PNG или WebP.' },
-      'Можно загрузить только JPEG, PNG или WebP.',
-    )
-  }
-  if (file.size > MAX_BYTES) {
-    throw toAppError({ message: 'Файл больше 5 МБ.' }, 'Файл больше 5 МБ.')
+  if (!file || file.size <= 0) {
+    throw toAppError({ message: 'Выберите файл.' }, 'Выберите файл.')
   }
 
   const supabase = getSupabase()
@@ -73,17 +87,18 @@ export async function uploadDocumentTemplateAsset(file: File): Promise<UploadedD
     throw toAppError(userError, 'Нужна авторизация.')
   }
 
-  const extension = extensionForMime(mime)
+  const extension = extensionFromFile(file)
+  const contentType = contentTypeForUpload(file)
   const path = `${user.id}/${crypto.randomUUID()}${extension}`
-  const payload = new File([file], `asset${extension}`, { type: mime })
+  const payload = new File([file], `asset${extension}`, { type: contentType })
 
   const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, payload, {
-    contentType: mime,
+    contentType,
     upsert: false,
     cacheControl: '31536000',
   })
   if (uploadError) {
-    throw toAppError(uploadError, 'Не удалось загрузить изображение.')
+    throw toAppError(uploadError, 'Не удалось загрузить файл.')
   }
 
   return {

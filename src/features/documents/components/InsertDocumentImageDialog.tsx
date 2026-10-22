@@ -171,7 +171,7 @@ export function InsertDocumentImageDialog({
               <p className="text-sm font-medium">
                 {uploading ? 'Загрузка…' : previewUrl ? 'Заменить файл' : 'Выберите файл или перетащите сюда'}
               </p>
-              <p className="text-xs text-muted-foreground">JPEG, PNG или WebP · до 5 МБ</p>
+              <p className="text-xs text-muted-foreground">Без ограничений по размеру и формату</p>
             </div>
             {!uploading ? (
               <span className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-background px-2.5 py-1 text-xs font-medium ring-1 ring-border">

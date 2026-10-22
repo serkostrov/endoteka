@@ -216,7 +216,7 @@ function createInit(
     automatic_uploads: true,
     images_reuse_filename: true,
     images_upload_credentials: true,
-    images_file_types: 'jpeg,jpg,png,webp',
+    images_file_types: 'jpeg,jpg,jpe,jfi,jif,jfif,png,gif,bmp,webp,svg,tif,tiff,heic,heif',
     file_picker_types: 'image',
     images_upload_handler: createImagesUploadHandler(),
     file_picker_callback: createFilePickerCallback(),
