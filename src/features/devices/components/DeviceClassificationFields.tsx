@@ -3,7 +3,11 @@ import { Check, ChevronDown, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Path, UseFormReturn } from 'react-hook-form'
 
-import { SearchCreateAction } from '@/components/shared/SearchSuggestOverlay'
+import {
+  SearchCreateAction,
+  SearchEmptyCreate,
+  SearchSuggestPanel,
+} from '@/components/shared/SearchSuggestOverlay'
 import { FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -428,17 +432,27 @@ function RefSelect({
 }) {
   const listId = useId()
   const searchRef = useRef<HTMLInputElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!open) {
       setQuery('')
       return
     }
+    const sheet = triggerRef.current?.closest('[data-slot="sheet-content"]')
+    setPortalHost(sheet instanceof HTMLElement ? sheet : null)
     const frame = requestAnimationFrame(() => searchRef.current?.focus())
     return () => cancelAnimationFrame(frame)
   }, [open])
+
+  function requestCreate() {
+    const nextName = query.trim()
+    setOpen(false)
+    window.setTimeout(() => onCreate?.(nextName), 0)
+  }
 
   return (
     <FormField
@@ -454,6 +468,8 @@ function RefSelect({
         const selectedLabel = rawLabel.replace(/\s*·\s*/g, ' ').replace(/\s+/g, ' ').trim()
         const filtered = items.filter((item) => matchesQuery(item.name, query))
         const showNone = matchesQuery(NONE_LABEL, query)
+        const isEmpty = !showNone && filtered.length === 0
+        const createLabel = query.trim() ? `Добавить «${query.trim()}»` : 'Новый'
         const fieldError = form.getFieldState(name as Path<DeviceClassificationFormValues>).error
 
         function pick(next: string) {
@@ -481,6 +497,7 @@ function RefSelect({
               <PopoverTrigger asChild>
                 <FormControl>
                   <button
+                    ref={triggerRef}
                     type="button"
                     data-slot={triggerSlot}
                     disabled={disabled}
@@ -507,68 +524,70 @@ function RefSelect({
                 align="start"
                 sideOffset={4}
                 collisionPadding={12}
+                container={portalHost}
                 className="w-[var(--radix-popover-trigger-width)] min-w-[12rem] max-w-[min(24rem,calc(100vw-1.5rem))] overflow-hidden p-0"
                 onOpenAutoFocus={(event) => event.preventDefault()}
               >
-                <div className="flex flex-col">
-                  <div className="shrink-0 border-b p-2">
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        ref={searchRef}
-                        value={query}
-                        onChange={(event) => setQuery(event.target.value)}
-                        placeholder="Поиск…"
-                        className="h-8 pl-8"
-                        onKeyDown={(event) => {
-                          if (event.key === 'Escape') {
-                            event.stopPropagation()
-                            setOpen(false)
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                  <div
-                    id={listId}
-                    role="listbox"
-                    aria-label={label}
-                    className="max-h-[min(28rem,calc(var(--radix-popover-content-available-height,100dvh)-5rem))] overflow-y-auto overscroll-contain p-1"
-                    onWheel={(event) => event.stopPropagation()}
-                    onTouchMove={(event) => event.stopPropagation()}
-                  >
-                    {showNone ? (
-                      <OptionButton
-                        selected={value === CLASSIFICATION_NONE}
-                        onSelect={() => pick(CLASSIFICATION_NONE)}
-                      >
-                        {NONE_LABEL}
-                      </OptionButton>
-                    ) : null}
-                    {filtered.map((item) => (
-                      <OptionButton
-                        key={item.id}
-                        selected={value === item.id}
-                        onSelect={() => pick(item.id)}
-                      >
-                        {item.name}
-                      </OptionButton>
-                    ))}
-                    {!showNone && filtered.length === 0 ? (
-                      <p className="px-2 py-3 text-sm text-muted-foreground">Ничего не найдено</p>
-                    ) : null}
-                  </div>
-                  {allowCreate ? (
-                    <SearchCreateAction
-                      label="Новый"
-                      onCreate={() => {
-                        const nextName = query.trim()
-                        setOpen(false)
-                        onCreate?.(nextName)
+                <div className="shrink-0 border-b p-2">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      ref={searchRef}
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      placeholder="Поиск…"
+                      className="h-8 pl-8"
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && allowCreate && isEmpty && query.trim()) {
+                          event.preventDefault()
+                          requestCreate()
+                          return
+                        }
+                        if (event.key === 'Escape') {
+                          event.stopPropagation()
+                          setOpen(false)
+                        }
                       }}
                     />
-                  ) : null}
+                  </div>
                 </div>
+                <SearchSuggestPanel
+                  footer={
+                    allowCreate && !isEmpty ? (
+                      <SearchCreateAction label={createLabel} onCreate={requestCreate} />
+                    ) : null
+                  }
+                >
+                  <div id={listId} role="listbox" aria-label={label} className="p-1">
+                    {isEmpty ? (
+                      <SearchEmptyCreate
+                        message="Ничего не найдено"
+                        actionLabel={createLabel}
+                        onCreate={allowCreate ? requestCreate : undefined}
+                      />
+                    ) : (
+                      <>
+                        {showNone ? (
+                          <OptionButton
+                            selected={value === CLASSIFICATION_NONE}
+                            onSelect={() => pick(CLASSIFICATION_NONE)}
+                          >
+                            {NONE_LABEL}
+                          </OptionButton>
+                        ) : null}
+                        {filtered.map((item) => (
+                          <OptionButton
+                            key={item.id}
+                            selected={value === item.id}
+                            onSelect={() => pick(item.id)}
+                          >
+                            {item.name}
+                          </OptionButton>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </SearchSuggestPanel>
               </PopoverContent>
             </Popover>
             {compactMessage && !fieldError ? null : <FormMessage />}

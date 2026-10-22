@@ -127,27 +127,91 @@ type SmtpConfig = {
   password?: string
   secure: boolean
   fromEmail: string
+  fromName: string
+  /** smtp.bz с VPS обычно блокирует SMTP-порты — шлём через HTTPS API. */
+  useSmtpBzApi: boolean
 }
 
 function readSmtpConfig(): SmtpConfig | null {
   const host = Deno.env.get('SMTP_HOST')?.trim()
-  const fromEmail = (Deno.env.get('SMTP_FROM') ?? Deno.env.get('SMTP_USER') ?? '').trim()
+  const fromEmail = (Deno.env.get('SMTP_FROM') ?? Deno.env.get('SMTP_ADMIN_EMAIL') ?? Deno.env.get('SMTP_USER') ?? '')
+    .trim()
+    .replace(/^.*<([^>]+)>.*$/, '$1')
   if (!host || !fromEmail) {
     return null
   }
 
   const port = Number(Deno.env.get('SMTP_PORT') ?? '587')
   const user = Deno.env.get('SMTP_USER')?.trim()
-  const password = Deno.env.get('SMTP_PASSWORD') ?? undefined
+  const password = Deno.env.get('SMTP_PASSWORD') ?? Deno.env.get('SMTP_PASS') ?? undefined
+  const fromName = (Deno.env.get('SMTP_SENDER_NAME') ?? 'Эндотека').trim()
+  const hostLower = host.toLowerCase()
+  const useSmtpBzApi =
+    hostLower === 'smtp.bz' ||
+    hostLower === 'api.smtp.bz' ||
+    hostLower.endsWith('.smtp.bz') ||
+    Boolean(Deno.env.get('SMTP_BZ_API_TOKEN')?.trim())
 
   return {
     host,
     port: Number.isFinite(port) ? port : 587,
     user: user || undefined,
-    password,
+    password: password || Deno.env.get('SMTP_BZ_API_TOKEN')?.trim() || undefined,
     secure: Deno.env.get('SMTP_SECURE') === 'true',
     fromEmail,
+    fromName,
+    useSmtpBzApi,
   }
+}
+
+function isSmtpBzHost(host: string) {
+  const h = host.toLowerCase()
+  return h === 'smtp.bz' || h === 'api.smtp.bz' || h.endsWith('.smtp.bz')
+}
+
+async function sendViaSmtpBzApi(input: {
+  token: string
+  fromEmail: string
+  fromName?: string
+  to: string
+  subject: string
+  text: string
+  html?: string
+}) {
+  const body = new URLSearchParams()
+  body.set('from', input.fromEmail)
+  if (input.fromName) {
+    body.set('name', input.fromName)
+  }
+  body.set('to', input.to)
+  body.set('subject', input.subject)
+  body.set('text', input.text)
+  body.set('html', input.html ?? `<pre style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(input.text)}</pre>`)
+
+  const response = await fetch('https://api.smtp.bz/v1/smtp/send', {
+    method: 'POST',
+    headers: {
+      Authorization: input.token,
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+    },
+    body,
+  })
+  const payload = (await response.json().catch(() => null)) as
+    | { result?: boolean; error?: string; message?: string }
+    | null
+  if (!response.ok || payload?.result !== true) {
+    throw new Error(
+      payload?.error || payload?.message || `smtp.bz API: HTTP ${response.status}`,
+    )
+  }
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
 }
 
 async function sendInviteEmail(input: {
@@ -157,6 +221,45 @@ async function sendInviteEmail(input: {
   actionLink: string
 }) {
   const greeting = input.fullName ? `${input.fullName}, здравствуйте!` : 'Здравствуйте!'
+  const text = [
+    greeting,
+    '',
+    'Вас пригласили в Эндотека.',
+    'Перейдите по ссылке, чтобы принять приглашение и задать пароль:',
+    input.actionLink,
+    '',
+    'Если вы не ожидали это письмо, просто проигнорируйте его.',
+  ].join('\n')
+  const subject = 'Приглашение в Эндотека'
+  const html = [
+    `<p>${escapeHtml(greeting)}</p>`,
+    '<p>Вас пригласили в Эндотека.</p>',
+    `<p><a href="${escapeHtml(input.actionLink)}">Принять приглашение и задать пароль</a></p>`,
+    `<p style="word-break:break-all;color:#666;font-size:12px">${escapeHtml(input.actionLink)}</p>`,
+    '<p>Если вы не ожидали это письмо, просто проигнорируйте его.</p>',
+  ].join('')
+
+  const apiToken =
+    Deno.env.get('SMTP_BZ_API_TOKEN')?.trim() ||
+    input.smtp.password ||
+    (isSmtpBzHost(input.smtp.host) ? input.smtp.user : undefined)
+
+  if (input.smtp.useSmtpBzApi || isSmtpBzHost(input.smtp.host)) {
+    if (!apiToken) {
+      throw new Error('Для smtp.bz задайте SMTP_PASSWORD или SMTP_BZ_API_TOKEN.')
+    }
+    await sendViaSmtpBzApi({
+      token: apiToken,
+      fromEmail: input.smtp.fromEmail,
+      fromName: input.smtp.fromName,
+      to: input.to,
+      subject,
+      text,
+      html,
+    })
+    return
+  }
+
   const client = new SMTPClient({
     connection: {
       hostname: input.smtp.host,
@@ -171,18 +274,13 @@ async function sendInviteEmail(input: {
 
   try {
     await client.send({
-      from: input.smtp.fromEmail,
+      from: input.smtp.fromName
+        ? `${input.smtp.fromName} <${input.smtp.fromEmail}>`
+        : input.smtp.fromEmail,
       to: input.to,
-      subject: 'Приглашение в Эндотека',
-      content: [
-        greeting,
-        '',
-        'Вас пригласили в Эндотека.',
-        'Перейдите по ссылке, чтобы принять приглашение и задать пароль:',
-        input.actionLink,
-        '',
-        'Если вы не ожидали это письмо, просто проигнорируйте его.',
-      ].join('\n'),
+      subject,
+      content: text,
+      html,
     })
   } finally {
     try {
@@ -229,7 +327,13 @@ function errorMessage(cause: unknown) {
 
 function allowedOrigins(supabaseUrl: string) {
   const origins = new Set<string>()
-  for (const raw of [Deno.env.get('SITE_URL'), supabaseUrl, 'http://localhost:5173', 'http://127.0.0.1:5173']) {
+  for (const raw of [
+    Deno.env.get('SITE_URL'),
+    Deno.env.get('SUPABASE_PUBLIC_URL'),
+    supabaseUrl,
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+  ]) {
     if (!raw) {
       continue
     }

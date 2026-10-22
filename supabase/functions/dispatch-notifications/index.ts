@@ -79,19 +79,97 @@ type DeliveryRow = {
   from_email: string
 }
 
+function isSmtpBzHost(host: string) {
+  const h = host.toLowerCase()
+  return h === 'smtp.bz' || h === 'api.smtp.bz' || h.endsWith('.smtp.bz')
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+}
+
+async function sendViaSmtpBzApi(input: {
+  token: string
+  fromEmail: string
+  fromName?: string
+  to: string
+  subject: string
+  text: string
+}) {
+  const body = new URLSearchParams()
+  body.set('from', input.fromEmail)
+  if (input.fromName) {
+    body.set('name', input.fromName)
+  }
+  body.set('to', input.to)
+  body.set('subject', input.subject)
+  body.set('text', input.text)
+  body.set(
+    'html',
+    `<pre style="font-family:sans-serif;white-space:pre-wrap">${escapeHtml(input.text)}</pre>`,
+  )
+
+  const response = await fetch('https://api.smtp.bz/v1/smtp/send', {
+    method: 'POST',
+    headers: {
+      Authorization: input.token,
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+    },
+    body,
+  })
+  const payload = (await response.json().catch(() => null)) as
+    | { result?: boolean; error?: string; message?: string }
+    | null
+  if (!response.ok || payload?.result !== true) {
+    throw new Error(
+      payload?.error || payload?.message || `smtp.bz API: HTTP ${response.status}`,
+    )
+  }
+}
+
 async function sendEmail(row: DeliveryRow) {
-  const host = Deno.env.get('SMTP_HOST')
+  const host = (Deno.env.get('SMTP_HOST') ?? '').trim()
   const port = Number(Deno.env.get('SMTP_PORT') ?? '587')
-  const user = Deno.env.get('SMTP_USER')
-  const password = Deno.env.get('SMTP_PASSWORD')
+  const user = Deno.env.get('SMTP_USER')?.trim()
+  const password =
+    Deno.env.get('SMTP_PASSWORD') ?? Deno.env.get('SMTP_PASS') ?? Deno.env.get('SMTP_BZ_API_TOKEN')
   const secure = Deno.env.get('SMTP_SECURE') === 'true'
-  const fromEmail = row.from_email || Deno.env.get('SMTP_FROM') || user || ''
+  const fromEmail = (
+    row.from_email ||
+    Deno.env.get('SMTP_FROM') ||
+    Deno.env.get('SMTP_ADMIN_EMAIL') ||
+    user ||
+    ''
+  )
+    .trim()
+    .replace(/^.*<([^>]+)>.*$/, '$1')
+  const fromName = (row.from_name || Deno.env.get('SMTP_SENDER_NAME') || '').trim()
 
   if (!host || !fromEmail) {
     throw new Error('SMTP не настроен. Задайте секреты SMTP_HOST и адрес отправителя.')
   }
   if (!row.email) {
     throw new Error('У сотрудника нет email.')
+  }
+
+  const apiToken = Deno.env.get('SMTP_BZ_API_TOKEN')?.trim() || password || undefined
+  if (isSmtpBzHost(host) || Deno.env.get('SMTP_BZ_API_TOKEN')?.trim()) {
+    if (!apiToken) {
+      throw new Error('Для smtp.bz задайте SMTP_PASSWORD или SMTP_BZ_API_TOKEN.')
+    }
+    await sendViaSmtpBzApi({
+      token: apiToken,
+      fromEmail,
+      fromName: fromName || undefined,
+      to: row.email,
+      subject: row.title,
+      text: row.body,
+    })
+    return
   }
 
   const client = new SMTPClient({
@@ -105,7 +183,7 @@ async function sendEmail(row: DeliveryRow) {
 
   try {
     await client.send({
-      from: row.from_name ? `${row.from_name} <${fromEmail}>` : fromEmail,
+      from: fromName ? `${fromName} <${fromEmail}>` : fromEmail,
       to: row.email,
       subject: row.title,
       content: row.body,

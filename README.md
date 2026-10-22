@@ -89,6 +89,8 @@ Healthcheck: `GET /health`.
 
 Письмо приглашения отправляет `invite-user` через те же секреты `SMTP_*`, что и уведомления.
 
+**smtp.bz на VPS:** многие хостинги режут исходящие SMTP-порты. Задайте `SMTP_HOST=smtp.bz` и API-токен в `SMTP_PASSWORD` (или `SMTP_BZ_API_TOKEN`) — `invite-user` / `dispatch-notifications` отправят почту через HTTPS API `api.smtp.bz`.
+
 ### Cron
 
 Внешнее расписание (Dashboard, pg_cron или иной планировщик). Заголовок: `Authorization: Bearer <CRON_SECRET>` (или service role ≥ 20 символов).
