@@ -95,7 +95,10 @@ export function DeviceClassificationFields({
   appearance = 'form',
 }: DeviceClassificationFieldsProps) {
   const form = formProp as UseFormReturn<DeviceClassificationFormValues>
-  const canCreate = useHasPermission(Permission.SettingsUpdate)
+  // Типы/бренды/модели — часть карточки прибора: достаточно devices:create.
+  // settings:update — полный доступ из настроек справочников.
+  const canCreate =
+    useHasPermission(Permission.DevicesCreate) || useHasPermission(Permission.SettingsUpdate)
   const setsQuery = useReferenceSets()
   const groups = useReferenceItemsBySetCode(ReferenceSetCode.DeviceGroups)
   const brands = useReferenceItemsBySetCode(ReferenceSetCode.DeviceBrands)

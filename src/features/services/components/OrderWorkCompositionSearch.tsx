@@ -633,18 +633,37 @@ function SuggestRow({
   onHover: () => void
   onSelect: () => void
 }) {
+  const pointerStart = useRef<{ x: number; y: number } | null>(null)
+
   return (
     <button
       type="button"
       disabled={disabled}
       className={cn(
-        'flex w-full items-center gap-2 py-1.5 pr-3 text-left text-sm',
+        'flex w-full items-center gap-2 py-1.5 pr-3 text-left text-sm select-text',
         indent === 1 ? 'pl-9' : 'pl-14',
         active ? 'bg-accent' : 'hover:bg-accent/70',
       )}
       onMouseEnter={onHover}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={onSelect}
+      onMouseDown={(event) => {
+        pointerStart.current = { x: event.clientX, y: event.clientY }
+      }}
+      onClick={(event) => {
+        // Выделение названия/артикула не должно добавлять позицию в заказ.
+        const selection = window.getSelection()
+        if (selection && !selection.isCollapsed && selection.toString().trim().length > 0) {
+          return
+        }
+        const start = pointerStart.current
+        if (start) {
+          const dx = Math.abs(event.clientX - start.x)
+          const dy = Math.abs(event.clientY - start.y)
+          if (dx > 4 || dy > 4) {
+            return
+          }
+        }
+        onSelect()
+      }}
     >
       {coverUrl !== undefined ? (
         <InventoryItemCoverThumb src={coverUrl} alt={title} className="size-8" />
