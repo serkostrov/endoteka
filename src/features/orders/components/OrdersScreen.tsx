@@ -247,26 +247,11 @@ export function OrdersScreen() {
   const listBlockedByBoardPlaceholder =
     isList && ordersQuery.isPlaceholderData && (ordersQuery.data?.items.length ?? 0) > pageSize
 
-  // Выбор держим между страницами; сбрасываем при смене фильтров, сортировки, размера страницы или вида.
-  const selectionResetKey = [
-    isList ? 'list' : 'board',
-    debouncedSearch,
-    responsibleParam,
-    attentionOnly ? '1' : '0',
-    activeOnly ? '1' : '0',
-    deadlineState,
-    statusCodes.join(','),
-    customerId,
-    groupId,
-    brandId,
-    modelId,
-    listSort,
-    listDir,
-    String(pageSize),
-  ].join('|')
-  const [seenSelectionResetKey, setSeenSelectionResetKey] = useState(selectionResetKey)
-  if (seenSelectionResetKey !== selectionResetKey) {
-    setSeenSelectionResetKey(selectionResetKey)
+  // Выбор держим между страницами и фильтрами; сбрасываем только при смене вида (список ↔ доска).
+  const selectionViewKey = isList ? 'list' : 'board'
+  const [seenSelectionViewKey, setSeenSelectionViewKey] = useState(selectionViewKey)
+  if (seenSelectionViewKey !== selectionViewKey) {
+    setSeenSelectionViewKey(selectionViewKey)
     setSelectedIds([])
   }
 
