@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState, type WheelEvent } from 'react'
 import { ChevronDown, Printer } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -23,9 +23,19 @@ export function OrderPrintMenu({ orderId }: OrderPrintMenuProps) {
   const canPrint = useHasPermission(Permission.DocumentsPrint)
   const templatesQuery = useDocumentTemplates('all', '')
   const create = useCreateDocument()
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [pending, setPending] = useState(false)
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return
+    }
+    const sheet = triggerRef.current?.closest('[data-slot="sheet-content"]')
+    setPortalHost(sheet instanceof HTMLElement ? sheet : null)
+  }, [open])
 
   if (!canRead && !canCreate && !canPrint) {
     return null
@@ -79,7 +89,14 @@ export function OrderPrintMenu({ orderId }: OrderPrintMenuProps) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" className="gap-0 px-0" aria-label="Печать">
+        <Button
+          ref={triggerRef}
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-0 px-0"
+          aria-label="Печать"
+        >
           <span className="px-2">
             <Printer className="size-4" />
           </span>
@@ -88,8 +105,16 @@ export function OrderPrintMenu({ orderId }: OrderPrintMenuProps) {
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
-        <div className="max-h-72 overflow-y-auto py-1">
+      <PopoverContent
+        align="end"
+        container={portalHost}
+        className="flex w-80 flex-col overflow-hidden p-0"
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
+        <div
+          className="min-h-0 max-h-72 overflow-y-auto overscroll-contain py-1"
+          onWheel={handleScrollableWheel}
+        >
           {templatesQuery.isLoading ? (
             <p className="text-muted-foreground px-3 py-4 text-sm">Загрузка шаблонов…</p>
           ) : templates.length === 0 ? (
@@ -111,7 +136,7 @@ export function OrderPrintMenu({ orderId }: OrderPrintMenuProps) {
             })
           )}
         </div>
-        <div className="border-t p-2">
+        <div className="shrink-0 border-t p-2">
           <Button
             type="button"
             className="w-full"
@@ -124,4 +149,14 @@ export function OrderPrintMenu({ orderId }: OrderPrintMenuProps) {
       </PopoverContent>
     </Popover>
   )
+}
+
+/** Sheet RemoveScroll глушит native wheel на портале — крутим список вручную. */
+function handleScrollableWheel(event: WheelEvent<HTMLDivElement>) {
+  const el = event.currentTarget
+  if (el.scrollHeight <= el.clientHeight) {
+    return
+  }
+  event.stopPropagation()
+  el.scrollTop += event.deltaY
 }

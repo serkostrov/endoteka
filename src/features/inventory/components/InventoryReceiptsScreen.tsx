@@ -28,6 +28,11 @@ import {
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
+import {
+  nextListSortDir,
+  parseListSortColumn,
+  parseListSortDir,
+} from '@/lib/list-table-sort'
 import { formatDate, formatDateTime } from '@/lib/utils/date'
 
 import { InventoryReceiptSheet } from './InventoryReceiptSheet'
@@ -40,7 +45,23 @@ import {
   downloadBlob,
   receiptExportFilename,
 } from '../lib/receipt-export'
-import type { InventoryReceiptListItem } from '../services/inventory-service'
+import type {
+  InventoryReceiptListItem,
+  InventoryReceiptSortColumn,
+} from '../services/inventory-service'
+
+const RECEIPT_SORT_COLUMNS = [
+  'date',
+  'status',
+  'supplier',
+  'lines',
+  'qty',
+  'actor',
+  'created',
+] as const satisfies readonly InventoryReceiptSortColumn[]
+
+const DEFAULT_RECEIPT_SORT: InventoryReceiptSortColumn = 'created'
+const DEFAULT_RECEIPT_DIR = 'desc' as const
 
 export function InventoryReceiptsScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -60,8 +81,14 @@ export function InventoryReceiptsScreen() {
   const period = periodParam && isDatePeriodPreset(periodParam) ? periodParam : DatePeriodPreset.All
   const periodFrom = searchParams.get('from')
   const periodTo = searchParams.get('to')
+  const listSort = parseListSortColumn(
+    searchParams.get('sort'),
+    RECEIPT_SORT_COLUMNS,
+    DEFAULT_RECEIPT_SORT,
+  )
+  const listDir = parseListSortDir(searchParams.get('dir'), DEFAULT_RECEIPT_DIR)
 
-  const filterKey = `${statusFilter}|${period}|${periodFrom ?? ''}|${periodTo ?? ''}`
+  const filterKey = `${statusFilter}|${period}|${periodFrom ?? ''}|${periodTo ?? ''}|${listSort}|${listDir}`
   const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
   if (seenFilterKey !== filterKey) {
     setSeenFilterKey(filterKey)
@@ -82,8 +109,19 @@ export function InventoryReceiptsScreen() {
       to: periodTo,
       createdFrom: periodBounds.fromIso,
       createdTo: periodBounds.toExclusiveIso,
+      sort: listSort,
+      direction: listDir,
     }),
-    [statusFilter, period, periodFrom, periodTo, periodBounds.fromIso, periodBounds.toExclusiveIso],
+    [
+      statusFilter,
+      period,
+      periodFrom,
+      periodTo,
+      periodBounds.fromIso,
+      periodBounds.toExclusiveIso,
+      listSort,
+      listDir,
+    ],
   )
 
   const receiptsQuery = useInventoryReceipts(page, pageSize, listFilters)
@@ -120,6 +158,16 @@ export function InventoryReceiptsScreen() {
       }
     }
     setSearchParams(next, { replace: true })
+  }
+
+  function handleSort(columnId: string) {
+    const column = parseListSortColumn(columnId, RECEIPT_SORT_COLUMNS, DEFAULT_RECEIPT_SORT)
+    const nextDir = nextListSortDir(listSort, column, listDir, DEFAULT_RECEIPT_DIR)
+    const isDefault = column === DEFAULT_RECEIPT_SORT && nextDir === DEFAULT_RECEIPT_DIR
+    patchFilters({
+      sort: isDefault ? null : column,
+      dir: isDefault ? null : nextDir,
+    })
   }
 
   function openReceipt(id: string) {
@@ -263,11 +311,22 @@ export function InventoryReceiptsScreen() {
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
+        sort={{
+          columnId: listSort,
+          direction: listDir,
+          onSort: handleSort,
+        }}
         columns={[
-          { id: 'date', header: 'Дата', cell: (row) => formatDate(row.receiptDate) },
+          {
+            id: 'date',
+            header: 'Дата',
+            sortable: true,
+            cell: (row) => formatDate(row.receiptDate),
+          },
           {
             id: 'status',
             header: 'Статус',
+            sortable: true,
             cell: (row) => (
               <StatusBadge tone={inventoryReceiptStatusTone(row.status)}>
                 {inventoryReceiptStatusLabels[row.status]}
@@ -277,6 +336,7 @@ export function InventoryReceiptsScreen() {
           {
             id: 'supplier',
             header: 'Поставщик',
+            sortable: true,
             cell: (row) =>
               row.supplier ? (
                 <SupplierLink name={row.supplier} customerId={row.supplierId} />
@@ -284,17 +344,29 @@ export function InventoryReceiptsScreen() {
                 <span className="text-muted-foreground">—</span>
               ),
           },
-          { id: 'lines', header: 'Строк', cell: (row) => String(row.lineCount) },
-          { id: 'qty', header: 'Кол-во', cell: (row) => formatQuantity(row.totalQuantity) },
+          {
+            id: 'lines',
+            header: 'Строк',
+            sortable: true,
+            cell: (row) => String(row.lineCount),
+          },
+          {
+            id: 'qty',
+            header: 'Кол-во',
+            sortable: true,
+            cell: (row) => formatQuantity(row.totalQuantity),
+          },
           {
             id: 'actor',
             header: 'Кто',
+            sortable: true,
             className: 'hidden md:table-cell',
             cell: (row) => row.actorName || '—',
           },
           {
             id: 'created',
             header: 'Создан',
+            sortable: true,
             className: 'hidden lg:table-cell',
             cell: (row) => formatDateTime(row.createdAt),
           },

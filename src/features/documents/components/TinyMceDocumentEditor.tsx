@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, type MutableRefObject } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import tinymce from 'tinymce'
 import { Editor } from '@tinymce/tinymce-react'
 import type { Editor as TinyMCEEditor } from 'tinymce'
+import { toast } from 'sonner'
 
 import 'tinymce/icons/default/icons.min.js'
 import 'tinymce/themes/silver/theme.min.js'
@@ -19,9 +20,12 @@ import 'tinymce/skins/ui/oxide/content.js'
 import 'tinymce/skins/content/default/content.js'
 
 import { DocumentPageSize, type DocumentPageSize as PageSize } from '@/lib/constants/documents'
+import { getErrorMessage } from '@/lib/errors'
+import { pickImageFiles } from '@/lib/pick-image-files'
 import { cn } from '@/lib/utils'
 import { toIsoDate } from '@/lib/utils/date'
 
+import { InsertDocumentImageDialog } from './InsertDocumentImageDialog'
 import { documentEditorContentStyle } from '../document-content-style'
 import { DEFAULT_DOCUMENT_DATE_FORMAT, documentDateFormats } from '../date-formats'
 import { resolvePlaceholderValue } from '../interpolate'
@@ -34,11 +38,19 @@ import {
   placeholderRegistry,
   type PlaceholderDefinition,
 } from '../placeholders'
+import {
+  DOCUMENT_TEMPLATE_ASSET_ACCEPT,
+  uploadDocumentTemplateAsset,
+} from '../services/document-assets-service'
 import { registerTablePropsDialog } from '../table-props-dialog'
 import { registerLineHeightControl } from '../line-height-control'
 import { registerBlockSpacingControl } from '../block-spacing-control'
 import { registerDocFieldGuards, unlockDocFieldsForSelection } from '../doc-field-editing'
 import { normalizePageMargins, type PageMarginsMm } from '../template-schema'
+
+type ImageDialogRequest = {
+  mode: 'logo' | 'image'
+}
 
 void tinymce
 
@@ -77,9 +89,18 @@ export function TinyMceDocumentEditor({
   const marginsRef = useRef(resolvedMargins)
   marginsRef.current = resolvedMargins
   const localEditorRef = useRef<TinyMCEEditor | null>(null)
+  const [imageDialog, setImageDialog] = useState<ImageDialogRequest | null>(null)
+  const openImageDialogRef = useRef<(request: ImageDialogRequest) => void>(() => undefined)
+  openImageDialogRef.current = (request) => setImageDialog(request)
 
   const init = useMemo(
-    () => createInit(() => settingsRef.current, pageSize, () => marginsRef.current),
+    () =>
+      createInit(
+        () => settingsRef.current,
+        pageSize,
+        () => marginsRef.current,
+        (request) => openImageDialogRef.current(request),
+      ),
     [pageSize],
   )
 
@@ -112,11 +133,13 @@ export function TinyMceDocumentEditor({
     }
   }
 
+  const isLabel = pageSize === DocumentPageSize.Label
+
   return (
     <div
       className={cn(
         'document-tinymce document-tinymce--paged flex h-full min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card',
-        pageSize === DocumentPageSize.Label && 'document-tinymce--label',
+        isLabel && 'document-tinymce--label',
       )}
     >
       <Editor
@@ -128,6 +151,26 @@ export function TinyMceDocumentEditor({
         onInit={(_event, editor) => bindEditor(editor)}
         init={init}
       />
+      <InsertDocumentImageDialog
+        open={Boolean(imageDialog)}
+        mode={imageDialog?.mode ?? 'image'}
+        onOpenChange={(open) => {
+          if (!open) {
+            setImageDialog(null)
+          }
+        }}
+        onInsert={({ src, alt }) => {
+          const editor = localEditorRef.current
+          if (!editor) {
+            return
+          }
+          const maxHeight = imageDialog?.mode === 'logo' ? (isLabel ? '28px' : '72px') : isLabel ? '36px' : '180px'
+          editor.insertContent(
+            `<img src="${escapeAttr(src)}" alt="${escapeAttr(alt)}" style="max-height: ${maxHeight}; width: auto;">`,
+          )
+          editor.focus()
+        }}
+      />
     </div>
   )
 }
@@ -136,6 +179,7 @@ function createInit(
   getSettingsFields: () => PlaceholderDefinition[],
   pageSize: PageSize,
   getMargins: () => PageMarginsMm,
+  openImageDialog: (request: ImageDialogRequest) => void,
 ): Record<string, unknown> {
   const size = pageSize === DocumentPageSize.Label ? 'label' : 'a4'
   const isLabel = size === 'label'
@@ -168,7 +212,14 @@ function createInit(
     relative_urls: false,
     content_style: documentEditorContentStyle(size, margins),
     image_title: true,
-    automatic_uploads: false,
+    image_description: true,
+    automatic_uploads: true,
+    images_reuse_filename: true,
+    images_upload_credentials: true,
+    images_file_types: 'jpeg,jpg,png,webp',
+    file_picker_types: 'image',
+    images_upload_handler: createImagesUploadHandler(),
+    file_picker_callback: createFilePickerCallback(),
     table_default_styles: {
       width: '100%',
       'border-collapse': 'collapse',
@@ -186,7 +237,7 @@ function createInit(
       registerLineHeightControl(editor)
       registerBlockSpacingControl(editor)
       registerDocFieldGuards(editor)
-      registerExtras(editor, getSettingsFields, isLabel)
+      registerExtras(editor, getSettingsFields, isLabel, openImageDialog)
       registerPageGapGuards(editor)
       const refreshPreviews = () => hydrateFieldPreviews(editor, getSettingsFields())
       const refreshPages = () => syncPageGuides(editor, pageSize, getMargins())
@@ -594,10 +645,52 @@ function mmToPx(doc: Document, mm: number) {
   return px || mm * 3.7795
 }
 
+function createImagesUploadHandler() {
+  return async (blobInfo: { blob: () => Blob; filename: () => string }) => {
+    const blob = blobInfo.blob()
+    const fileName = blobInfo.filename() || 'image.png'
+    const file = new File([blob], fileName, { type: blob.type || 'image/png' })
+    try {
+      const uploaded = await uploadDocumentTemplateAsset(file)
+      return uploaded.url
+    } catch (error) {
+      const message = getErrorMessage(error)
+      toast.error(message)
+      throw new Error(message)
+    }
+  }
+}
+
+function createFilePickerCallback() {
+  return (
+    callback: (value: string, meta?: Record<string, string>) => void,
+    _value: string,
+    meta: { filetype?: string },
+  ) => {
+    if (meta.filetype && meta.filetype !== 'image') {
+      return
+    }
+    void (async () => {
+      const files = await pickImageFiles({ accept: DOCUMENT_TEMPLATE_ASSET_ACCEPT })
+      const file = files[0]
+      if (!file) {
+        return
+      }
+      try {
+        const uploaded = await uploadDocumentTemplateAsset(file)
+        callback(uploaded.url, { title: file.name, alt: file.name.replace(/\.[^.]+$/, '') })
+      } catch (error) {
+        toast.error(getErrorMessage(error))
+      }
+    })()
+  }
+}
+
 function registerExtras(
   editor: TinyMCEEditor,
   getSettingsFields: () => PlaceholderDefinition[],
   isLabel: boolean,
+  openImageDialog: (request: ImageDialogRequest) => void,
 ) {
   editor.ui.registry.addMenuButton('placeholders', {
     text: 'Поле',
@@ -648,12 +741,8 @@ function registerExtras(
   editor.ui.registry.addButton('logo', {
     text: 'Логотип',
     icon: 'image',
-    tooltip: 'Вставить логотип',
-    onAction: () => openUrlDialog(editor, 'Логотип', 'Адрес картинки', (src) => {
-      editor.insertContent(
-        `<img src="${escapeAttr(src)}" alt="Логотип" style="max-height: ${isLabel ? '28px' : '72px'}; width: auto;">`,
-      )
-    }),
+    tooltip: 'Загрузить логотип с компьютера',
+    onAction: () => openImageDialog({ mode: 'logo' }),
   })
 
   const codeField = isLabel ? 'item.barcode' : 'order.number'
@@ -800,33 +889,6 @@ function fieldPreviewText(
   const fromRegistry = key in placeholderRegistry ? placeholderRegistry[key as keyof typeof placeholderRegistry] : null
   const fromSettings = settingsFields.find((item) => item.key === key)
   return fromSettings?.label || fromRegistry?.label || key
-}
-
-function openUrlDialog(
-  editor: TinyMCEEditor,
-  title: string,
-  label: string,
-  onSubmit: (src: string) => void,
-) {
-  editor.windowManager.open({
-    title,
-    body: {
-      type: 'panel',
-      items: [{ type: 'urlinput', name: 'src', label, filetype: 'image' }],
-    },
-    buttons: [
-      { type: 'cancel', text: 'Отмена' },
-      { type: 'submit', text: 'Вставить', buttonType: 'primary' },
-    ],
-    onSubmit: (api) => {
-      const data = api.getData() as { src?: { value?: string } | string }
-      const src = typeof data.src === 'string' ? data.src : data.src?.value ?? ''
-      if (src.trim()) {
-        onSubmit(src.trim())
-      }
-      api.close()
-    },
-  })
 }
 
 function escapeAttr(value: string) {

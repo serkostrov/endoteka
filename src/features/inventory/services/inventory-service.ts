@@ -936,11 +936,31 @@ export async function adjustInventory(input: {
   return data
 }
 
+export type InventoryReceiptSortColumn =
+  | 'date'
+  | 'status'
+  | 'supplier'
+  | 'lines'
+  | 'qty'
+  | 'actor'
+  | 'created'
+
 export type InventoryReceiptListFilters = {
   status?: string
   createdFrom?: string | null
   createdTo?: string | null
+  sort?: InventoryReceiptSortColumn
+  direction?: 'asc' | 'desc'
 }
+
+export type InventoryWriteOffSortColumn =
+  | 'date'
+  | 'reason'
+  | 'lines'
+  | 'qty'
+  | 'amount'
+  | 'actor'
+  | 'created'
 
 export async function listInventoryReceipts(
   page: number,
@@ -953,6 +973,8 @@ export async function listInventoryReceipts(
     status_filter: filters.status && filters.status !== 'all' ? filters.status : 'all',
     created_from: filters.createdFrom ?? null,
     created_to: filters.createdTo ?? null,
+    sort_by: filters.sort ?? 'created',
+    sort_dir: filters.direction ?? 'desc',
   })
 
   if (error) {
@@ -1198,10 +1220,17 @@ export async function createInventoryWriteOff(input: {
   return data
 }
 
-export async function listInventoryWriteOffs(page: number, pageSize: number) {
+export async function listInventoryWriteOffs(
+  page: number,
+  pageSize: number,
+  sort: InventoryWriteOffSortColumn = 'created',
+  direction: 'asc' | 'desc' = 'desc',
+) {
   const { data, error } = await getSupabase().rpc('list_inventory_write_offs', {
     page_number: page,
     page_size: pageSize,
+    sort_by: sort,
+    sort_dir: direction,
   })
 
   if (error) {

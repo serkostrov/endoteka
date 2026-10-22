@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
+import { CreatedPeriodFilter } from '@/components/shared/CreatedPeriodFilter'
 import { DataTable } from '@/components/shared/DataTable'
 import { FilterBar } from '@/components/shared/FilterBar'
 import { IconActionButton } from '@/components/shared/IconActionButton'
@@ -11,10 +12,16 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { SearchInput } from '@/components/shared/SearchInput'
 import { SelectionBulkBar } from '@/components/shared/SelectionBulkBar'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { activeFilterControlClass } from '@/components/shared/active-filter-style'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import {
+  DatePeriodPreset,
+  isDatePeriodPreset,
+  resolveDatePeriodBounds,
+} from '@/lib/constants/date-period'
 import { formatMoney } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import {
@@ -25,12 +32,30 @@ import {
 } from '@/lib/constants/sales'
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
+import {
+  nextListSortDir,
+  parseListSortColumn,
+  parseListSortDir,
+} from '@/lib/list-table-sort'
 import { formatDate } from '@/lib/utils/date'
 import { formatInteger } from '@/lib/utils/number'
 
 import { SaleDetailSheet } from './SaleDetailScreen'
 import { useCreateSale, useDeleteSale, useSales } from '../hooks/use-sales'
-import type { SaleListItem } from '../services/sales-service'
+import type { SaleListItem, SaleSortColumn } from '../services/sales-service'
+
+const SALE_SORT_COLUMNS = [
+  'invoice',
+  'customer',
+  'date',
+  'total',
+  'status',
+  'actor',
+  'created',
+] as const satisfies readonly SaleSortColumn[]
+
+const DEFAULT_SALE_SORT: SaleSortColumn = 'created'
+const DEFAULT_SALE_DIR = 'desc' as const
 
 export function SalesScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -45,7 +70,36 @@ export function SalesScreen() {
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
   const [bulkPending, setBulkPending] = useState(false)
   const debouncedSearch = useDebouncedValue(search, SALES_SEARCH_DEBOUNCE_MS)
-  const salesQuery = useSales(debouncedSearch, status, page, pageSize)
+  const periodParam = searchParams.get('period')
+  const period = periodParam && isDatePeriodPreset(periodParam) ? periodParam : DatePeriodPreset.All
+  const periodFrom = searchParams.get('from')
+  const periodTo = searchParams.get('to')
+  const listSort = parseListSortColumn(
+    searchParams.get('sort'),
+    SALE_SORT_COLUMNS,
+    DEFAULT_SALE_SORT,
+  )
+  const listDir = parseListSortDir(searchParams.get('dir'), DEFAULT_SALE_DIR)
+  const filterKey = `${status}|${period}|${periodFrom ?? ''}|${periodTo ?? ''}|${listSort}|${listDir}`
+  const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
+  if (seenFilterKey !== filterKey) {
+    setSeenFilterKey(filterKey)
+    setPage(1)
+    setSelectedIds([])
+  }
+
+  const periodBounds = useMemo(
+    () => resolveDatePeriodBounds(period, periodFrom, periodTo),
+    [period, periodFrom, periodTo],
+  )
+
+  const salesQuery = useSales(debouncedSearch, status, page, pageSize, listSort, listDir, {
+    period,
+    from: periodFrom,
+    to: periodTo,
+    createdFrom: periodBounds.fromIso,
+    createdTo: periodBounds.toExclusiveIso,
+  })
   const create = useCreateSale()
   const remove = useDeleteSale()
   const saleId = searchParams.get('sale')
@@ -58,6 +112,19 @@ export function SalesScreen() {
   )
   const confirmedSelectedOnPage = selectedOnPage.filter((row) => row.status === SaleStatus.Confirmed)
   const canBulkDelete = selectedIds.length > 0 && confirmedSelectedOnPage.length < selectedIds.length
+  const hasActiveFilters = status !== 'all' || period !== DatePeriodPreset.All || Boolean(debouncedSearch)
+
+  function patchFilters(patch: Record<string, string | null>) {
+    const next = new URLSearchParams(searchParams)
+    for (const [key, value] of Object.entries(patch)) {
+      if (!value || value === 'all') {
+        next.delete(key)
+      } else {
+        next.set(key, value)
+      }
+    }
+    setSearchParams(next, { replace: true })
+  }
 
   function openSale(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -69,6 +136,16 @@ export function SalesScreen() {
     setPageSize(size)
     setPage(1)
     setSelectedIds([])
+  }
+
+  function handleSort(columnId: string) {
+    const column = parseListSortColumn(columnId, SALE_SORT_COLUMNS, DEFAULT_SALE_SORT)
+    const nextDir = nextListSortDir(listSort, column, listDir, DEFAULT_SALE_DIR)
+    const isDefault = column === DEFAULT_SALE_SORT && nextDir === DEFAULT_SALE_DIR
+    patchFilters({
+      sort: isDefault ? null : column,
+      dir: isDefault ? null : nextDir,
+    })
   }
 
   async function handleCreate() {
@@ -161,7 +238,12 @@ export function SalesScreen() {
             setSelectedIds([])
           }}
         >
-          <SelectTrigger aria-label="Фильтр по статусу">
+          <SelectTrigger
+            aria-label="Фильтр по статусу"
+            className={activeFilterControlClass(status !== 'all', 'w-auto min-w-40')}
+            onClear={status !== 'all' ? () => setStatus('all') : undefined}
+            clearLabel="Сбросить фильтр по статусу"
+          >
             <SelectValue placeholder="Статус" />
           </SelectTrigger>
           <SelectContent searchable>
@@ -173,6 +255,20 @@ export function SalesScreen() {
             ))}
           </SelectContent>
         </Select>
+        <CreatedPeriodFilter
+          value={{
+            preset: period,
+            from: periodFrom,
+            to: periodTo,
+          }}
+          onChange={(next) =>
+            patchFilters({
+              period: next.preset === DatePeriodPreset.All ? null : next.preset,
+              from: next.preset === DatePeriodPreset.Custom ? next.from : null,
+              to: next.preset === DatePeriodPreset.Custom ? next.to : null,
+            })
+          }
+        />
       </FilterBar>
 
       {selectedIds.length > 0 ? (
@@ -204,7 +300,11 @@ export function SalesScreen() {
         data={items}
         getRowId={(row) => row.id}
         emptyTitle="Продаж нет"
-        emptyDescription="Создайте счёт, укажите покупателя и подтвердите списание."
+        emptyDescription={
+          hasActiveFilters
+            ? 'Нет продаж по выбранным фильтрам.'
+            : 'Создайте счёт, укажите покупателя и подтвердите списание.'
+        }
         onRowClick={(row) => openSale(row.id)}
         selection={{
           selectedIds,
@@ -217,14 +317,40 @@ export function SalesScreen() {
           pageSize,
           onPageSizeChange: handlePageSizeChange,
         }}
+        sort={{
+          columnId: listSort,
+          direction: listDir,
+          onSort: handleSort,
+        }}
         columns={[
-          { id: 'invoice', header: 'Счёт', cell: (row) => row.invoiceNumber },
-          { id: 'customer', header: 'Покупатель', cell: (row) => row.customerName || '—' },
-          { id: 'date', header: 'Дата', cell: (row) => formatDate(row.saleDate) },
-          { id: 'total', header: 'Сумма', cell: (row) => formatMoney(row.total) },
+          {
+            id: 'invoice',
+            header: 'Счёт',
+            sortable: true,
+            cell: (row) => row.invoiceNumber,
+          },
+          {
+            id: 'customer',
+            header: 'Покупатель',
+            sortable: true,
+            cell: (row) => row.customerName || '—',
+          },
+          {
+            id: 'date',
+            header: 'Дата',
+            sortable: true,
+            cell: (row) => formatDate(row.saleDate),
+          },
+          {
+            id: 'total',
+            header: 'Сумма',
+            sortable: true,
+            cell: (row) => formatMoney(row.total),
+          },
           {
             id: 'status',
             header: 'Статус',
+            sortable: true,
             cell: (row) => (
               <StatusBadge tone={saleStatusTone(row.status)}>{saleStatusLabels[row.status]}</StatusBadge>
             ),
@@ -232,6 +358,7 @@ export function SalesScreen() {
           {
             id: 'actor',
             header: 'Оформил',
+            sortable: true,
             className: 'hidden md:table-cell',
             cell: (row) => row.createdByName || '—',
           },

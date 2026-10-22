@@ -60,8 +60,10 @@ import {
   type InventoryItemInput,
   type InventoryReceiptDeleteMode,
   type InventoryReceiptListFilters,
+  type InventoryReceiptSortColumn,
   type InventoryStockExportFilters,
   type InventoryWriteOffDeleteMode,
+  type InventoryWriteOffSortColumn,
   type ReceiptLineInput,
   type WriteOffLineInput,
 } from '../services/inventory-service'
@@ -139,6 +141,8 @@ export function useInventoryReceipts(
     to?: string | null
     createdFrom?: string | null
     createdTo?: string | null
+    sort?: InventoryReceiptSortColumn
+    direction?: 'asc' | 'desc'
   } = {},
 ) {
   return useQuery({
@@ -149,12 +153,16 @@ export function useInventoryReceipts(
       period: filters.period,
       from: filters.from,
       to: filters.to,
+      sort: filters.sort,
+      dir: filters.direction,
     }),
     queryFn: () =>
       listInventoryReceipts(page, pageSize, {
         status: filters.status,
         createdFrom: filters.createdFrom,
         createdTo: filters.createdTo,
+        sort: filters.sort,
+        direction: filters.direction,
       }),
     placeholderData: keepPreviousData,
   })
@@ -199,10 +207,15 @@ export function useDeleteInventoryReceipt() {
   })
 }
 
-export function useInventoryWriteOffs(page: number, pageSize: number) {
+export function useInventoryWriteOffs(
+  page: number,
+  pageSize: number,
+  sort: InventoryWriteOffSortColumn = 'created',
+  direction: 'asc' | 'desc' = 'desc',
+) {
   return useQuery({
-    queryKey: queryKeys.inventory.writeOffs({ page, pageSize }),
-    queryFn: () => listInventoryWriteOffs(page, pageSize),
+    queryKey: queryKeys.inventory.writeOffs({ page, pageSize, sort, dir: direction }),
+    queryFn: () => listInventoryWriteOffs(page, pageSize, sort, direction),
     placeholderData: keepPreviousData,
   })
 }

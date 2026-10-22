@@ -13,12 +13,47 @@ import {
   removeSaleLine,
   setSaleLine,
   updateSale,
+  type SaleSortColumn,
 } from '../services/sales-service'
 
-export function useSales(search: string, status: string, page: number, pageSize: number) {
+export function useSales(
+  search: string,
+  status: string,
+  page: number,
+  pageSize: number,
+  sort: SaleSortColumn = 'created',
+  direction: 'asc' | 'desc' = 'desc',
+  periodFilters: {
+    period?: string
+    from?: string | null
+    to?: string | null
+    createdFrom?: string | null
+    createdTo?: string | null
+  } = {},
+) {
   return useQuery({
-    queryKey: queryKeys.sales.list({ search, status, page, pageSize }),
-    queryFn: () => listSales(search, status, page, pageSize),
+    queryKey: queryKeys.sales.list({
+      search,
+      status,
+      page,
+      pageSize,
+      sort,
+      dir: direction,
+      period: periodFilters.period,
+      from: periodFilters.from,
+      to: periodFilters.to,
+    }),
+    queryFn: () =>
+      listSales(
+        search,
+        status,
+        page,
+        pageSize,
+        sort,
+        direction,
+        periodFilters.createdFrom ?? null,
+        periodFilters.createdTo ?? null,
+      ),
     placeholderData: keepPreviousData,
   })
 }

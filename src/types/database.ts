@@ -2195,6 +2195,8 @@ export type Database = {
           status_filter?: string
           created_from?: string | null
           created_to?: string | null
+          sort_by?: string
+          sort_dir?: string
         }
         Returns: {
           id: string
@@ -2283,7 +2285,12 @@ export type Database = {
         Returns: string
       }
       list_inventory_write_offs: {
-        Args: { page_number?: number; page_size?: number }
+        Args: {
+          page_number?: number
+          page_size?: number
+          sort_by?: string
+          sort_dir?: string
+        }
         Returns: {
           id: string
           write_off_date: string
@@ -2487,6 +2494,10 @@ export type Database = {
           status_filter?: string
           page_number?: number
           page_size?: number
+          sort_by?: string
+          sort_dir?: string
+          created_from?: string | null
+          created_to?: string | null
         }
         Returns: {
           id: string

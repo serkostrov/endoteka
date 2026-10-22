@@ -4,7 +4,6 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { ListPagination } from '@/components/shared/ListPagination'
-import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -180,35 +179,55 @@ export function DataTable<T>({
                   />
                 </TableHead>
               ) : null}
-              {columns.map((column, index) => (
-                <TableHead
-                  key={column.id}
-                  className={cn(
-                    headClass,
-                    column.className,
-                    !selection && index === 0 && !dense && 'pl-4',
-                    index === columns.length - 1 && !dense && 'pr-4',
-                  )}
-                >
-                  {column.sortable && sort ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="-ml-2 h-8 gap-1 px-2 font-medium"
-                      onClick={() => sort.onSort(column.id)}
-                    >
-                      {column.header}
-                      <SortIcon
-                        active={sort.columnId === column.id}
-                        direction={sort.columnId === column.id ? sort.direction : 'asc'}
-                      />
-                    </Button>
-                  ) : (
-                    column.header
-                  )}
-                </TableHead>
-              ))}
+              {columns.map((column, index) => {
+                const sortable = Boolean(column.sortable && sort)
+                const active = sortable && sort!.columnId === column.id
+
+                return (
+                  <TableHead
+                    key={column.id}
+                    aria-sort={
+                      active
+                        ? sort!.direction === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : sortable
+                          ? 'none'
+                          : undefined
+                    }
+                    className={cn(
+                      headClass,
+                      column.className,
+                      sortable && 'p-0',
+                      active && 'bg-muted text-foreground',
+                      !selection && index === 0 && !dense && !sortable && 'pl-4',
+                      index === columns.length - 1 && !dense && !sortable && 'pr-4',
+                    )}
+                  >
+                    {sortable ? (
+                      <button
+                        type="button"
+                        aria-label={`Сортировать по колонке ${column.header}`}
+                        className={cn(
+                          'flex h-full min-h-10 w-full items-center gap-1 px-3 text-left font-medium hover:bg-muted/70',
+                          dense && 'min-h-8 px-2 text-xs',
+                          !selection && index === 0 && !dense && 'pl-4',
+                          index === columns.length - 1 && !dense && 'pr-4',
+                        )}
+                        onClick={() => sort!.onSort(column.id)}
+                      >
+                        <span className="min-w-0 truncate">{column.header}</span>
+                        <SortIcon
+                          active={Boolean(active)}
+                          direction={active ? sort!.direction : 'asc'}
+                        />
+                      </button>
+                    ) : (
+                      column.header
+                    )}
+                  </TableHead>
+                )
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>

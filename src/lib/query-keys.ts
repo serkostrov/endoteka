@@ -98,9 +98,11 @@ export const queryKeys = {
       period?: string
       from?: string | null
       to?: string | null
+      sort?: string
+      dir?: string
     }) => ['inventory', 'receipts', filters] as const,
     receipt: (id: string) => ['inventory', 'receipt', id] as const,
-    writeOffs: (filters: { page: number; pageSize: number }) =>
+    writeOffs: (filters: { page: number; pageSize: number; sort?: string; dir?: string }) =>
       ['inventory', 'write-offs', filters] as const,
     writeOff: (id: string) => ['inventory', 'write-off', id] as const,
     adjustments: (filters: { page: number; pageSize: number }) =>
@@ -123,8 +125,17 @@ export const queryKeys = {
   },
   sales: {
     all: ['sales'] as const,
-    list: (filters: { search: string; status: string; page: number; pageSize: number }) =>
-      ['sales', 'list', filters] as const,
+    list: (filters: {
+      search: string
+      status: string
+      page: number
+      pageSize: number
+      sort?: string
+      dir?: string
+      period?: string
+      from?: string | null
+      to?: string | null
+    }) => ['sales', 'list', filters] as const,
     detail: (id: string) => ['sales', 'detail', id] as const,
   },
   documents: {

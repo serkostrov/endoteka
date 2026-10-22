@@ -46,7 +46,10 @@ export function InventoryStockScreen() {
   const [pageSize, setPageSize] = usePageSize()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const stockParam = searchParams.get('stock')
-  const stockFilter = stockParam === 'zero' || stockParam === 'in_stock' ? stockParam : 'all'
+  const stockFilter =
+    stockParam === 'zero' || stockParam === 'all' || stockParam === 'in_stock'
+      ? stockParam
+      : 'in_stock'
   const categoryId = searchParams.get('category') || null
   const itemId = searchParams.get('item')
   const filterKey = `${stockFilter}|${categoryId ?? ''}`
@@ -219,7 +222,9 @@ export function InventoryStockScreen() {
             value={stockFilter}
             onValueChange={(value) => {
               const next = new URLSearchParams(searchParams)
-              if (value === 'zero' || value === 'in_stock') {
+              if (value === 'in_stock') {
+                next.delete('stock')
+              } else if (value === 'zero' || value === 'all') {
                 next.set('stock', value)
               } else {
                 next.delete('stock')
@@ -232,7 +237,7 @@ export function InventoryStockScreen() {
               aria-label="Фильтр по остатку"
               className="h-9 w-44"
               onClear={
-                stockFilter !== 'all'
+                stockFilter !== 'in_stock'
                   ? () => {
                       const next = new URLSearchParams(searchParams)
                       next.delete('stock')

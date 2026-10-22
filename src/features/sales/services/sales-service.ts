@@ -184,12 +184,45 @@ function mapLine(value: Json): SaleLine | null {
   }
 }
 
-export async function listSales(search: string, status: string, page: number, pageSize: number) {
+export type SaleSortColumn =
+  | 'invoice'
+  | 'customer'
+  | 'date'
+  | 'total'
+  | 'status'
+  | 'actor'
+  | 'created'
+
+export type SaleListFilters = {
+  search?: string
+  status?: string
+  page?: number
+  pageSize?: number
+  sort?: SaleSortColumn
+  direction?: 'asc' | 'desc'
+  createdFrom?: string | null
+  createdTo?: string | null
+}
+
+export async function listSales(
+  search: string,
+  status: string,
+  page: number,
+  pageSize: number,
+  sort: SaleSortColumn = 'created',
+  direction: 'asc' | 'desc' = 'desc',
+  createdFrom: string | null = null,
+  createdTo: string | null = null,
+) {
   const { data, error } = await getSupabase().rpc('list_sales', {
     search_query: search,
     status_filter: status === 'all' ? '' : status,
     page_number: page,
     page_size: pageSize,
+    sort_by: sort,
+    sort_dir: direction,
+    created_from: createdFrom,
+    created_to: createdTo,
   })
 
   if (error) {
