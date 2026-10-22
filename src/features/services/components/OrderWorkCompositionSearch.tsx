@@ -665,7 +665,7 @@ function SuggestRow({
         'flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 text-left text-sm outline-none',
         indent === 1 ? 'pl-9' : 'pl-14',
         active ? 'bg-accent' : 'hover:bg-accent/70',
-        disabled && 'pointer-events-none opacity-50',
+        disabled && 'opacity-50',
       )}
       onMouseEnter={onHover}
       onMouseDown={(event) => {
@@ -675,6 +675,9 @@ function SuggestRow({
         trySelect(event.clientX, event.clientY)
       }}
       onKeyDown={(event) => {
+        if (disabled) {
+          return
+        }
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault()
           onSelect()
@@ -684,17 +687,18 @@ function SuggestRow({
       {coverUrl !== undefined ? (
         <InventoryItemCoverThumb src={coverUrl} alt={title} className="size-8 shrink-0" />
       ) : null}
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 cursor-pointer">
+        {/* Курсор выделения только на названии (в т.ч. без остатка — можно скопировать). */}
         <span className="block cursor-text select-text truncate font-medium leading-5" title={title}>
           {title}
         </span>
         {subtitle ? (
-          <span className="block cursor-text select-text truncate text-[11px] leading-4 text-muted-foreground">
-            {subtitle}
-          </span>
+          <span className="block truncate text-[11px] leading-4 text-muted-foreground">{subtitle}</span>
         ) : null}
       </span>
-      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatMoney(price)} ₽</span>
+      <span className="shrink-0 cursor-pointer text-xs tabular-nums text-muted-foreground">
+        {formatMoney(price)} ₽
+      </span>
     </div>
   )
 }
