@@ -448,8 +448,17 @@ function WorkLineRow({
 
   return (
     <TableRow
+      role="link"
+      tabIndex={0}
+      title="Открыть карточку"
       className="group/row cursor-pointer border-b last:border-b-0 hover:bg-muted/20"
       onClick={handleRowClick}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpen()
+        }
+      }}
     >
       <TableCell className={cn(cellPad, 'w-8 text-muted-foreground')}>
         <TypeIcon className="size-3.5 opacity-70" aria-hidden />
@@ -457,7 +466,7 @@ function WorkLineRow({
       </TableCell>
       <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal')}>
         <div className="flex min-w-0 max-w-full items-baseline gap-2">
-          <span className="cursor-text select-text truncate text-sm font-medium text-primary">
+          <span className="select-text truncate text-sm font-medium text-primary" title={line.name}>
             {line.name}
           </span>
           {isOrderOnlyLine(line) ? (
@@ -466,21 +475,21 @@ function WorkLineRow({
             </StatusBadge>
           ) : null}
           {line.subtitle ? (
-            <span className="hidden min-w-0 cursor-text select-text truncate text-[11px] text-muted-foreground sm:inline">
+            <span className="hidden min-w-0 select-text truncate text-[11px] text-muted-foreground sm:inline">
               {line.subtitle}
             </span>
           ) : null}
         </div>
         {line.subtitle ? (
-          <p className="mt-0.5 cursor-text select-text truncate text-[11px] text-muted-foreground sm:hidden">
+          <p className="mt-0.5 select-text truncate text-[11px] text-muted-foreground sm:hidden">
             {line.subtitle}
           </p>
         ) : null}
       </TableCell>
-      <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')} data-row-ignore-click>
+      <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')}>
         <InlineNumberField line={line} field="unitPrice" disabled={!canEdit} />
       </TableCell>
-      <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')} data-row-ignore-click>
+      <TableCell className={cn(cellPad, 'whitespace-nowrap text-right')}>
         <InlineNumberField
           line={line}
           field="quantity"
@@ -491,7 +500,7 @@ function WorkLineRow({
       <TableCell className={cn(cellPad, 'whitespace-nowrap text-right text-sm tabular-nums')}>
         {formatMoney(amount)}
       </TableCell>
-      <TableCell className={cellPad} data-row-ignore-click>
+      <TableCell className={cellPad}>
         {canEdit ? (
           <IconActionButton
             label="Удалить из заказа"

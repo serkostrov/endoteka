@@ -635,47 +635,67 @@ function SuggestRow({
 }) {
   const pointerStart = useRef<{ x: number; y: number } | null>(null)
 
+  function trySelect(clientX: number, clientY: number) {
+    if (disabled) {
+      return
+    }
+    // Выделение названия не добавляет в заказ.
+    const selection = window.getSelection()
+    if (selection && !selection.isCollapsed && selection.toString().trim().length > 0) {
+      return
+    }
+    const start = pointerStart.current
+    if (start) {
+      const dx = Math.abs(clientX - start.x)
+      const dy = Math.abs(clientY - start.y)
+      if (dx > 4 || dy > 4) {
+        return
+      }
+    }
+    onSelect()
+  }
+
   return (
-    <button
-      type="button"
-      disabled={disabled}
+    <div
+      role="option"
+      aria-selected={active}
+      aria-disabled={disabled || undefined}
+      tabIndex={disabled ? -1 : 0}
       className={cn(
-        'flex w-full items-center gap-2 py-1.5 pr-3 text-left text-sm select-text',
+        'flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 text-left text-sm outline-none',
         indent === 1 ? 'pl-9' : 'pl-14',
         active ? 'bg-accent' : 'hover:bg-accent/70',
+        disabled && 'pointer-events-none opacity-50',
       )}
       onMouseEnter={onHover}
       onMouseDown={(event) => {
         pointerStart.current = { x: event.clientX, y: event.clientY }
       }}
       onClick={(event) => {
-        // Выделение названия/артикула не должно добавлять позицию в заказ.
-        const selection = window.getSelection()
-        if (selection && !selection.isCollapsed && selection.toString().trim().length > 0) {
-          return
+        trySelect(event.clientX, event.clientY)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect()
         }
-        const start = pointerStart.current
-        if (start) {
-          const dx = Math.abs(event.clientX - start.x)
-          const dy = Math.abs(event.clientY - start.y)
-          if (dx > 4 || dy > 4) {
-            return
-          }
-        }
-        onSelect()
       }}
     >
       {coverUrl !== undefined ? (
-        <InventoryItemCoverThumb src={coverUrl} alt={title} className="size-8" />
+        <InventoryItemCoverThumb src={coverUrl} alt={title} className="size-8 shrink-0" />
       ) : null}
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium leading-5">{title}</span>
+        <span className="block cursor-text select-text truncate font-medium leading-5" title={title}>
+          {title}
+        </span>
         {subtitle ? (
-          <span className="block truncate text-[11px] leading-4 text-muted-foreground">{subtitle}</span>
+          <span className="block cursor-text select-text truncate text-[11px] leading-4 text-muted-foreground">
+            {subtitle}
+          </span>
         ) : null}
       </span>
       <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatMoney(price)} ₽</span>
-    </button>
+    </div>
   )
 }
 
