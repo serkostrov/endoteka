@@ -38,8 +38,8 @@ const cellClass = 'min-w-0 px-3 py-2.5 align-middle whitespace-normal'
 const COLUMNS: { id: OrderSortColumn; label: string; className: string }[] = [
   { id: 'number', label: 'Заказ', className: 'w-36' },
   { id: 'deadline', label: 'Срок', className: 'w-28' },
-  { id: 'status', label: 'Статус', className: 'w-32' },
-  { id: 'responsible', label: 'Ответственный', className: 'hidden w-28 md:table-cell' },
+  { id: 'status', label: 'Статус', className: 'w-52' },
+  { id: 'responsible', label: 'Ответственный', className: 'hidden w-32 md:table-cell' },
   { id: 'device', label: 'Изделие', className: '' },
   { id: 'client', label: 'Клиент', className: 'w-64' },
   { id: 'total', label: 'Итог', className: 'w-36' },
@@ -220,9 +220,9 @@ export function OrderListTable({
                   <TableCell className={cellClass}>
                     <TwoLine primary={deadline.primary} secondary={deadline.secondary} />
                   </TableCell>
-                  <TableCell className={cellClass}>
+                  <TableCell className={cn(cellClass, 'overflow-hidden')}>
                     <div
-                      className="-ml-1.5 flex items-center"
+                      className="-ml-1.5 min-w-0 max-w-full"
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
                       onPointerDown={(event) => event.stopPropagation()}
@@ -235,7 +235,7 @@ export function OrderListTable({
                       />
                     </div>
                   </TableCell>
-                  <TableCell className={cn(cellClass, 'hidden md:table-cell')}>
+                  <TableCell className={cn(cellClass, 'hidden overflow-hidden md:table-cell')}>
                     <span className="block truncate">{order.responsibleName || 'Не назначен'}</span>
                   </TableCell>
                   <TableCell className={cellClass}>

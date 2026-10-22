@@ -77,12 +77,19 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
             type="button"
             variant="ghost"
             size={compact ? 'xs' : 'sm'}
-            className={cn('gap-1 px-1', compact && 'h-6 py-0')}
+            className={cn(
+              'gap-1 px-1',
+              compact && 'h-6 max-w-full min-w-0 shrink justify-start py-0',
+            )}
             onClick={(event) => event.stopPropagation()}
             aria-label={`Статус: ${statusName}`}
           >
-            <OrderStatusBadge code={statusCode} name={statusName} />
-            <ChevronDown className="size-3.5 text-muted-foreground" />
+            <OrderStatusBadge
+              code={statusCode}
+              name={statusName}
+              className={compact ? 'min-w-0 max-w-full shrink truncate' : undefined}
+            />
+            <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-96 w-72 overflow-y-auto" onClick={(event) => event.stopPropagation()}>

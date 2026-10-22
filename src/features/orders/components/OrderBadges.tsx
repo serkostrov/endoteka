@@ -40,11 +40,19 @@ function deadlineTone(state: DeadlineState): 'neutral' | 'warning' | 'danger' | 
   return 'neutral'
 }
 
-export function OrderStatusBadge({ code, name }: { code: string; name: string }) {
+export function OrderStatusBadge({
+  code,
+  name,
+  className,
+}: {
+  code: string
+  name: string
+  className?: string
+}) {
   const catalog = useOrderStatusCatalog()
   const color = catalog.data?.find((item) => item.code === code)?.color
   return (
-    <StatusBadge tone={orderStatusTone(code)} style={statusBadgeStyle(color)}>
+    <StatusBadge tone={orderStatusTone(code)} style={statusBadgeStyle(color)} className={className}>
       {name}
     </StatusBadge>
   )
