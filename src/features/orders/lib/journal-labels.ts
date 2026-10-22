@@ -15,10 +15,22 @@ export function orderJournalEventTypeLabel(eventType: string, summary = '') {
   if (eventType === TaskJournalEvent.Created || eventType === TaskJournalEvent.Completed || eventType === TaskJournalEvent.Deleted) {
     return 'Задача'
   }
-  if (eventType === 'parts_consumed' || eventType === 'parts_returned') {
-    return 'Склад'
+  if (
+    eventType === 'part_added' ||
+    eventType === 'part_removed' ||
+    eventType === 'part_updated' ||
+    eventType === 'parts_consumed' ||
+    eventType === 'parts_returned'
+  ) {
+    if (eventType === 'parts_consumed' || eventType === 'parts_returned') {
+      if (/^добавлена позиция/i.test(summary.trim())) {
+        return 'Запчасть'
+      }
+      return 'Склад'
+    }
+    return 'Запчасть'
   }
-  if (eventType === 'service_added' || eventType === 'service_removed') {
+  if (eventType === 'service_added' || eventType === 'service_removed' || eventType === 'service_updated') {
     return 'Услуга'
   }
   if (eventType === 'responsible_assigned') {
