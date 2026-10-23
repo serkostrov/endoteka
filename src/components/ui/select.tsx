@@ -194,6 +194,11 @@ function SelectContent({
         }}
         onCloseAutoFocus={(event) => {
           setSearchQuery("")
+          // Сброс залипшего pointer-events:none от modal Select.
+          document.body.style.pointerEvents = ""
+          window.setTimeout(() => {
+            document.body.style.pointerEvents = ""
+          }, 0)
           onCloseAutoFocus?.(event)
         }}
       >

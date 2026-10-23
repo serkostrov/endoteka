@@ -31,6 +31,7 @@ import { getDocument } from '@/features/documents/services/documents-service'
 import { DocumentSourceType, sourceTypeForTemplate } from '@/lib/constants/documents'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
+import { deferOpenModal } from '@/lib/ui/release-body-pointer-events'
 import { formatInteger } from '@/lib/utils/number'
 
 import { useDeleteOrder, useMoveOrderStatus, useOrderStatusCatalog } from '../hooks/use-orders'
@@ -282,9 +283,10 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
             <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuItem
                 disabled={!canCreateDocs}
-                onSelect={() => {
-                  // Defer so dropdown dismiss does not immediately close the dialog.
-                  window.setTimeout(() => setPrintOpen(true), 50)
+                onSelect={(event) => {
+                  // Не даём меню вернуть фокус и оставить body с pointer-events:none.
+                  event.preventDefault()
+                  deferOpenModal(() => setPrintOpen(true))
                 }}
               >
                 Печать по шаблону

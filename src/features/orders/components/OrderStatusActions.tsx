@@ -16,6 +16,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { useWarrantyDefaults } from '@/features/devices/hooks/use-devices'
 import { getErrorMessage } from '@/lib/errors'
+import { deferOpenModal } from '@/lib/ui/release-body-pointer-events'
 import { cn } from '@/lib/utils'
 
 import { OrderStatusBadge } from './OrderBadges'
@@ -109,10 +110,11 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
                   <DropdownMenuItem
                     key={status.id}
                     variant={status.isDestructive ? 'destructive' : 'default'}
-                    onSelect={() => {
+                    onSelect={(event) => {
                       if (status.requiresWarranty || status.isDestructive) {
+                        event.preventDefault()
                         setWarrantyDraft(null)
-                        setTarget(status)
+                        deferOpenModal(() => setTarget(status))
                         return
                       }
                       void applyStatus(status)

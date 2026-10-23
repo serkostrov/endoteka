@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type Ref } from 'react'
+import { useLayoutEffect, useRef, useState, type Ref, type WheelEvent } from 'react'
 import { Clock } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
@@ -36,7 +36,19 @@ export function TimePicker({
   const formatted = parsed ? formatTime(parsed.hours, parsed.minutes) : ''
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<string | null>(null)
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const draft = editing ?? formatted
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return
+    }
+    const host = triggerRef.current?.closest(
+      '[data-slot="dialog-content"], [data-slot="sheet-content"]',
+    )
+    setPortalHost(host instanceof HTMLElement ? host : null)
+  }, [open])
 
   function emit(hours: number, minutes: number) {
     onChange(formatTime(hours, minutes))
@@ -102,6 +114,7 @@ export function TimePicker({
       >
         <PopoverTrigger asChild>
           <Button
+            ref={triggerRef}
             type="button"
             variant="ghost"
             size="icon-sm"
@@ -113,7 +126,12 @@ export function TimePicker({
             <Clock />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-auto p-3">
+        <PopoverContent
+          align="end"
+          container={portalHost}
+          className="w-auto p-3"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <div className="flex gap-2">
             <TimeColumn
               label="Часы"
@@ -165,7 +183,11 @@ function TimeColumn({
   return (
     <div className="w-16">
       <p className="mb-1.5 text-center text-xs font-medium text-muted-foreground">{label}</p>
-      <div ref={listRef} className="max-h-52 overflow-y-auto overscroll-contain">
+      <div
+        ref={listRef}
+        className="max-h-52 overflow-y-auto overscroll-contain"
+        onWheel={handleScrollableWheel}
+      >
         <div className="flex flex-col gap-0.5">
           {items.map((item) => {
             const active = selected === item
@@ -190,6 +212,17 @@ function TimeColumn({
       </div>
     </div>
   )
+}
+
+/** Dialog/Sheet RemoveScroll глушит native wheel — крутим список вручную. */
+function handleScrollableWheel(event: WheelEvent<HTMLDivElement>) {
+  const el = event.currentTarget
+  if (el.scrollHeight <= el.clientHeight) {
+    return
+  }
+  event.preventDefault()
+  event.stopPropagation()
+  el.scrollTop += event.deltaY
 }
 
 function minuteOptions(current: number | null): number[] {
