@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 
 import { ErrorState } from '@/components/shared/ErrorState'
 import { FilterBar } from '@/components/shared/FilterBar'
@@ -397,7 +398,7 @@ export function OrdersScreen() {
       />
 
       <div className="space-y-2">
-        <FilterBar className="max-sm:flex-col max-sm:items-stretch max-sm:overflow-visible sm:flex-nowrap">
+        <FilterBar className="flex-nowrap">
           <div className="hidden items-center gap-2 sm:flex">
             <SegmentedFilter
               aria-label="Назначение"
@@ -427,14 +428,21 @@ export function OrdersScreen() {
             label="Поиск заказов"
             placeholder="Номер, клиент или серийный номер"
             className={cn(
-              'w-full min-w-0 max-w-none flex-1 sm:min-w-[12rem]',
+              'min-w-0 max-w-none flex-1 sm:min-w-[12rem]',
               search.trim().length > 0 &&
                 '[&_input]:border-primary [&_input]:bg-primary/5 [&_input]:ring-[3px] [&_input]:ring-primary/20 [&_svg]:text-primary',
             )}
           />
           {canCreate ? (
-            <Button type="button" className="w-full sm:w-auto" onClick={() => setCreateOpen(true)}>
-              Новый заказ
+            <Button
+              type="button"
+              size="icon"
+              className="shrink-0 sm:h-9 sm:w-auto sm:px-4 sm:has-[>svg]:px-3"
+              aria-label="Новый заказ"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus className="size-5 sm:hidden" />
+              <span className="hidden sm:inline">Новый заказ</span>
             </Button>
           ) : null}
         </FilterBar>
