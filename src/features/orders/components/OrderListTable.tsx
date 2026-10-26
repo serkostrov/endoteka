@@ -451,9 +451,9 @@ function OrderListCard({
           </p>
         </div>
 
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
           <div
-            className="-ml-1 min-w-0 max-w-full"
+            className="-ml-1 min-w-0 flex-1"
             onClick={(event) => event.stopPropagation()}
             onKeyDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}

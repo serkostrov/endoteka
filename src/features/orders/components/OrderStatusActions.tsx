@@ -80,7 +80,7 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
             size={compact ? 'xs' : 'sm'}
             className={cn(
               'gap-1 px-1',
-              compact && 'h-6 w-full max-w-full min-w-0 justify-start py-0',
+              compact && 'h-6 max-w-full min-w-0 justify-start py-0 sm:w-full',
             )}
             onClick={(event) => event.stopPropagation()}
             aria-label={`Статус: ${statusName}`}
@@ -90,7 +90,7 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
               name={statusName}
               className={
                 compact
-                  ? 'w-0 min-w-0 max-w-full flex-1 justify-start text-left shrink'
+                  ? 'max-w-full min-w-0 justify-start text-left shrink truncate sm:w-0 sm:flex-1'
                   : undefined
               }
             />
