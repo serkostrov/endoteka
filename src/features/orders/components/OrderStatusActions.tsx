@@ -79,8 +79,8 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
             variant="ghost"
             size={compact ? 'xs' : 'sm'}
             className={cn(
-              'gap-1 px-1',
-              compact && 'h-6 max-w-full min-w-0 justify-start py-0 sm:w-full',
+              'h-auto w-auto max-w-full gap-1 px-1',
+              compact && 'h-6 min-w-0 justify-start py-0',
             )}
             onClick={(event) => event.stopPropagation()}
             aria-label={`Статус: ${statusName}`}
@@ -89,9 +89,7 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
               code={statusCode}
               name={statusName}
               className={
-                compact
-                  ? 'max-w-full min-w-0 justify-start text-left shrink truncate sm:w-0 sm:flex-1'
-                  : undefined
+                compact ? 'max-w-full min-w-0 justify-start text-left truncate' : undefined
               }
             />
             <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
