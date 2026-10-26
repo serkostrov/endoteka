@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { CreatedPeriodFilter } from '@/components/shared/CreatedPeriodFilter'
 import { DataTable } from '@/components/shared/DataTable'
 import { FilterBar } from '@/components/shared/FilterBar'
+import { ListPagination } from '@/components/shared/ListPagination'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { SupplierLink } from '@/components/shared/SupplierLink'
@@ -287,116 +288,204 @@ export function InventoryReceiptsScreen() {
         <ReceiptBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
       ) : null}
 
-      <DataTable
-        caption="Приходы"
-        isLoading={receiptsQuery.isLoading}
-        error={receiptsQuery.error ? getErrorMessage(receiptsQuery.error) : null}
-        data={receiptsQuery.data?.items ?? []}
-        getRowId={(row) => row.id}
-        emptyTitle="Приходов нет"
-        emptyDescription={
+      {(() => {
+        const items = receiptsQuery.data?.items ?? []
+        const emptyDescription =
           statusFilter !== 'all' || period !== DatePeriodPreset.All
             ? 'Нет приходов по выбранным фильтрам.'
             : 'Оформите поступление, чтобы появились партии.'
-        }
-        onRowClick={handleRowClick}
-        selection={{
-          selectedIds,
-          onSelectedIdsChange: setSelectedIds,
-        }}
-        pagination={{
-          page,
-          pageCount,
-          onPageChange: setPage,
-          pageSize,
-          onPageSizeChange: handlePageSizeChange,
-        }}
-        sort={{
-          columnId: listSort,
-          direction: listDir,
-          onSort: handleSort,
-        }}
-        columns={[
-          {
-            id: 'date',
-            header: 'Дата',
-            sortable: true,
-            cell: (row) => formatDate(row.receiptDate),
-          },
-          {
-            id: 'status',
-            header: 'Статус',
-            sortable: true,
-            cell: (row) => (
-              <StatusBadge tone={inventoryReceiptStatusTone(row.status)}>
-                {inventoryReceiptStatusLabels[row.status]}
-              </StatusBadge>
-            ),
-          },
-          {
-            id: 'supplier',
-            header: 'Поставщик',
-            sortable: true,
-            cell: (row) =>
-              row.supplier ? (
-                <SupplierLink name={row.supplier} customerId={row.supplierId} />
+        return (
+          <>
+            <div className="space-y-2 md:hidden">
+              {receiptsQuery.isLoading ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">Загрузка…</p>
+              ) : receiptsQuery.error ? (
+                <p className="text-sm text-destructive">{getErrorMessage(receiptsQuery.error)}</p>
+              ) : items.length === 0 ? (
+                <p className="rounded-xl border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+                  {emptyDescription}
+                </p>
               ) : (
-                <span className="text-muted-foreground">—</span>
-              ),
-          },
-          {
-            id: 'lines',
-            header: 'Строк',
-            sortable: true,
-            cell: (row) => String(row.lineCount),
-          },
-          {
-            id: 'qty',
-            header: 'Кол-во',
-            sortable: true,
-            cell: (row) => formatQuantity(row.totalQuantity),
-          },
-          {
-            id: 'actor',
-            header: 'Кто',
-            sortable: true,
-            className: 'hidden md:table-cell',
-            cell: (row) => row.actorName || '—',
-          },
-          {
-            id: 'created',
-            header: 'Создан',
-            sortable: true,
-            className: 'hidden lg:table-cell',
-            cell: (row) => formatDateTime(row.createdAt),
-          },
-          ...(canReceive
-            ? [
-                {
-                  id: 'actions',
-                  header: 'Действия',
-                  className: 'w-[1%] whitespace-nowrap',
-                  cell: (row: InventoryReceiptListItem) => (
-                    <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
-                      <ReceiptDeleteControl
-                        receipt={{ id: row.id, supplier: row.supplier, status: row.status }}
-                        onDeleted={() => {
-                          setSelectedIds((ids) => ids.filter((id) => id !== row.id))
-                          if (receiptId === row.id) {
-                            closeReceipt()
-                          }
-                          if (editDraftId === row.id) {
-                            setEditDraftId(null)
-                          }
-                        }}
-                      />
+                items.map((row) => (
+                  <article
+                    key={row.id}
+                    className="flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 shadow-xs"
+                    onClick={() => handleRowClick(row)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        handleRowClick(row)
+                      }
+                    }}
+                    role="link"
+                    tabIndex={0}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium tabular-nums">{formatDate(row.receiptDate)}</p>
+                        <p className="mt-0.5 truncate text-sm">
+                          {row.supplier ? (
+                            <SupplierLink name={row.supplier} customerId={row.supplierId} />
+                          ) : (
+                            <span className="text-muted-foreground">Без поставщика</span>
+                          )}
+                        </p>
+                      </div>
+                      <StatusBadge tone={inventoryReceiptStatusTone(row.status)}>
+                        {inventoryReceiptStatusLabels[row.status]}
+                      </StatusBadge>
                     </div>
-                  ),
-                },
-              ]
-            : []),
-        ]}
-      />
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {row.lineCount} стр. · {formatQuantity(row.totalQuantity)}
+                    </p>
+                    {canReceive ? (
+                      <div
+                        className="flex justify-end"
+                        onClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
+                      >
+                        <ReceiptDeleteControl
+                          receipt={{ id: row.id, supplier: row.supplier, status: row.status }}
+                          onDeleted={() => {
+                            setSelectedIds((ids) => ids.filter((id) => id !== row.id))
+                            if (receiptId === row.id) {
+                              closeReceipt()
+                            }
+                            if (editDraftId === row.id) {
+                              setEditDraftId(null)
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                  </article>
+                ))
+              )}
+              <ListPagination
+                page={page}
+                pageCount={pageCount}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                onPageSizeChange={handlePageSizeChange}
+                className="justify-end"
+              />
+            </div>
+            <div className="hidden md:block">
+              <DataTable
+                caption="Приходы"
+                isLoading={receiptsQuery.isLoading}
+                error={receiptsQuery.error ? getErrorMessage(receiptsQuery.error) : null}
+                data={items}
+                getRowId={(row) => row.id}
+                emptyTitle="Приходов нет"
+                emptyDescription={emptyDescription}
+                onRowClick={handleRowClick}
+                selection={{
+                  selectedIds,
+                  onSelectedIdsChange: setSelectedIds,
+                }}
+                pagination={{
+                  page,
+                  pageCount,
+                  onPageChange: setPage,
+                  pageSize,
+                  onPageSizeChange: handlePageSizeChange,
+                }}
+                sort={{
+                  columnId: listSort,
+                  direction: listDir,
+                  onSort: handleSort,
+                }}
+                columns={[
+                  {
+                    id: 'date',
+                    header: 'Дата',
+                    sortable: true,
+                    cell: (row) => formatDate(row.receiptDate),
+                  },
+                  {
+                    id: 'status',
+                    header: 'Статус',
+                    sortable: true,
+                    cell: (row) => (
+                      <StatusBadge tone={inventoryReceiptStatusTone(row.status)}>
+                        {inventoryReceiptStatusLabels[row.status]}
+                      </StatusBadge>
+                    ),
+                  },
+                  {
+                    id: 'supplier',
+                    header: 'Поставщик',
+                    sortable: true,
+                    cell: (row) =>
+                      row.supplier ? (
+                        <SupplierLink name={row.supplier} customerId={row.supplierId} />
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      ),
+                  },
+                  {
+                    id: 'lines',
+                    header: 'Строк',
+                    sortable: true,
+                    cell: (row) => String(row.lineCount),
+                  },
+                  {
+                    id: 'qty',
+                    header: 'Кол-во',
+                    sortable: true,
+                    cell: (row) => formatQuantity(row.totalQuantity),
+                  },
+                  {
+                    id: 'actor',
+                    header: 'Кто',
+                    sortable: true,
+                    cell: (row) => row.actorName || '—',
+                  },
+                  {
+                    id: 'created',
+                    header: 'Создан',
+                    sortable: true,
+                    cell: (row) => formatDateTime(row.createdAt),
+                  },
+                  ...(canReceive
+                    ? [
+                        {
+                          id: 'actions',
+                          header: 'Действия',
+                          className: 'w-[1%] whitespace-nowrap',
+                          cell: (row: InventoryReceiptListItem) => (
+                            <div
+                              className="flex justify-end"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <ReceiptDeleteControl
+                                receipt={{
+                                  id: row.id,
+                                  supplier: row.supplier,
+                                  status: row.status,
+                                }}
+                                onDeleted={() => {
+                                  setSelectedIds((ids) => ids.filter((id) => id !== row.id))
+                                  if (receiptId === row.id) {
+                                    closeReceipt()
+                                  }
+                                  if (editDraftId === row.id) {
+                                    setEditDraftId(null)
+                                  }
+                                }}
+                              />
+                            </div>
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </div>
+          </>
+        )
+      })()}
 
       <ReceiveStockSheet open={createOpen} onOpenChange={setCreateOpen} />
       <ReceiveStockSheet

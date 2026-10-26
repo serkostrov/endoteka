@@ -54,6 +54,7 @@ import { getErrorMessage } from '@/lib/errors'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { queryKeys } from '@/lib/query-keys'
 import { formatDate } from '@/lib/utils/date'
+import { cn } from '@/lib/utils'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
 import { useInventoryItemCompatibleTypes } from '@/features/devices/hooks/use-compatible-parts'
@@ -445,9 +446,9 @@ function ItemCardBody({
           {actionsRow}
         </div>
       ) : (
-        <div className="space-y-1 pr-2">
+        <div className="space-y-2 pr-2">
           <h2 className="text-lg font-semibold tracking-tight">{item.name}</h2>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <p className="min-w-0 text-sm text-muted-foreground">{codeArticleLine || '—'}</p>
             {stockBadge}
           </div>
@@ -629,9 +630,9 @@ function ItemCardEditor({
   )
 
   const headerBlock = (
-    <div className="space-y-1 pr-2">
+    <div className="space-y-2 pr-2">
       <div className="min-w-0">{titleField}</div>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
         <div className="min-w-0 flex-1">{codeArticleFields}</div>
         {stockBadge}
       </div>
@@ -752,67 +753,119 @@ function ItemCardEditor({
 function ItemBatchesSection({ batches }: { batches: InventoryBatch[] }) {
   return (
     <SectionCard title="Остаток по партиям" description="Списание со склада — с самых ранних.">
-      <DataTable
-        caption="Партии"
-        dense
-        framed={false}
-        maxVisibleRows={8}
-        data={batches}
-        getRowId={(row) => row.id}
-        emptyTitle="Партий нет"
-        emptyDescription="Появятся после прихода или положительной инвентаризации."
-        rowClassName={(row) =>
-          row.remainingQuantity <= 0 || row.supplier === 'Недостача' ? 'text-muted-foreground' : undefined
-        }
-        columns={[
-          {
-            id: 'date',
-            header: 'Дата',
-            className: 'w-[6.5rem]',
-            cell: (row) => formatDate(row.receiptDate),
-          },
-          {
-            id: 'supplier',
-            header: 'Поставщик',
-            cell: (row) =>
-              row.supplier === 'Недостача' ? (
-                <span>Недостача</span>
-              ) : (
-                <SupplierLink name={row.supplier} customerId={row.supplierId} />
-              ),
-          },
-          {
-            id: 'qty',
-            header: 'Пришло',
-            className: 'w-[4.5rem] text-right tabular-nums',
-            cell: (row) => formatQuantity(row.quantity),
-          },
-          {
-            id: 'left',
-            header: 'Остаток',
-            className: 'w-[4.5rem] text-right tabular-nums',
-            cell: (row) => (
-              <span
-                className={
-                  row.remainingQuantity < 0
-                    ? 'font-medium text-destructive'
-                    : row.remainingQuantity <= 0
-                      ? undefined
-                      : 'font-medium'
-                }
+      {batches.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          Партий нет. Появятся после прихода или положительной инвентаризации.
+        </p>
+      ) : (
+        <>
+          <div className="space-y-2 md:hidden">
+            {batches.map((row) => (
+              <div
+                key={row.id}
+                className={cn(
+                  'rounded-lg border px-3 py-2.5 text-sm',
+                  (row.remainingQuantity <= 0 || row.supplier === 'Недостача') &&
+                    'text-muted-foreground',
+                )}
               >
-                {formatQuantity(row.remainingQuantity)}
-              </span>
-            ),
-          },
-          {
-            id: 'price',
-            header: 'Цена',
-            className: 'w-[5rem] text-right tabular-nums',
-            cell: (row) => formatMoney(row.purchasePrice),
-          },
-        ]}
-      />
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-medium tabular-nums">{formatDate(row.receiptDate)}</p>
+                    <p className="mt-0.5 truncate">
+                      {row.supplier === 'Недостача' ? (
+                        'Недостача'
+                      ) : (
+                        <SupplierLink name={row.supplier} customerId={row.supplierId} />
+                      )}
+                    </p>
+                  </div>
+                  <p
+                    className={cn(
+                      'shrink-0 tabular-nums',
+                      row.remainingQuantity < 0
+                        ? 'font-medium text-destructive'
+                        : row.remainingQuantity > 0
+                          ? 'font-medium'
+                          : undefined,
+                    )}
+                  >
+                    ост. {formatQuantity(row.remainingQuantity)}
+                  </p>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+                  пришло {formatQuantity(row.quantity)} · {formatMoney(row.purchasePrice)}
+                </p>
+              </div>
+            ))}
+          </div>
+          <div className="hidden md:block">
+            <DataTable
+              caption="Партии"
+              dense
+              framed={false}
+              maxVisibleRows={8}
+              data={batches}
+              getRowId={(row) => row.id}
+              emptyTitle="Партий нет"
+              emptyDescription="Появятся после прихода или положительной инвентаризации."
+              rowClassName={(row) =>
+                row.remainingQuantity <= 0 || row.supplier === 'Недостача'
+                  ? 'text-muted-foreground'
+                  : undefined
+              }
+              columns={[
+                {
+                  id: 'date',
+                  header: 'Дата',
+                  className: 'w-[6.5rem]',
+                  cell: (row) => formatDate(row.receiptDate),
+                },
+                {
+                  id: 'supplier',
+                  header: 'Поставщик',
+                  cell: (row) =>
+                    row.supplier === 'Недостача' ? (
+                      <span>Недостача</span>
+                    ) : (
+                      <SupplierLink name={row.supplier} customerId={row.supplierId} />
+                    ),
+                },
+                {
+                  id: 'qty',
+                  header: 'Пришло',
+                  className: 'w-[4.5rem] text-right tabular-nums',
+                  cell: (row) => formatQuantity(row.quantity),
+                },
+                {
+                  id: 'left',
+                  header: 'Остаток',
+                  className: 'w-[4.5rem] text-right tabular-nums',
+                  cell: (row) => (
+                    <span
+                      className={
+                        row.remainingQuantity < 0
+                          ? 'font-medium text-destructive'
+                          : row.remainingQuantity <= 0
+                            ? undefined
+                            : 'font-medium'
+                      }
+                    >
+                      {formatQuantity(row.remainingQuantity)}
+                    </span>
+                  ),
+                },
+                {
+                  id: 'price',
+                  header: 'Цена',
+                  className: 'w-[5rem] text-right tabular-nums',
+                  cell: (row) => formatMoney(row.purchasePrice),
+                },
+              ]}
+            />
+          </div>
+        </>
+      )}
     </SectionCard>
   )
 }

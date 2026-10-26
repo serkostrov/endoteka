@@ -459,7 +459,7 @@ function AttachmentFeedTile({
       {canDelete ? (
         <button
           type="button"
-          className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-sm bg-background/90 text-destructive opacity-0 shadow-sm ring-1 ring-border transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-sm bg-background/90 text-destructive opacity-100 shadow-sm ring-1 ring-border transition-opacity focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
           aria-label={`Удалить «${label}»`}
           disabled={deleting}
           onClick={(event) => {

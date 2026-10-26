@@ -156,7 +156,7 @@ function OrderDetailCard({
           <div className={cn('flex flex-col lg:flex-row', inSheet && 'h-full min-h-0')}>
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <header className="border-b px-4 py-2.5">
-                <div className="flex items-start gap-2">
+                <div className="flex flex-wrap items-start gap-x-2 gap-y-2">
                   <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1.5">
                     <h1 className="truncate text-lg font-semibold tracking-tight">Заказ {order.number}</h1>
                     <OrderStatusMenu
@@ -167,7 +167,7 @@ function OrderDetailCard({
                     />
                     <OrderDeadlineHint order={order} className="h-6" />
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
+                  <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                     <IconActionButton
                       label="События"
                       className="lg:hidden"
@@ -252,13 +252,13 @@ function OrderDetailCard({
           <Sheet open={eventsOpen} onOpenChange={setEventsOpen}>
             <SheetContent
               side="bottom"
-              className="flex h-[min(92dvh,40rem)] flex-col gap-0 overflow-hidden p-0 lg:hidden"
+              className="flex h-[min(92dvh,40rem)] max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 lg:hidden"
             >
               <SheetHeader className="shrink-0 border-b px-4 py-3 pr-14 text-left">
                 <SheetTitle>События</SheetTitle>
                 <SheetDescription>История заказа {order.number}</SheetDescription>
               </SheetHeader>
-              <div className="min-h-0 flex-1">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 {eventsOpen ? (
                   <OrderActivityFeed
                     orderId={order.id}

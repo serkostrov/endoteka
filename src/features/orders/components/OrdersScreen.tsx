@@ -439,8 +439,8 @@ export function OrdersScreen() {
           ) : null}
         </FilterBar>
 
-        <FilterBar className="[&_[data-slot=select-trigger]]:min-w-[10rem] [&_[data-slot=select-trigger]]:shrink-0 sm:[&_[data-slot=select-trigger]]:min-w-0 sm:[&_[data-slot=select-trigger]]:flex-1 sm:[&_[data-slot=select-trigger]]:shrink">
-          <div className="flex shrink-0 items-center gap-2 sm:hidden">
+        <FilterBar className="max-sm:flex-wrap max-sm:overflow-visible [&_[data-slot=select-trigger]]:min-w-0 [&_[data-slot=select-trigger]]:w-full max-sm:[&_[data-slot=select-trigger]]:basis-[calc(50%-0.25rem)] sm:[&_[data-slot=select-trigger]]:min-w-0 sm:[&_[data-slot=select-trigger]]:w-auto sm:[&_[data-slot=select-trigger]]:flex-1 sm:[&_[data-slot=select-trigger]]:shrink">
+          <div className="flex w-full shrink-0 items-center gap-2 sm:hidden">
             <SegmentedFilter
               aria-label="Назначение"
               value={assignmentFilter}

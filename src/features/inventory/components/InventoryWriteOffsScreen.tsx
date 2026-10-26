@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/DataTable'
 import { FilterBar } from '@/components/shared/FilterBar'
+import { ListPagination } from '@/components/shared/ListPagination'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { activeFilterControlClass } from '@/components/shared/active-filter-style'
@@ -203,125 +204,213 @@ export function InventoryWriteOffsScreen() {
         <WriteOffBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
       ) : null}
 
-      <DataTable
-        caption="Списания"
-        isLoading={writeOffsQuery.isLoading}
-        error={writeOffsQuery.error ? getErrorMessage(writeOffsQuery.error) : null}
-        data={writeOffsQuery.data?.items ?? []}
-        getRowId={(row) => row.id}
-        emptyTitle="Списаний нет"
-        emptyDescription={
+      {(() => {
+        const items = writeOffsQuery.data?.items ?? []
+        const emptyDescription =
           statusFilter !== 'all'
             ? 'Нет списаний по выбранному фильтру.'
             : 'Оформите списание, чтобы уменьшить остаток на складе.'
-        }
-        onRowClick={handleRowClick}
-        selection={{
-          selectedIds,
-          onSelectedIdsChange: setSelectedIds,
-        }}
-        pagination={{
-          page,
-          pageCount,
-          onPageChange: setPage,
-          pageSize,
-          onPageSizeChange: handlePageSizeChange,
-        }}
-        sort={{
-          columnId: listSort,
-          direction: listDir,
-          onSort: handleSort,
-        }}
-        columns={[
-          {
-            id: 'date',
-            header: 'Дата',
-            sortable: true,
-            cell: (row) => formatDate(row.writeOffDate),
-          },
-          {
-            id: 'status',
-            header: 'Статус',
-            sortable: true,
-            cell: (row) => (
-              <StatusBadge tone={inventoryWriteOffStatusTone(row.status)}>
-                {inventoryWriteOffStatusLabels[row.status]}
-              </StatusBadge>
-            ),
-          },
-          {
-            id: 'reason',
-            header: 'Причина',
-            sortable: true,
-            cell: (row) => (
-              <div className="min-w-0">
-                <p className="truncate font-medium">{row.reason || '—'}</p>
-                {row.notes ? (
-                  <p className="truncate text-xs text-muted-foreground">{row.notes}</p>
-                ) : null}
-              </div>
-            ),
-          },
-          {
-            id: 'lines',
-            header: 'Строк',
-            sortable: true,
-            cell: (row) => String(row.lineCount),
-          },
-          {
-            id: 'qty',
-            header: 'Кол-во',
-            sortable: true,
-            cell: (row) => formatQuantity(row.totalQuantity),
-          },
-          {
-            id: 'amount',
-            header: 'Сумма',
-            sortable: true,
-            className: 'tabular-nums',
-            cell: (row) => formatMoney(row.totalAmount),
-          },
-          {
-            id: 'actor',
-            header: 'Кто',
-            sortable: true,
-            className: 'hidden md:table-cell',
-            cell: (row) => row.actorName || '—',
-          },
-          {
-            id: 'created',
-            header: 'Создан',
-            sortable: true,
-            className: 'hidden lg:table-cell',
-            cell: (row) => formatDateTime(row.createdAt),
-          },
-          ...(canWriteOff
-            ? [
-                {
-                  id: 'actions',
-                  header: 'Действия',
-                  className: 'w-[1%] whitespace-nowrap',
-                  cell: (row: InventoryWriteOffListItem) => (
-                    <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
-                      <WriteOffDeleteControl
-                        writeOff={{ id: row.id, reason: row.reason, status: row.status }}
-                        onDeleted={() => {
-                          setSelectedIds((ids) => ids.filter((id) => id !== row.id))
-                          if (writeOffId === row.id) {
-                            closeWriteOff()
-                          }
-                          if (editDraftId === row.id) {
-                            setEditDraftId(null)
-                          }
-                        }}
-                      />
+        return (
+          <>
+            <div className="space-y-2 md:hidden">
+              {writeOffsQuery.isLoading ? (
+                <p className="py-8 text-center text-sm text-muted-foreground">Загрузка…</p>
+              ) : writeOffsQuery.error ? (
+                <p className="text-sm text-destructive">{getErrorMessage(writeOffsQuery.error)}</p>
+              ) : items.length === 0 ? (
+                <p className="rounded-xl border bg-card px-4 py-8 text-center text-sm text-muted-foreground">
+                  {emptyDescription}
+                </p>
+              ) : (
+                items.map((row) => (
+                  <article
+                    key={row.id}
+                    className="flex cursor-pointer flex-col gap-1.5 rounded-lg border bg-card px-3 py-2.5 shadow-xs"
+                    onClick={() => handleRowClick(row)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        handleRowClick(row)
+                      }
+                    }}
+                    role="link"
+                    tabIndex={0}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium tabular-nums">
+                          {formatDate(row.writeOffDate)}
+                        </p>
+                        <p className="mt-0.5 truncate text-sm font-medium">{row.reason || '—'}</p>
+                        {row.notes ? (
+                          <p className="truncate text-xs text-muted-foreground">{row.notes}</p>
+                        ) : null}
+                      </div>
+                      <StatusBadge tone={inventoryWriteOffStatusTone(row.status)}>
+                        {inventoryWriteOffStatusLabels[row.status]}
+                      </StatusBadge>
                     </div>
-                  ),
-                },
-              ]
-            : []),
-        ]}
-      />
+                    <p className="text-xs text-muted-foreground tabular-nums">
+                      {row.lineCount} стр. · {formatQuantity(row.totalQuantity)} ·{' '}
+                      {formatMoney(row.totalAmount)}
+                    </p>
+                    {canWriteOff ? (
+                      <div
+                        className="flex justify-end"
+                        onClick={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
+                      >
+                        <WriteOffDeleteControl
+                          writeOff={{ id: row.id, reason: row.reason, status: row.status }}
+                          onDeleted={() => {
+                            setSelectedIds((ids) => ids.filter((id) => id !== row.id))
+                            if (writeOffId === row.id) {
+                              closeWriteOff()
+                            }
+                            if (editDraftId === row.id) {
+                              setEditDraftId(null)
+                            }
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                  </article>
+                ))
+              )}
+              <ListPagination
+                page={page}
+                pageCount={pageCount}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                onPageSizeChange={handlePageSizeChange}
+                className="justify-end"
+              />
+            </div>
+            <div className="hidden md:block">
+              <DataTable
+                caption="Списания"
+                isLoading={writeOffsQuery.isLoading}
+                error={writeOffsQuery.error ? getErrorMessage(writeOffsQuery.error) : null}
+                data={items}
+                getRowId={(row) => row.id}
+                emptyTitle="Списаний нет"
+                emptyDescription={emptyDescription}
+                onRowClick={handleRowClick}
+                selection={{
+                  selectedIds,
+                  onSelectedIdsChange: setSelectedIds,
+                }}
+                pagination={{
+                  page,
+                  pageCount,
+                  onPageChange: setPage,
+                  pageSize,
+                  onPageSizeChange: handlePageSizeChange,
+                }}
+                sort={{
+                  columnId: listSort,
+                  direction: listDir,
+                  onSort: handleSort,
+                }}
+                columns={[
+                  {
+                    id: 'date',
+                    header: 'Дата',
+                    sortable: true,
+                    cell: (row) => formatDate(row.writeOffDate),
+                  },
+                  {
+                    id: 'status',
+                    header: 'Статус',
+                    sortable: true,
+                    cell: (row) => (
+                      <StatusBadge tone={inventoryWriteOffStatusTone(row.status)}>
+                        {inventoryWriteOffStatusLabels[row.status]}
+                      </StatusBadge>
+                    ),
+                  },
+                  {
+                    id: 'reason',
+                    header: 'Причина',
+                    sortable: true,
+                    cell: (row) => (
+                      <div className="min-w-0">
+                        <p className="truncate font-medium">{row.reason || '—'}</p>
+                        {row.notes ? (
+                          <p className="truncate text-xs text-muted-foreground">{row.notes}</p>
+                        ) : null}
+                      </div>
+                    ),
+                  },
+                  {
+                    id: 'lines',
+                    header: 'Строк',
+                    sortable: true,
+                    cell: (row) => String(row.lineCount),
+                  },
+                  {
+                    id: 'qty',
+                    header: 'Кол-во',
+                    sortable: true,
+                    cell: (row) => formatQuantity(row.totalQuantity),
+                  },
+                  {
+                    id: 'amount',
+                    header: 'Сумма',
+                    sortable: true,
+                    className: 'tabular-nums',
+                    cell: (row) => formatMoney(row.totalAmount),
+                  },
+                  {
+                    id: 'actor',
+                    header: 'Кто',
+                    sortable: true,
+                    cell: (row) => row.actorName || '—',
+                  },
+                  {
+                    id: 'created',
+                    header: 'Создан',
+                    sortable: true,
+                    cell: (row) => formatDateTime(row.createdAt),
+                  },
+                  ...(canWriteOff
+                    ? [
+                        {
+                          id: 'actions',
+                          header: 'Действия',
+                          className: 'w-[1%] whitespace-nowrap',
+                          cell: (row: InventoryWriteOffListItem) => (
+                            <div
+                              className="flex justify-end"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <WriteOffDeleteControl
+                                writeOff={{
+                                  id: row.id,
+                                  reason: row.reason,
+                                  status: row.status,
+                                }}
+                                onDeleted={() => {
+                                  setSelectedIds((ids) => ids.filter((id) => id !== row.id))
+                                  if (writeOffId === row.id) {
+                                    closeWriteOff()
+                                  }
+                                  if (editDraftId === row.id) {
+                                    setEditDraftId(null)
+                                  }
+                                }}
+                              />
+                            </div>
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </div>
+          </>
+        )
+      })()}
 
       <WriteOffStockSheet open={createOpen} onOpenChange={setCreateOpen} />
       <WriteOffStockSheet

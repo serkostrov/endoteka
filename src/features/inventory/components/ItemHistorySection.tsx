@@ -8,6 +8,7 @@ import { SectionCard } from '@/components/shared/SectionCard'
 import { formatQuantity } from '@/lib/constants/inventory'
 import { sheets } from '@/lib/constants/routes'
 import { formatDateTime } from '@/lib/utils/date'
+import { cn } from '@/lib/utils'
 
 import type { InventoryMovement } from '../services/inventory-service'
 
@@ -30,65 +31,101 @@ export function ItemHistorySection({ movements }: { movements: InventoryMovement
       }
       description={rows.length > 0 ? 'Приходы, заказы, продажи и списания' : undefined}
     >
-      <DataTable
-        caption="История"
-        dense
-        framed={false}
-        maxVisibleRows={8}
-        data={rows}
-        getRowId={(row) => row.id}
-        emptyTitle="Истории пока нет"
-        emptyDescription="Появится после прихода, списания в заказ или продажи."
-        columns={[
-          {
-            id: 'action',
-            header: 'Действие',
-            className: 'w-[9.5rem] align-top',
-            cell: (row) => <ActionLink row={row} />,
-          },
-          {
-            id: 'created',
-            header: 'Создано',
-            className: 'w-[8.5rem] align-top',
-            cell: (row) => (
-              <div className="min-w-0 leading-snug">
-                <p className="truncate text-sm text-foreground">{row.actorName || '—'}</p>
-                <p className="text-xs text-muted-foreground">{formatDateTime(row.createdAt)}</p>
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          Истории пока нет. Появится после прихода, списания в заказ или продажи.
+        </p>
+      ) : (
+        <>
+          <div className="space-y-2 md:hidden">
+            {rows.map((row) => (
+              <div key={row.id} className="rounded-lg border px-3 py-2.5 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <ActionLink row={row} />
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {row.actorName || '—'} · {formatDateTime(row.createdAt)}
+                    </p>
+                  </div>
+                  <p
+                    className={cn(
+                      'shrink-0 text-sm font-medium tabular-nums',
+                      row.quantity > 0 && 'text-emerald-700 dark:text-emerald-400',
+                    )}
+                  >
+                    {row.quantity > 0 ? '+' : '−'}
+                    {formatQuantity(Math.abs(row.quantity))}
+                  </p>
+                </div>
+                <div className="mt-1.5">
+                  <HistoryDescription row={row} />
+                </div>
               </div>
-            ),
-          },
-          {
-            id: 'description',
-            header: 'Описание',
-            className: 'min-w-[10rem] max-w-[18rem] align-top whitespace-normal',
-            cell: (row) => <HistoryDescription row={row} />,
-          },
-          {
-            id: 'in',
-            header: 'Приход',
-            className: 'w-[4.25rem] align-top text-right tabular-nums',
-            cell: (row) =>
-              row.quantity > 0 ? (
-                <span className="font-medium text-emerald-700 dark:text-emerald-400">
-                  {formatQuantity(row.quantity)}
-                </span>
-              ) : (
-                <span className="text-muted-foreground/50">—</span>
-              ),
-          },
-          {
-            id: 'out',
-            header: 'Уход',
-            className: 'w-[3.75rem] align-top text-right tabular-nums',
-            cell: (row) =>
-              row.quantity < 0 ? (
-                <span className="font-medium">{formatQuantity(Math.abs(row.quantity))}</span>
-              ) : (
-                <span className="text-muted-foreground/50">—</span>
-              ),
-          },
-        ]}
-      />
+            ))}
+          </div>
+          <div className="hidden md:block">
+            <DataTable
+              caption="История"
+              dense
+              framed={false}
+              maxVisibleRows={8}
+              data={rows}
+              getRowId={(row) => row.id}
+              emptyTitle="Истории пока нет"
+              emptyDescription="Появится после прихода, списания в заказ или продажи."
+              columns={[
+                {
+                  id: 'action',
+                  header: 'Действие',
+                  className: 'w-[9.5rem] align-top',
+                  cell: (row) => <ActionLink row={row} />,
+                },
+                {
+                  id: 'created',
+                  header: 'Создано',
+                  className: 'w-[8.5rem] align-top',
+                  cell: (row) => (
+                    <div className="min-w-0 leading-snug">
+                      <p className="truncate text-sm text-foreground">{row.actorName || '—'}</p>
+                      <p className="text-xs text-muted-foreground">{formatDateTime(row.createdAt)}</p>
+                    </div>
+                  ),
+                },
+                {
+                  id: 'description',
+                  header: 'Описание',
+                  className: 'min-w-[10rem] max-w-[18rem] align-top whitespace-normal',
+                  cell: (row) => <HistoryDescription row={row} />,
+                },
+                {
+                  id: 'in',
+                  header: 'Приход',
+                  className: 'w-[4.25rem] align-top text-right tabular-nums',
+                  cell: (row) =>
+                    row.quantity > 0 ? (
+                      <span className="font-medium text-emerald-700 dark:text-emerald-400">
+                        {formatQuantity(row.quantity)}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    ),
+                },
+                {
+                  id: 'out',
+                  header: 'Уход',
+                  className: 'w-[3.75rem] align-top text-right tabular-nums',
+                  cell: (row) =>
+                    row.quantity < 0 ? (
+                      <span className="font-medium">{formatQuantity(Math.abs(row.quantity))}</span>
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    ),
+                },
+              ]}
+            />
+          </div>
+        </>
+      )}
     </SectionCard>
   )
 }

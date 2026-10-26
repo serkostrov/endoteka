@@ -37,9 +37,9 @@ const cellClass = 'min-w-0 px-3 py-2.5 align-middle whitespace-normal'
 
 const COLUMNS: { id: OrderSortColumn; label: string; className: string }[] = [
   { id: 'number', label: 'Заказ', className: 'w-36' },
-  { id: 'deadline', label: 'Срок', className: 'hidden w-28 md:table-cell' },
-  { id: 'status', label: 'Статус', className: 'w-44 md:w-52' },
-  { id: 'responsible', label: 'Ответственный', className: 'hidden w-32 md:table-cell' },
+  { id: 'deadline', label: 'Срок', className: 'w-28' },
+  { id: 'status', label: 'Статус', className: 'w-52' },
+  { id: 'responsible', label: 'Ответственный', className: 'w-32' },
   { id: 'device', label: 'Изделие', className: '' },
   { id: 'client', label: 'Клиент', className: 'w-64' },
   { id: 'total', label: 'Итог', className: 'w-36' },
@@ -138,7 +138,33 @@ export function OrderListTable({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="space-y-2 md:hidden">
+        {selectable ? (
+          <div className="flex items-center gap-2 px-1">
+            <Checkbox
+              checked={allPageSelected ? true : somePageSelected ? 'indeterminate' : false}
+              onCheckedChange={(value) => toggleAllPage(value === true)}
+              aria-label="Выбрать все на странице"
+            />
+            <span className="text-xs text-muted-foreground">Выбрать все на странице</span>
+          </div>
+        ) : null}
+        {data.map((order) => {
+          const selected = selectedIds.includes(order.id)
+          return (
+            <OrderListCard
+              key={order.id}
+              order={order}
+              selected={selected}
+              selectable={selectable}
+              onToggle={(checked) => toggleOne(order.id, checked)}
+              onOpen={() => onOpenOrder(order.id)}
+            />
+          )
+        })}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-xl border bg-card md:block">
         <Table className="min-w-5xl table-fixed">
           <TableCaption className="sr-only">Список заказов</TableCaption>
           <colgroup>
@@ -218,28 +244,25 @@ export function OrderListTable({
                       secondary={formatDateTime(order.createdAt)}
                     />
                   </TableCell>
-                  <TableCell className={cn(cellClass, 'hidden md:table-cell')}>
+                  <TableCell className={cellClass}>
                     <TwoLine primary={deadline.primary} secondary={deadline.secondary} />
                   </TableCell>
                   <TableCell className={cn(cellClass, 'overflow-hidden')}>
-                    <div className="flex min-w-0 max-w-full items-center gap-1.5">
-                      <div
-                        className="-ml-1.5 min-w-0 flex-1"
-                        onClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => event.stopPropagation()}
-                        onPointerDown={(event) => event.stopPropagation()}
-                      >
-                        <OrderStatusMenu
-                          orderId={order.id}
-                          statusCode={order.statusCode}
-                          statusName={order.statusName}
-                          compact
-                        />
-                      </div>
-                      <OrderDeadlineHint order={order} className="shrink-0 md:hidden" />
+                    <div
+                      className="-ml-1.5 min-w-0 max-w-full"
+                      onClick={(event) => event.stopPropagation()}
+                      onKeyDown={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => event.stopPropagation()}
+                    >
+                      <OrderStatusMenu
+                        orderId={order.id}
+                        statusCode={order.statusCode}
+                        statusName={order.statusName}
+                        compact
+                      />
                     </div>
                   </TableCell>
-                  <TableCell className={cn(cellClass, 'hidden overflow-hidden md:table-cell')}>
+                  <TableCell className={cn(cellClass, 'overflow-hidden')}>
                     <span className="block truncate" title={order.responsibleName || 'Не назначен'}>
                       {order.responsibleName || 'Не назначен'}
                     </span>
@@ -365,6 +388,100 @@ function SortableHead({
         )}
       </button>
     </TableHead>
+  )
+}
+
+function OrderListCard({
+  order,
+  selected,
+  selectable,
+  onToggle,
+  onOpen,
+}: {
+  order: OrderListItem
+  selected: boolean
+  selectable: boolean
+  onToggle: (checked: boolean) => void
+  onOpen: () => void
+}) {
+  const serial = deviceSerialLine(order.serialNumber)
+
+  return (
+    <article
+      className={cn(
+        'flex cursor-pointer gap-2.5 rounded-lg border bg-card px-3 py-2.5 shadow-xs transition-colors',
+        'hover:bg-accent/40',
+        selected && 'border-primary/40 bg-primary/5',
+      )}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onOpen()
+        }
+      }}
+      role="link"
+      tabIndex={0}
+    >
+      {selectable ? (
+        <div
+          className="flex shrink-0 items-start pt-0.5"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <Checkbox
+            checked={selected}
+            onCheckedChange={(value) => onToggle(value === true)}
+            aria-label={`Выбрать заказ ${order.number}`}
+          />
+        </div>
+      ) : null}
+
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-primary">{order.number}</p>
+            <p className="truncate text-xs text-muted-foreground tabular-nums">
+              {formatDateTime(order.createdAt)}
+            </p>
+          </div>
+          <p className="shrink-0 text-sm font-medium tabular-nums">
+            {formatMoney(order.totalAmount)} ₽
+          </p>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <div
+            className="-ml-1 min-w-0 max-w-full"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <OrderStatusMenu
+              orderId={order.id}
+              statusCode={order.statusCode}
+              statusName={order.statusName}
+              compact
+            />
+          </div>
+          <OrderDeadlineHint order={order} className="shrink-0" />
+        </div>
+
+        <div className="min-w-0 space-y-0.5 text-xs">
+          <p className="truncate font-medium text-primary" title={order.customerName}>
+            {order.customerName || '—'}
+          </p>
+          <p className="truncate text-muted-foreground" title={order.deviceLabel || undefined}>
+            {order.deviceLabel || '—'}
+            {serial ? ` · ${serial}` : ''}
+          </p>
+          <p className="truncate text-muted-foreground">
+            {order.responsibleName || 'Не назначен'}
+          </p>
+        </div>
+      </div>
+    </article>
   )
 }
 
