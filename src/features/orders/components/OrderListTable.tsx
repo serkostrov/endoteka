@@ -25,11 +25,11 @@ import {
 import { deviceSerialLine } from '@/features/devices/classification'
 import { DeadlineState } from '@/lib/constants/orders'
 import { formatMoney } from '@/lib/constants/inventory'
-import { formatDate, formatDateTime } from '@/lib/utils/date'
+import { formatDateTime } from '@/lib/utils/date'
 import { formatInteger } from '@/lib/utils/number'
 import { cn } from '@/lib/utils'
 
-import { OrderDeadlineHint } from './OrderBadges'
+import { OrderDeadlineHint, useStatusCodesHidingDeadline } from './OrderBadges'
 import { OrderStatusMenu } from './OrderStatusActions'
 import type { OrderListItem, OrderSortColumn } from '../services/orders-service'
 
@@ -37,8 +37,8 @@ const cellClass = 'min-w-0 px-3 py-2.5 align-middle whitespace-normal'
 
 const COLUMNS: { id: OrderSortColumn; label: string; className: string }[] = [
   { id: 'number', label: 'Заказ', className: 'w-36' },
-  { id: 'deadline', label: 'Срок', className: 'w-28' },
-  { id: 'status', label: 'Статус', className: 'w-52' },
+  { id: 'deadline', label: 'Срок', className: 'hidden w-28 md:table-cell' },
+  { id: 'status', label: 'Статус', className: 'w-44 md:w-52' },
   { id: 'responsible', label: 'Ответственный', className: 'hidden w-32 md:table-cell' },
   { id: 'device', label: 'Изделие', className: '' },
   { id: 'client', label: 'Клиент', className: 'w-64' },
@@ -82,6 +82,7 @@ export function OrderListTable({
 }: OrderListTableProps) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
   const selectable = Boolean(onSelectedIdsChange)
+  const hideDeadlineCodes = useStatusCodesHidingDeadline()
   const pageIds = useMemo(() => data.map((order) => order.id), [data])
   const selectedOnPage = pageIds.filter((id) => selectedIds.includes(id))
   const allPageSelected = pageIds.length > 0 && selectedOnPage.length === pageIds.length
@@ -176,7 +177,7 @@ export function OrderListTable({
           </TableHeader>
           <TableBody>
             {data.map((order, index) => {
-              const deadline = deadlineLines(order)
+              const deadline = deadlineLines(order, hideDeadlineCodes)
               const selected = selectedIds.includes(order.id)
 
               return (
@@ -217,35 +218,45 @@ export function OrderListTable({
                       secondary={formatDateTime(order.createdAt)}
                     />
                   </TableCell>
-                  <TableCell className={cellClass}>
+                  <TableCell className={cn(cellClass, 'hidden md:table-cell')}>
                     <TwoLine primary={deadline.primary} secondary={deadline.secondary} />
                   </TableCell>
                   <TableCell className={cn(cellClass, 'overflow-hidden')}>
-                    <div
-                      className="-ml-1.5 min-w-0 max-w-full"
-                      onClick={(event) => event.stopPropagation()}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      onPointerDown={(event) => event.stopPropagation()}
-                    >
-                      <OrderStatusMenu
-                        orderId={order.id}
-                        statusCode={order.statusCode}
-                        statusName={order.statusName}
-                        compact
-                      />
+                    <div className="flex min-w-0 max-w-full items-center gap-1.5">
+                      <div
+                        className="-ml-1.5 min-w-0 flex-1"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                        onPointerDown={(event) => event.stopPropagation()}
+                      >
+                        <OrderStatusMenu
+                          orderId={order.id}
+                          statusCode={order.statusCode}
+                          statusName={order.statusName}
+                          compact
+                        />
+                      </div>
+                      <OrderDeadlineHint order={order} className="shrink-0 md:hidden" />
                     </div>
                   </TableCell>
                   <TableCell className={cn(cellClass, 'hidden overflow-hidden md:table-cell')}>
-                    <span className="block truncate">{order.responsibleName || 'Не назначен'}</span>
+                    <span className="block truncate" title={order.responsibleName || 'Не назначен'}>
+                      {order.responsibleName || 'Не назначен'}
+                    </span>
                   </TableCell>
-                  <TableCell className={cellClass}>
+                  <TableCell className={cn(cellClass, 'overflow-hidden')}>
                     <TwoLine
                       primary={order.deviceLabel || '—'}
                       secondary={deviceSerialLine(order.serialNumber) || undefined}
                     />
                   </TableCell>
-                  <TableCell className={cellClass}>
-                    <span className="block truncate font-medium text-primary">{order.customerName}</span>
+                  <TableCell className={cn(cellClass, 'overflow-hidden')}>
+                    <span
+                      className="block truncate font-medium text-primary"
+                      title={order.customerName}
+                    >
+                      {order.customerName}
+                    </span>
                   </TableCell>
                   <TableCell className={cn(cellClass, 'pr-4 tabular-nums')}>
                     <span className="font-medium">{formatMoney(order.totalAmount)} ₽</span>
@@ -368,13 +379,14 @@ function TwoLine({ primary, secondary }: { primary: ReactNode; secondary?: React
   )
 }
 
-function deadlineLines(order: OrderListItem) {
-  if (!order.deadline) {
+function deadlineLines(order: OrderListItem, hideDeadlineCodes: Set<string>) {
+  if (
+    hideDeadlineCodes.has(order.statusCode) ||
+    !order.deadline ||
+    order.deadlineState === DeadlineState.None ||
+    order.deadlineState === DeadlineState.Closed
+  ) {
     return { primary: <span className="text-muted-foreground">—</span>, secondary: undefined }
-  }
-
-  if (order.deadlineState === DeadlineState.None || order.deadlineState === DeadlineState.Closed) {
-    return { primary: formatDate(order.deadline), secondary: undefined }
   }
 
   return {

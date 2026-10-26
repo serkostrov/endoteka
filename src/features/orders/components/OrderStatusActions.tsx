@@ -21,7 +21,7 @@ import { cn } from '@/lib/utils'
 
 import { OrderStatusBadge } from './OrderBadges'
 import { useChangeOrderStatus, useOrderStatusCatalog } from '../hooks/use-orders'
-import { groupStatusCatalog, statusBadgeStyle, type OrderStatusCatalogItem } from '../lib/status-catalog'
+import { groupStatusCatalog, statusCatalogBadgeStyle, type OrderStatusCatalogItem } from '../lib/status-catalog'
 
 type OrderStatusMenuProps = {
   orderId: string
@@ -80,7 +80,7 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
             size={compact ? 'xs' : 'sm'}
             className={cn(
               'gap-1 px-1',
-              compact && 'h-6 max-w-full min-w-0 shrink justify-start py-0',
+              compact && 'h-6 w-full max-w-full min-w-0 justify-start py-0',
             )}
             onClick={(event) => event.stopPropagation()}
             aria-label={`Статус: ${statusName}`}
@@ -88,7 +88,11 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
             <OrderStatusBadge
               code={statusCode}
               name={statusName}
-              className={compact ? 'min-w-0 max-w-full shrink truncate' : undefined}
+              className={
+                compact
+                  ? 'w-0 min-w-0 max-w-full flex-1 justify-start text-left shrink'
+                  : undefined
+              }
             />
             <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
           </Button>
@@ -114,15 +118,17 @@ export function OrderStatusMenu({ orderId, statusCode, statusName, compact = fal
                       if (status.requiresWarranty || status.isDestructive) {
                         event.preventDefault()
                         setWarrantyDraft(null)
+                        setOpen(false)
                         deferOpenModal(() => setTarget(status))
                         return
                       }
+                      setOpen(false)
                       void applyStatus(status)
                     }}
                   >
                     <span
                       className="rounded-md px-1.5 py-0.5 text-xs font-medium"
-                      style={statusBadgeStyle(status.color || status.groupColor)}
+                      style={statusCatalogBadgeStyle(status)}
                     >
                       {status.name}
                     </span>

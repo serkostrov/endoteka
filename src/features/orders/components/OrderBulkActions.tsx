@@ -39,7 +39,7 @@ import {
   formatCourierPhone,
   printCourierRouteSheet,
 } from '../lib/print-courier-route-sheet'
-import { groupStatusCatalog, statusBadgeStyle, type OrderStatusCatalogItem } from '../lib/status-catalog'
+import { groupStatusCatalog, statusCatalogBadgeStyle, type OrderStatusCatalogItem } from '../lib/status-catalog'
 import { getOrdersCourierRouteRows } from '../services/orders-service'
 
 type OrderBulkActionsProps = {
@@ -253,7 +253,7 @@ export function OrderBulkActions({ selectedIds, onClear }: OrderBulkActionsProps
                       >
                         <span
                           className="rounded-md px-1.5 py-0.5 text-xs font-medium"
-                          style={statusBadgeStyle(status.color || status.groupColor)}
+                          style={statusCatalogBadgeStyle(status)}
                         >
                           {status.name}
                         </span>

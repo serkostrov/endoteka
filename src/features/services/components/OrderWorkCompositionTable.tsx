@@ -138,59 +138,75 @@ export function OrderWorkCompositionTable({ orderId }: { orderId: string }) {
     <>
       <div className="space-y-4">
         {hasLines ? (
-          <div className="overflow-x-auto">
-            <Table className="table-fixed">
-              <colgroup>
-                <col style={{ width: '2rem' }} />
-                <col />
-                <col style={{ width: '7.5rem' }} />
-                <col style={{ width: '6.5rem' }} />
-                <col style={{ width: '7.5rem' }} />
-                <col style={{ width: '2rem' }} />
-              </colgroup>
-              <TableHeader>
-                <TableRow className="border-b hover:bg-transparent">
-                  <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
-                  <TableHead className={cn(cellPad, 'h-8 text-xs font-medium text-muted-foreground')}>
-                    Наименование
-                  </TableHead>
-                  <TableHead
-                    className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
-                  >
-                    Цена, ₽
-                  </TableHead>
-                  <TableHead
-                    className={cn(
-                      cellPad,
-                      'h-8 pr-5 text-right text-xs font-medium text-muted-foreground',
-                    )}
-                  >
-                    Кол-во
-                  </TableHead>
-                  <TableHead
-                    className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
-                  >
-                    Сумма, ₽
-                  </TableHead>
-                  <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {groups.map((group) => (
-                  <ActorGroupRows
-                    key={group.actorName}
-                    group={group}
-                    canWriteOff={canWriteOff}
-                    canUpdateServices={canUpdateServices}
-                    onOpenPart={(itemId) => setOpenedItemId(itemId)}
-                    onOpenCatalogService={(line) => setOpenedCatalogService(line)}
-                    onOpenCustomPart={(line) => setCustomPart(line)}
-                    onOpenCustomService={(line) => setCustomService(line)}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <>
+            <div className="space-y-3 md:hidden">
+              {groups.map((group) => (
+                <ActorGroupCards
+                  key={group.actorName}
+                  group={group}
+                  canWriteOff={canWriteOff}
+                  canUpdateServices={canUpdateServices}
+                  onOpenPart={(itemId) => setOpenedItemId(itemId)}
+                  onOpenCatalogService={(line) => setOpenedCatalogService(line)}
+                  onOpenCustomPart={(line) => setCustomPart(line)}
+                  onOpenCustomService={(line) => setCustomService(line)}
+                />
+              ))}
+            </div>
+            <div className="hidden md:block">
+              <Table className="min-w-[40rem] table-fixed">
+                <colgroup>
+                  <col style={{ width: '2rem' }} />
+                  <col />
+                  <col style={{ width: '7.5rem' }} />
+                  <col style={{ width: '6.5rem' }} />
+                  <col style={{ width: '7.5rem' }} />
+                  <col style={{ width: '2rem' }} />
+                </colgroup>
+                <TableHeader>
+                  <TableRow className="border-b hover:bg-transparent">
+                    <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+                    <TableHead className={cn(cellPad, 'h-8 text-xs font-medium text-muted-foreground')}>
+                      Наименование
+                    </TableHead>
+                    <TableHead
+                      className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
+                    >
+                      Цена, ₽
+                    </TableHead>
+                    <TableHead
+                      className={cn(
+                        cellPad,
+                        'h-8 pr-5 text-right text-xs font-medium text-muted-foreground',
+                      )}
+                    >
+                      Кол-во
+                    </TableHead>
+                    <TableHead
+                      className={cn(cellPad, 'h-8 text-right text-xs font-medium text-muted-foreground')}
+                    >
+                      Сумма, ₽
+                    </TableHead>
+                    <TableHead className={cn(cellPad, 'h-8')} aria-hidden />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {groups.map((group) => (
+                    <ActorGroupRows
+                      key={group.actorName}
+                      group={group}
+                      canWriteOff={canWriteOff}
+                      canUpdateServices={canUpdateServices}
+                      onOpenPart={(itemId) => setOpenedItemId(itemId)}
+                      onOpenCatalogService={(line) => setOpenedCatalogService(line)}
+                      onOpenCustomPart={(line) => setCustomPart(line)}
+                      onOpenCustomService={(line) => setCustomService(line)}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         ) : (
           <EmptyState
             title="Состав работ пока пуст"
@@ -366,6 +382,82 @@ function WorkCompositionFields({
   )
 }
 
+type ActorGroupHandlers = {
+  group: ActorGroup
+  canWriteOff: boolean
+  canUpdateServices: boolean
+  onOpenPart: (itemId: string) => void
+  onOpenCatalogService: (line: WorkDraftLine) => void
+  onOpenCustomPart: (line: WorkDraftLine) => void
+  onOpenCustomService: (line: WorkDraftLine) => void
+}
+
+function lineCanEdit(
+  line: WorkDraftLine,
+  canWriteOff: boolean,
+  canUpdateServices: boolean,
+) {
+  return line.kind === 'part'
+    ? canWriteOff || (canUpdateServices && !line.itemId)
+    : canUpdateServices
+}
+
+function openWorkLine(
+  line: WorkDraftLine,
+  handlers: Pick<
+    ActorGroupHandlers,
+    'onOpenPart' | 'onOpenCatalogService' | 'onOpenCustomPart' | 'onOpenCustomService'
+  >,
+) {
+  if (line.kind === 'part') {
+    if (line.itemId) {
+      handlers.onOpenPart(line.itemId)
+    } else {
+      handlers.onOpenCustomPart(line)
+    }
+    return
+  }
+  if (line.templateId) {
+    handlers.onOpenCatalogService(line)
+  } else {
+    handlers.onOpenCustomService(line)
+  }
+}
+
+function ActorGroupCards({
+  group,
+  canWriteOff,
+  canUpdateServices,
+  onOpenPart,
+  onOpenCatalogService,
+  onOpenCustomPart,
+  onOpenCustomService,
+}: ActorGroupHandlers) {
+  return (
+    <section className="space-y-2">
+      <p className="px-0.5 text-xs font-semibold tracking-wide text-foreground/80">{group.actorName}</p>
+      <ul className="space-y-2">
+        {group.lines.map((line) => (
+          <li key={line.key}>
+            <WorkLineCard
+              line={line}
+              canEdit={lineCanEdit(line, canWriteOff, canUpdateServices)}
+              onOpen={() =>
+                openWorkLine(line, {
+                  onOpenPart,
+                  onOpenCatalogService,
+                  onOpenCustomPart,
+                  onOpenCustomService,
+                })
+              }
+            />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
 function ActorGroupRows({
   group,
   canWriteOff,
@@ -374,15 +466,7 @@ function ActorGroupRows({
   onOpenCatalogService,
   onOpenCustomPart,
   onOpenCustomService,
-}: {
-  group: ActorGroup
-  canWriteOff: boolean
-  canUpdateServices: boolean
-  onOpenPart: (itemId: string) => void
-  onOpenCatalogService: (line: WorkDraftLine) => void
-  onOpenCustomPart: (line: WorkDraftLine) => void
-  onOpenCustomService: (line: WorkDraftLine) => void
-}) {
+}: ActorGroupHandlers) {
   return (
     <>
       <TableRow className="hover:bg-transparent">
@@ -394,29 +478,98 @@ function ActorGroupRows({
         <WorkLineRow
           key={line.key}
           line={line}
-          canEdit={
-            line.kind === 'part'
-              ? canWriteOff || (canUpdateServices && !line.itemId)
-              : canUpdateServices
+          canEdit={lineCanEdit(line, canWriteOff, canUpdateServices)}
+          onOpen={() =>
+            openWorkLine(line, {
+              onOpenPart,
+              onOpenCatalogService,
+              onOpenCustomPart,
+              onOpenCustomService,
+            })
           }
-          onOpen={() => {
-            if (line.kind === 'part') {
-              if (line.itemId) {
-                onOpenPart(line.itemId)
-              } else {
-                onOpenCustomPart(line)
-              }
-              return
-            }
-            if (line.templateId) {
-              onOpenCatalogService(line)
-            } else {
-              onOpenCustomService(line)
-            }
-          }}
         />
       ))}
     </>
+  )
+}
+
+function WorkLineCard({
+  line,
+  canEdit,
+  onOpen,
+}: {
+  line: WorkDraftLine
+  canEdit: boolean
+  onOpen: () => void
+}) {
+  const workDraft = useOrderWorkCompositionDraft()
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const amount = line.quantity * line.unitPrice
+  const TypeIcon = line.kind === 'part' ? Briefcase : Wrench
+
+  return (
+    <div className="rounded-lg border bg-card p-3 shadow-xs">
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          className="min-w-0 flex-1 text-left"
+          onClick={onOpen}
+          title="Открыть карточку"
+        >
+          <div className="flex items-start gap-2">
+            <TypeIcon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground opacity-70" aria-hidden />
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium text-primary">{line.name}</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {isOrderOnlyLine(line) ? (
+                  <StatusBadge tone="neutral" className="text-[10px]">
+                    Только для заказа
+                  </StatusBadge>
+                ) : null}
+                {line.subtitle ? (
+                  <span className="text-[11px] text-muted-foreground">{line.subtitle}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </button>
+        {canEdit ? (
+          <IconActionButton
+            label="Удалить из заказа"
+            variant="ghost"
+            size="icon-xs"
+            className="shrink-0 text-destructive hover:text-destructive"
+            disabled={workDraft.saving}
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 />
+          </IconActionButton>
+        ) : null}
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <label className="space-y-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Цена, ₽</span>
+          <InlineNumberField line={line} field="unitPrice" disabled={!canEdit} align="left" />
+        </label>
+        <label className="space-y-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Кол-во</span>
+          <InlineNumberField
+            line={line}
+            field="quantity"
+            disabled={!canEdit}
+            suffix={line.unitName}
+            align="left"
+          />
+        </label>
+        <div className="space-y-1 text-right">
+          <span className="text-[11px] font-medium text-muted-foreground">Сумма, ₽</span>
+          <p className="h-8 content-center text-sm tabular-nums">{formatMoney(amount)}</p>
+        </div>
+      </div>
+
+      <WorkLineDeleteDialog line={line} open={deleteOpen} onOpenChange={setDeleteOpen} />
+    </div>
   )
 }
 
@@ -513,26 +666,41 @@ function WorkLineRow({
             <Trash2 />
           </IconActionButton>
         ) : null}
-
-        <ConfirmDialog
-          open={deleteOpen}
-          title={line.kind === 'part' ? 'Удалить из состава' : 'Удалить услугу'}
-          description={
-            line.kind === 'part'
-              ? `${line.name} будет убрана из состава. Списание со склада — только после сохранения.`
-              : `«${line.name}» будет убрана из состава.`
-          }
-          confirmLabel="Удалить"
-          isPending={false}
-          onOpenChange={setDeleteOpen}
-          onConfirm={() => {
-            workDraft.removeLine(line.key)
-            setDeleteOpen(false)
-            toast.success(line.kind === 'part' ? 'Позиция убрана из состава' : 'Услуга убрана из состава')
-          }}
-        />
+        <WorkLineDeleteDialog line={line} open={deleteOpen} onOpenChange={setDeleteOpen} />
       </TableCell>
     </TableRow>
+  )
+}
+
+function WorkLineDeleteDialog({
+  line,
+  open,
+  onOpenChange,
+}: {
+  line: WorkDraftLine
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const workDraft = useOrderWorkCompositionDraft()
+
+  return (
+    <ConfirmDialog
+      open={open}
+      title={line.kind === 'part' ? 'Удалить из состава' : 'Удалить услугу'}
+      description={
+        line.kind === 'part'
+          ? `${line.name} будет убрана из состава. Списание со склада — только после сохранения.`
+          : `«${line.name}» будет убрана из состава.`
+      }
+      confirmLabel="Удалить"
+      isPending={false}
+      onOpenChange={onOpenChange}
+      onConfirm={() => {
+        workDraft.removeLine(line.key)
+        onOpenChange(false)
+        toast.success(line.kind === 'part' ? 'Позиция убрана из состава' : 'Услуга убрана из состава')
+      }}
+    />
   )
 }
 
@@ -839,11 +1007,13 @@ function InlineNumberField({
   field,
   disabled,
   suffix,
+  align = 'right',
 }: {
   line: WorkDraftLine
   field: 'quantity' | 'unitPrice'
   disabled: boolean
   suffix?: string
+  align?: 'left' | 'right'
 }) {
   const workDraft = useOrderWorkCompositionDraft()
   const current = field === 'quantity' ? line.quantity : line.unitPrice
@@ -938,11 +1108,14 @@ function InlineNumberField({
     workDraft.updateLine(line.key, { unitPrice: parsed })
   }
 
+  const textAlign = align === 'left' ? 'text-left' : 'text-right'
+  const justify = align === 'left' ? 'justify-start' : 'justify-end'
+
   if (isQty) {
     return (
-      <div className="inline-flex w-full items-center justify-end gap-1">
+      <div className={cn('inline-flex w-full items-center gap-1', justify)}>
         {disabled ? (
-          <span className="min-w-[2.25rem] text-right text-sm tabular-nums text-foreground">
+          <span className={cn('min-w-[2.25rem] text-sm tabular-nums text-foreground', textAlign)}>
             {formatQuantity(current)}
           </span>
         ) : (
@@ -954,7 +1127,8 @@ function InlineNumberField({
             aria-label="Количество"
             className={cn(
               spinless,
-              'h-7 w-[2.75rem] shrink-0 border-transparent bg-transparent px-0.5 text-right text-sm shadow-none tabular-nums',
+              'h-8 w-full min-w-0 shrink border-border/60 bg-background px-1.5 text-sm shadow-none tabular-nums md:h-7 md:w-[2.75rem] md:shrink-0 md:border-transparent md:bg-transparent md:px-0.5',
+              textAlign,
               'hover:border-border hover:bg-background',
               'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
               flash && 'animate-stock-cap',
@@ -982,7 +1156,7 @@ function InlineNumberField({
 
   if (disabled) {
     return (
-      <span className="block whitespace-nowrap text-right text-sm tabular-nums text-foreground">
+      <span className={cn('block whitespace-nowrap text-sm tabular-nums text-foreground', textAlign)}>
         {formatMoney(current)}
       </span>
     )
@@ -997,7 +1171,8 @@ function InlineNumberField({
       aria-label="Цена"
       className={cn(
         spinless,
-        'ml-auto h-7 w-full min-w-[6.5rem] max-w-[8rem] border-transparent bg-transparent px-1.5 text-right text-sm shadow-none tabular-nums',
+        'h-8 w-full min-w-0 border-border/60 bg-background px-1.5 text-sm shadow-none tabular-nums md:ml-auto md:h-7 md:min-w-[6.5rem] md:max-w-[8rem] md:border-transparent md:bg-transparent',
+        textAlign,
         'hover:border-border hover:bg-background',
         'focus-visible:border-input focus-visible:bg-background focus-visible:ring-1',
       )}

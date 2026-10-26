@@ -11,6 +11,7 @@ import { ImageHoverPreview, ImageLightbox, type ImageLightboxItem } from '@/comp
 import { LoadingState } from '@/components/shared/LoadingState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
 import { useHasPermission, useCurrentUser } from '@/features/auth'
+import { DiagnosticJournalEvent } from '@/features/diagnostics/constants'
 import { useAddOrderJournalNote, useOrderJournal } from '@/features/diagnostics/hooks/use-diagnostics'
 import {
   formatJournalEventBody,
@@ -33,6 +34,7 @@ import type { Json } from '@/types/database'
 import { useDeleteOrderAttachment, useOrderAttachments, useUploadOrderFile } from '../hooks/use-orders'
 import { orderJournalEventTypeLabel } from '../lib/journal-labels'
 import type { OrderAttachment } from '../services/orders-service'
+import { JournalStatusChangeBody } from './OrderBadges'
 import { OrderJournalComposer } from './OrderJournalComposer'
 
 /** Окно склейки подряд загруженных файлов в одну запись ленты. */
@@ -42,13 +44,15 @@ const ATTACHMENT_PREVIEW_LIMIT = 3
 type OrderActivityFeedProps = {
   orderId: string
   orderNumber?: string
+  /** Скрыть внутренний заголовок (например, когда Sheet уже даёт title). */
+  hideHeader?: boolean
 }
 
 type FeedEntry =
   | { kind: 'single'; event: OrderJournalEvent }
   | { kind: 'attachments'; events: OrderJournalEvent[] }
 
-export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedProps) {
+export function OrderActivityFeed({ orderId, orderNumber, hideHeader = false }: OrderActivityFeedProps) {
   const user = useCurrentUser()
   const canWrite =
     useHasPermission(Permission.OrdersUpdate) || useHasPermission(Permission.OrdersCreate)
@@ -114,10 +118,12 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
 
   return (
     <div className="flex h-full min-h-0 flex-col text-[13px] leading-snug text-foreground/80">
-      <div className="border-b border-border/70 px-3 py-2">
-        <p className="text-xs font-medium text-foreground/90">История</p>
-        <p className="text-[11px] text-muted-foreground">События, фото, ссылки и задачи заказа</p>
-      </div>
+      {hideHeader ? null : (
+        <div className="border-b border-border/70 px-3 py-2">
+          <p className="text-xs font-medium text-foreground/90">История</p>
+          <p className="text-[11px] text-muted-foreground">События, фото, ссылки и задачи заказа</p>
+        </div>
+      )}
       <div ref={scrollerRef} className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {events.length === 0 ? (
           <EmptyState
@@ -187,7 +193,10 @@ export function OrderActivityFeed({ orderId, orderNumber }: OrderActivityFeedPro
                               : ''}
                           </span>
                         </div>
-                        {isTaskJournalEvent(event.eventType) ? null : (
+                        {isTaskJournalEvent(event.eventType) ? null : event.eventType ===
+                          DiagnosticJournalEvent.StatusChanged ? (
+                          <JournalStatusChangeBody event={event} />
+                        ) : (
                           <p
                             className={cn(
                               event.eventType === OrderJournalEventType.Comment && 'whitespace-pre-wrap',
@@ -450,7 +459,7 @@ function AttachmentFeedTile({
       {canDelete ? (
         <button
           type="button"
-          className="absolute top-0.5 right-0.5 flex size-6 items-center justify-center rounded-md bg-background/90 text-destructive opacity-0 shadow-sm ring-1 ring-border transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-sm bg-background/90 text-destructive opacity-0 shadow-sm ring-1 ring-border transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
           aria-label={`Удалить «${label}»`}
           disabled={deleting}
           onClick={(event) => {
@@ -458,7 +467,7 @@ function AttachmentFeedTile({
             onDelete()
           }}
         >
-          <Trash2 className="size-3.5" />
+          <Trash2 className="size-2.5" />
         </button>
       ) : null}
     </div>

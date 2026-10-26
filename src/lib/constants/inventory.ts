@@ -53,6 +53,30 @@ export function inventoryReceiptStatusTone(status: InventoryReceiptStatus) {
   return 'success' as const
 }
 
+export const InventoryWriteOffStatus = {
+  Draft: 'draft',
+  Posted: 'posted',
+} as const
+
+export type InventoryWriteOffStatus =
+  (typeof InventoryWriteOffStatus)[keyof typeof InventoryWriteOffStatus]
+
+export const inventoryWriteOffStatusLabels: Record<InventoryWriteOffStatus, string> = {
+  draft: 'Черновик',
+  posted: 'Проведён',
+}
+
+export function isInventoryWriteOffStatus(value: string): value is InventoryWriteOffStatus {
+  return value === InventoryWriteOffStatus.Draft || value === InventoryWriteOffStatus.Posted
+}
+
+export function inventoryWriteOffStatusTone(status: InventoryWriteOffStatus) {
+  if (status === InventoryWriteOffStatus.Draft) {
+    return 'neutral' as const
+  }
+  return 'success' as const
+}
+
 export function isInventoryMovementType(value: string): value is InventoryMovementType {
   return value in inventoryMovementTypeLabels
 }

@@ -46,6 +46,7 @@ import {
   listInventoryWriteOffs,
   receiveInventory,
   saveInventoryReceiptDraft,
+  saveInventoryWriteOffDraft,
   createInventoryWriteOff,
   removeOrderPartLine,
   listInventoryRegistryCategories,
@@ -63,7 +64,7 @@ import {
   type InventoryReceiptSortColumn,
   type InventoryStockExportFilters,
   type InventoryWriteOffDeleteMode,
-  type InventoryWriteOffSortColumn,
+  type InventoryWriteOffListFilters,
   type ReceiptLineInput,
   type WriteOffLineInput,
 } from '../services/inventory-service'
@@ -210,12 +211,17 @@ export function useDeleteInventoryReceipt() {
 export function useInventoryWriteOffs(
   page: number,
   pageSize: number,
-  sort: InventoryWriteOffSortColumn = 'created',
-  direction: 'asc' | 'desc' = 'desc',
+  filters: InventoryWriteOffListFilters = {},
 ) {
   return useQuery({
-    queryKey: queryKeys.inventory.writeOffs({ page, pageSize, sort, dir: direction }),
-    queryFn: () => listInventoryWriteOffs(page, pageSize, sort, direction),
+    queryKey: queryKeys.inventory.writeOffs({
+      page,
+      pageSize,
+      status: filters.status,
+      sort: filters.sort,
+      dir: filters.direction,
+    }),
+    queryFn: () => listInventoryWriteOffs(page, pageSize, filters),
     placeholderData: keepPreviousData,
   })
 }
@@ -237,9 +243,28 @@ export function useCreateInventoryWriteOff() {
       reason: string
       notes: string
       lines: WriteOffLineInput[]
+      draftId?: string | null
     }) => createInventoryWriteOff(input),
     onSuccess: async () => {
       await invalidateInventory(queryClient)
+    },
+  })
+}
+
+export function useSaveInventoryWriteOffDraft() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (input: {
+      draftId?: string | null
+      writeOffDate: string
+      reason: string
+      notes: string
+      lines: WriteOffLineInput[]
+    }) => saveInventoryWriteOffDraft(input),
+    onSuccess: async (id) => {
+      await invalidateInventory(queryClient)
+      await queryClient.invalidateQueries({ queryKey: queryKeys.inventory.writeOff(id) })
     },
   })
 }

@@ -28,10 +28,14 @@ type StatusBadgeProps = VariantProps<typeof statusBadgeVariants> & {
 export function StatusBadge({ children, tone, className, style }: StatusBadgeProps) {
   return (
     <Badge
-      className={cn(style?.backgroundColor ? 'border-transparent' : statusBadgeVariants({ tone }), className)}
+      className={cn(
+        style?.backgroundColor ? 'border-transparent' : statusBadgeVariants({ tone }),
+        className,
+      )}
       style={style}
+      title={children}
     >
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
     </Badge>
   )
 }

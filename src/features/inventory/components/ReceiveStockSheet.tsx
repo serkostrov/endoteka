@@ -418,7 +418,7 @@ export function ReceiveStockSheet({
                       />
                     ) : (
                       <div className="overflow-x-auto">
-                        <Table className="table-fixed">
+                        <Table className="min-w-[36rem] table-fixed">
                           <colgroup>
                             <col style={{ width: '2.75rem' }} />
                             <col />

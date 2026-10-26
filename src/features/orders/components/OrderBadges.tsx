@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Clock } from 'lucide-react'
 import { differenceInCalendarDays, differenceInHours } from 'date-fns'
 
@@ -7,7 +8,12 @@ import { formatDate, toDate } from '@/lib/utils/date'
 import { cn } from '@/lib/utils'
 
 import { useOrderStatusCatalog } from '../hooks/use-orders'
-import { statusBadgeStyle } from '../lib/status-catalog'
+import {
+  findStatusCatalogItem,
+  hidesOrderDeadline,
+  statusCatalogBadgeStyle,
+  statusCodesHidingDeadline,
+} from '../lib/status-catalog'
 import type { OrderListItem } from '../services/orders-service'
 
 export function orderStatusTone(code: string): 'neutral' | 'info' | 'warning' | 'danger' | 'success' {
@@ -45,17 +51,86 @@ export function OrderStatusBadge({
   name,
   className,
 }: {
-  code: string
+  code?: string
   name: string
   className?: string
 }) {
   const catalog = useOrderStatusCatalog()
-  const color = catalog.data?.find((item) => item.code === code)?.color
+  const item = findStatusCatalogItem(catalog.data ?? [], { code, name })
   return (
-    <StatusBadge tone={orderStatusTone(code)} style={statusBadgeStyle(color)} className={className}>
+    <StatusBadge
+      tone={orderStatusTone(item?.code ?? code ?? '')}
+      style={statusCatalogBadgeStyle(item)}
+      className={className}
+    >
       {name}
     </StatusBadge>
   )
+}
+
+/** Смена статуса в ленте событий: цветные бейджи как в меню «Сменить статус». */
+export function JournalStatusChangeBody({
+  event,
+}: {
+  event: Pick<OrderJournalEventLike, 'summary' | 'payload'>
+}) {
+  const { fromName, toName, fromCode, toCode } = parseStatusChangeLabels(event)
+  if (!fromName && !toName) {
+    return <p>{event.summary}</p>
+  }
+
+  return (
+    <p className="flex flex-wrap items-center gap-1.5">
+      {fromName ? <OrderStatusBadge code={fromCode ?? undefined} name={fromName} /> : null}
+      {fromName && toName ? (
+        <span className="text-muted-foreground" aria-hidden="true">
+          →
+        </span>
+      ) : null}
+      {toName ? <OrderStatusBadge code={toCode ?? undefined} name={toName} /> : null}
+    </p>
+  )
+}
+
+type OrderJournalEventLike = {
+  summary: string
+  payload: unknown
+}
+
+function parseStatusChangeLabels(event: OrderJournalEventLike) {
+  const payload =
+    event.payload && typeof event.payload === 'object' && !Array.isArray(event.payload)
+      ? (event.payload as Record<string, unknown>)
+      : null
+  const fromName = asNonEmptyString(payload?.from_name)
+  const toName = asNonEmptyString(payload?.to_name)
+  const fromCode = asNonEmptyString(payload?.from_code)
+  const toCode = asNonEmptyString(payload?.to_code)
+
+  if (fromName || toName) {
+    return { fromName, toName, fromCode, toCode }
+  }
+
+  const parts = event.summary.split(/\s*(?:→|->)\s*/)
+  if (parts.length >= 2) {
+    return {
+      fromName: parts[0]?.trim() || null,
+      toName: parts.slice(1).join(' → ').trim() || null,
+      fromCode: null,
+      toCode: null,
+    }
+  }
+
+  return {
+    fromName: null,
+    toName: event.summary.trim() || null,
+    fromCode: null,
+    toCode: null,
+  }
+}
+
+function asNonEmptyString(value: unknown) {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
 function relativeDeadlineLabel(deadline: string, state: DeadlineState) {
@@ -79,14 +154,36 @@ function relativeDeadlineLabel(deadline: string, state: DeadlineState) {
   return formatDate(deadline)
 }
 
+export function useOrderDeadlineHidden(statusCode: string | undefined) {
+  const catalog = useOrderStatusCatalog()
+  return useMemo(() => {
+    if (!statusCode) {
+      return false
+    }
+    const groupCode = catalog.data?.find((item) => item.code === statusCode)?.groupCode
+    return hidesOrderDeadline(groupCode)
+  }, [catalog.data, statusCode])
+}
+
+export function useStatusCodesHidingDeadline() {
+  const catalog = useOrderStatusCatalog()
+  return useMemo(() => statusCodesHidingDeadline(catalog.data ?? []), [catalog.data])
+}
+
 export function OrderDeadlineHint({
   order,
   className,
 }: {
-  order: Pick<OrderListItem, 'deadline' | 'deadlineState'>
+  order: Pick<OrderListItem, 'deadline' | 'deadlineState' | 'statusCode'>
   className?: string
 }) {
-  if (!order.deadline || order.deadlineState === DeadlineState.None || order.deadlineState === DeadlineState.Closed) {
+  const hidden = useOrderDeadlineHidden(order.statusCode)
+  if (
+    hidden ||
+    !order.deadline ||
+    order.deadlineState === DeadlineState.None ||
+    order.deadlineState === DeadlineState.Closed
+  ) {
     return null
   }
 
@@ -112,13 +209,19 @@ function startOfToday() {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate())
 }
 
-export function OrderDeadlineCell({ order }: { order: Pick<OrderListItem, 'deadline' | 'deadlineState'> }) {
-  if (!order.deadline || order.deadlineState === DeadlineState.None) {
+export function OrderDeadlineCell({
+  order,
+}: {
+  order: Pick<OrderListItem, 'deadline' | 'deadlineState' | 'statusCode'>
+}) {
+  const hidden = useOrderDeadlineHidden(order.statusCode)
+  if (
+    hidden ||
+    !order.deadline ||
+    order.deadlineState === DeadlineState.None ||
+    order.deadlineState === DeadlineState.Closed
+  ) {
     return <span className="text-muted-foreground">—</span>
-  }
-
-  if (order.deadlineState === DeadlineState.Closed) {
-    return <span>{formatDate(order.deadline)}</span>
   }
 
   const tone = deadlineTone(order.deadlineState)

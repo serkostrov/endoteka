@@ -1,11 +1,22 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 
 import { DataTable } from '@/components/shared/DataTable'
+import { FilterBar } from '@/components/shared/FilterBar'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { StatusBadge } from '@/components/shared/StatusBadge'
+import { activeFilterControlClass } from '@/components/shared/active-filter-style'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useHasPermission } from '@/features/auth'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import {
+  formatMoney,
+  formatQuantity,
+  InventoryWriteOffStatus,
+  inventoryWriteOffStatusLabels,
+  inventoryWriteOffStatusTone,
+  isInventoryWriteOffStatus,
+} from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { usePageSize } from '@/hooks/use-page-size'
@@ -28,6 +39,7 @@ import type {
 
 const WRITE_OFF_SORT_COLUMNS = [
   'date',
+  'status',
   'reason',
   'lines',
   'qty',
@@ -44,25 +56,53 @@ export function InventoryWriteOffsScreen() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize()
   const [createOpen, setCreateOpen] = useState(false)
+  const [editDraftId, setEditDraftId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const canWriteOff = useHasPermission(Permission.InventoryWriteOff)
+
+  const statusParam = searchParams.get('status')
+  const statusFilter =
+    statusParam && isInventoryWriteOffStatus(statusParam) ? statusParam : 'all'
   const listSort = parseListSortColumn(
     searchParams.get('sort'),
     WRITE_OFF_SORT_COLUMNS,
     DEFAULT_WRITE_OFF_SORT,
   )
   const listDir = parseListSortDir(searchParams.get('dir'), DEFAULT_WRITE_OFF_DIR)
-  const sortKey = `${listSort}|${listDir}`
-  const [seenSortKey, setSeenSortKey] = useState(sortKey)
-  if (seenSortKey !== sortKey) {
-    setSeenSortKey(sortKey)
+
+  const filterKey = `${statusFilter}|${listSort}|${listDir}`
+  const [seenFilterKey, setSeenFilterKey] = useState(filterKey)
+  if (seenFilterKey !== filterKey) {
+    setSeenFilterKey(filterKey)
     setPage(1)
     setSelectedIds([])
   }
-  const writeOffsQuery = useInventoryWriteOffs(page, pageSize, listSort, listDir)
+
+  const listFilters = useMemo(
+    () => ({
+      status: statusFilter,
+      sort: listSort,
+      direction: listDir,
+    }),
+    [statusFilter, listSort, listDir],
+  )
+
+  const writeOffsQuery = useInventoryWriteOffs(page, pageSize, listFilters)
   const writeOffId = searchParams.get('writeOff')
   const total = writeOffsQuery.data?.total ?? 0
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
+
+  function patchFilters(patch: Record<string, string | null>) {
+    const next = new URLSearchParams(searchParams)
+    for (const [key, value] of Object.entries(patch)) {
+      if (!value || value === 'all') {
+        next.delete(key)
+      } else {
+        next.set(key, value)
+      }
+    }
+    setSearchParams(next, { replace: true })
+  }
 
   function openWriteOff(id: string) {
     const next = new URLSearchParams(searchParams)
@@ -86,16 +126,33 @@ export function InventoryWriteOffsScreen() {
     const column = parseListSortColumn(columnId, WRITE_OFF_SORT_COLUMNS, DEFAULT_WRITE_OFF_SORT)
     const nextDir = nextListSortDir(listSort, column, listDir, DEFAULT_WRITE_OFF_DIR)
     const isDefault = column === DEFAULT_WRITE_OFF_SORT && nextDir === DEFAULT_WRITE_OFF_DIR
-    const next = new URLSearchParams(searchParams)
-    if (isDefault) {
-      next.delete('sort')
-      next.delete('dir')
-    } else {
-      next.set('sort', column)
-      next.set('dir', nextDir)
-    }
-    setSearchParams(next, { replace: true })
+    patchFilters({
+      sort: isDefault ? null : column,
+      dir: isDefault ? null : nextDir,
+    })
   }
+
+  function handleRowClick(row: InventoryWriteOffListItem) {
+    if (row.status === InventoryWriteOffStatus.Draft) {
+      if (canWriteOff) {
+        setEditDraftId(row.id)
+      }
+      return
+    }
+    openWriteOff(row.id)
+  }
+
+  useEffect(() => {
+    if (!writeOffId || !canWriteOff || !writeOffsQuery.data) {
+      return
+    }
+    const row = writeOffsQuery.data.items.find((item) => item.id === writeOffId)
+    if (row?.status !== InventoryWriteOffStatus.Draft) {
+      return
+    }
+    setEditDraftId(writeOffId)
+    closeWriteOff()
+  }, [writeOffId, canWriteOff, writeOffsQuery.data])
 
   return (
     <div className="space-y-4">
@@ -111,6 +168,37 @@ export function InventoryWriteOffsScreen() {
         }
       />
 
+      <FilterBar>
+        <Select
+          value={statusFilter}
+          onValueChange={(value) => patchFilters({ status: value === 'all' ? null : value })}
+        >
+          <SelectTrigger
+            aria-label="Фильтр по статусу"
+            className={activeFilterControlClass(statusFilter !== 'all', 'w-auto min-w-40')}
+            onClear={
+              statusFilter !== 'all' ? () => patchFilters({ status: null }) : undefined
+            }
+            clearLabel="Сбросить фильтр по статусу"
+          >
+            <SelectValue placeholder="Статус" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Все статусы</SelectItem>
+            <SelectItem value={InventoryWriteOffStatus.Draft}>
+              <StatusBadge tone={inventoryWriteOffStatusTone(InventoryWriteOffStatus.Draft)}>
+                {inventoryWriteOffStatusLabels.draft}
+              </StatusBadge>
+            </SelectItem>
+            <SelectItem value={InventoryWriteOffStatus.Posted}>
+              <StatusBadge tone={inventoryWriteOffStatusTone(InventoryWriteOffStatus.Posted)}>
+                {inventoryWriteOffStatusLabels.posted}
+              </StatusBadge>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterBar>
+
       {selectedIds.length > 0 ? (
         <WriteOffBulkActions selectedIds={selectedIds} onClear={() => setSelectedIds([])} />
       ) : null}
@@ -122,8 +210,12 @@ export function InventoryWriteOffsScreen() {
         data={writeOffsQuery.data?.items ?? []}
         getRowId={(row) => row.id}
         emptyTitle="Списаний нет"
-        emptyDescription="Оформите списание, чтобы уменьшить остаток на складе."
-        onRowClick={(row) => openWriteOff(row.id)}
+        emptyDescription={
+          statusFilter !== 'all'
+            ? 'Нет списаний по выбранному фильтру.'
+            : 'Оформите списание, чтобы уменьшить остаток на складе.'
+        }
+        onRowClick={handleRowClick}
         selection={{
           selectedIds,
           onSelectedIdsChange: setSelectedIds,
@@ -148,12 +240,22 @@ export function InventoryWriteOffsScreen() {
             cell: (row) => formatDate(row.writeOffDate),
           },
           {
+            id: 'status',
+            header: 'Статус',
+            sortable: true,
+            cell: (row) => (
+              <StatusBadge tone={inventoryWriteOffStatusTone(row.status)}>
+                {inventoryWriteOffStatusLabels[row.status]}
+              </StatusBadge>
+            ),
+          },
+          {
             id: 'reason',
             header: 'Причина',
             sortable: true,
             cell: (row) => (
               <div className="min-w-0">
-                <p className="truncate font-medium">{row.reason}</p>
+                <p className="truncate font-medium">{row.reason || '—'}</p>
                 {row.notes ? (
                   <p className="truncate text-xs text-muted-foreground">{row.notes}</p>
                 ) : null}
@@ -202,11 +304,14 @@ export function InventoryWriteOffsScreen() {
                   cell: (row: InventoryWriteOffListItem) => (
                     <div className="flex justify-end" onClick={(event) => event.stopPropagation()}>
                       <WriteOffDeleteControl
-                        writeOff={{ id: row.id, reason: row.reason }}
+                        writeOff={{ id: row.id, reason: row.reason, status: row.status }}
                         onDeleted={() => {
                           setSelectedIds((ids) => ids.filter((id) => id !== row.id))
                           if (writeOffId === row.id) {
                             closeWriteOff()
+                          }
+                          if (editDraftId === row.id) {
+                            setEditDraftId(null)
                           }
                         }}
                       />
@@ -219,6 +324,15 @@ export function InventoryWriteOffsScreen() {
       />
 
       <WriteOffStockSheet open={createOpen} onOpenChange={setCreateOpen} />
+      <WriteOffStockSheet
+        open={Boolean(editDraftId)}
+        draftId={editDraftId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditDraftId(null)
+          }
+        }}
+      />
       <InventoryWriteOffSheet
         writeOffId={writeOffId}
         open={Boolean(writeOffId)}

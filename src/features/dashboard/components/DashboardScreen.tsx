@@ -182,7 +182,13 @@ function OrderPreviewRow({ order }: { order: DashboardOrderPreview }) {
         </span>
         <OrderStatusBadge code={order.statusCode} name={order.statusName} />
         {isDeadlineState(order.deadlineState) ? (
-          <OrderDeadlineCell order={{ deadline: order.deadline, deadlineState: order.deadlineState }} />
+          <OrderDeadlineCell
+            order={{
+              deadline: order.deadline,
+              deadlineState: order.deadlineState,
+              statusCode: order.statusCode,
+            }}
+          />
         ) : null}
       </button>
     </li>

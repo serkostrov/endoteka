@@ -102,8 +102,13 @@ export const queryKeys = {
       dir?: string
     }) => ['inventory', 'receipts', filters] as const,
     receipt: (id: string) => ['inventory', 'receipt', id] as const,
-    writeOffs: (filters: { page: number; pageSize: number; sort?: string; dir?: string }) =>
-      ['inventory', 'write-offs', filters] as const,
+    writeOffs: (filters: {
+      page: number
+      pageSize: number
+      status?: string
+      sort?: string
+      dir?: string
+    }) => ['inventory', 'write-offs', filters] as const,
     writeOff: (id: string) => ['inventory', 'write-off', id] as const,
     adjustments: (filters: { page: number; pageSize: number }) =>
       ['inventory', 'adjustments', filters] as const,

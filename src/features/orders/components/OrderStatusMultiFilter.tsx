@@ -96,7 +96,7 @@ export function OrderStatusMultiFilter({
           className={activeFilterControlClass(
             isActive,
             cn(
-              "flex h-9 w-auto min-w-0 flex-1 items-center justify-between gap-2 rounded-md border border-input bg-muted px-3 py-0 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
+              "flex h-9 w-auto min-w-[10rem] shrink-0 items-center justify-between gap-2 rounded-md border border-input bg-muted px-3 py-0 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 sm:min-w-0 sm:flex-1 sm:shrink [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg:not([class*='text-'])]:text-muted-foreground",
               className,
             ),
           )}

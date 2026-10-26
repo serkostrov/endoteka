@@ -6,7 +6,9 @@ import { Trash2 } from 'lucide-react'
 
 import { DatePicker } from '@/components/shared/DatePicker'
 import { EmptyState } from '@/components/shared/EmptyState'
+import { ErrorState } from '@/components/shared/ErrorState'
 import { IconActionButton } from '@/components/shared/IconActionButton'
+import { LoadingState } from '@/components/shared/LoadingState'
 import { SectionCard } from '@/components/shared/SectionCard'
 import { Button } from '@/components/ui/button'
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
@@ -20,7 +22,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  runSheetFormSave,
 } from '@/components/ui/sheet'
 import {
   Table,
@@ -39,7 +40,11 @@ import { toIsoDate } from '@/lib/utils/date'
 import { InventoryItemCoverThumb } from './InventoryItemCoverThumb'
 import { InventoryItemSheet } from './InventoryItemScreen'
 import { ItemSearchField } from './ItemSearchField'
-import { useCreateInventoryWriteOff } from '../hooks/use-inventory'
+import {
+  useCreateInventoryWriteOff,
+  useInventoryWriteOff,
+  useSaveInventoryWriteOffDraft,
+} from '../hooks/use-inventory'
 import { writeOffFormSchema, type WriteOffFormValues } from '../schemas'
 import type { InventoryItem } from '../services/inventory-service'
 
@@ -52,16 +57,27 @@ type DraftLine = {
 type WriteOffStockSheetProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Редактирование существующего черновика. */
+  draftId?: string | null
 }
 
 const cellPad = 'px-2 py-1.5'
 const spinless =
   '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none'
 
-export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetProps) {
+export function WriteOffStockSheet({
+  open,
+  onOpenChange,
+  draftId = null,
+}: WriteOffStockSheetProps) {
   const create = useCreateInventoryWriteOff()
+  const saveDraft = useSaveInventoryWriteOffDraft()
+  const draftQuery = useInventoryWriteOff(draftId ?? undefined)
+  const [activeDraftId, setActiveDraftId] = useState<string | null>(draftId)
   const [lines, setLines] = useState<DraftLine[]>([])
   const [openedItemId, setOpenedItemId] = useState<string | null>(null)
+  const [hydratedDraftId, setHydratedDraftId] = useState<string | null>(null)
+  const [linesTouched, setLinesTouched] = useState(false)
   const form = useForm<WriteOffFormValues>({
     resolver: zodResolver(writeOffFormSchema),
     defaultValues: {
@@ -72,18 +88,71 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
   })
   const documentTotal = lines.reduce((sum, line) => sum + line.quantity * line.item.purchasePrice, 0)
   const insufficient = lines.filter((line) => line.quantity > line.item.stockQuantity)
+  const pending = create.isPending || saveDraft.isPending
+  const isEditingDraft = Boolean(activeDraftId)
+  const dirty = form.formState.isDirty || linesTouched
+  const draftLoading = Boolean(draftId) && draftQuery.isLoading && hydratedDraftId !== draftId
+  const draftError = Boolean(draftId) && draftQuery.error && hydratedDraftId !== draftId
 
   useEffect(() => {
     if (!open) {
+      setHydratedDraftId(null)
+      setActiveDraftId(draftId)
+      setLinesTouched(false)
+      return
+    }
+    setActiveDraftId(draftId)
+    if (draftId) {
       return
     }
     setLines([])
+    setHydratedDraftId(null)
+    setLinesTouched(false)
     form.reset({
       writeOffDate: toIsoDate(new Date()),
       reason: '',
       notes: '',
     })
-  }, [open, form])
+  }, [open, form, draftId])
+
+  useEffect(() => {
+    if (!open || !draftId || !draftQuery.data || draftQuery.data.status !== 'draft') {
+      return
+    }
+    if (hydratedDraftId === draftId) {
+      return
+    }
+    const writeOff = draftQuery.data
+    setActiveDraftId(writeOff.id)
+    form.reset({
+      writeOffDate: writeOff.writeOffDate || toIsoDate(new Date()),
+      reason: writeOff.reason,
+      notes: writeOff.notes,
+    })
+    setLines(
+      writeOff.lines.flatMap((line) => {
+        if (!line.item) {
+          return []
+        }
+        return [
+          {
+            key: `${line.item.id}-${line.id}`,
+            item: line.item,
+            quantity: line.quantity,
+          },
+        ]
+      }),
+    )
+    setLinesTouched(false)
+    setHydratedDraftId(draftId)
+  }, [open, draftId, draftQuery.data, form, hydratedDraftId])
+
+  function linePayload() {
+    return lines.map((line) => ({
+      itemId: line.item.id,
+      quantity: line.quantity,
+    }))
+  }
 
   function addLine(item: InventoryItem, quantity = 1) {
     if (!Number.isInteger(quantity) || quantity <= 0) {
@@ -94,6 +163,7 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
       toast.error(`Нет остатка: ${item.name}`)
       return
     }
+    setLinesTouched(true)
     setLines((current) => {
       const existing = current.find((line) => line.item.id === item.id)
       if (existing) {
@@ -114,6 +184,7 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
   }
 
   function updateLine(key: string, quantity: number) {
+    setLinesTouched(true)
     setLines((current) => current.map((line) => (line.key === key ? { ...line, quantity } : line)))
   }
 
@@ -131,12 +202,25 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
       writeOffDate: values.writeOffDate,
       reason: values.reason,
       notes: values.notes,
-      lines: lines.map((line) => ({
-        itemId: line.item.id,
-        quantity: line.quantity,
-      })),
+      lines: linePayload(),
+      draftId: activeDraftId,
     })
     toast.success('Списание проведено, товар убран со склада')
+  }
+
+  async function persistDraft(values: WriteOffFormValues) {
+    if (lines.some((line) => line.quantity <= 0)) {
+      throw new Error('Проверьте количество в строках')
+    }
+    const id = await saveDraft.mutateAsync({
+      draftId: activeDraftId,
+      writeOffDate: values.writeOffDate || toIsoDate(new Date()),
+      reason: values.reason,
+      notes: values.notes,
+      lines: linePayload(),
+    })
+    setActiveDraftId(id)
+    toast.success('Черновик сохранён')
   }
 
   async function onSubmit(values: WriteOffFormValues) {
@@ -148,12 +232,28 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
     }
   }
 
+  async function onSaveDraft() {
+    const values = form.getValues()
+    if (!values.writeOffDate) {
+      form.setError('writeOffDate', { message: 'Укажите дату' })
+      return
+    }
+    try {
+      await persistDraft(values)
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   return (
     <>
       <Sheet
         open={open}
-        dirty={form.formState.isDirty || lines.length > 0}
-        onSave={() => runSheetFormSave(form.handleSubmit, persist)}
+        dirty={dirty}
+        onSave={async () => {
+          await persistDraft(form.getValues())
+        }}
         onOpenChange={onOpenChange}
       >
         <SheetContent
@@ -161,11 +261,18 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
           className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(96vw,56rem)]"
         >
           <SheetHeader className="shrink-0 border-b px-4 py-3 pr-14">
-            <SheetTitle>Новое списание</SheetTitle>
+            <SheetTitle>{isEditingDraft ? 'Черновик списания' : 'Новое списание'}</SheetTitle>
             <SheetDescription>
-              Списание уменьшает остаток по FIFO: сначала самые ранние партии.
+              {isEditingDraft
+                ? 'Можно продолжить заполнение или провести документ.'
+                : 'Списание уменьшает остаток по FIFO: сначала самые ранние партии.'}
             </SheetDescription>
           </SheetHeader>
+          {draftLoading ? (
+            <LoadingState label="Загрузка черновика" className="min-h-40 flex-1" />
+          ) : draftError ? (
+            <ErrorState description={getErrorMessage(draftQuery.error)} className="flex-1" />
+          ) : (
           <Form {...form}>
             <form
               className="flex min-h-0 flex-1 flex-col"
@@ -262,7 +369,7 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
                       />
                     ) : (
                       <div className="overflow-x-auto">
-                        <Table className="table-fixed">
+                        <Table className="min-w-[36rem] table-fixed">
                           <colgroup>
                             <col style={{ width: '2.75rem' }} />
                             <col />
@@ -304,9 +411,10 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
                                 key={line.key}
                                 line={line}
                                 onChange={(quantity) => updateLine(line.key, quantity)}
-                                onRemove={() =>
+                                onRemove={() => {
+                                  setLinesTouched(true)
                                   setLines((current) => current.filter((item) => item.key !== line.key))
-                                }
+                                }}
                                 onOpenItem={setOpenedItemId}
                               />
                             ))}
@@ -329,15 +437,24 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
                     <span className="text-muted-foreground">Добавьте товары для проведения</span>
                   )}
                 </p>
-                <div className="flex w-full gap-2 sm:w-auto">
+                <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
                   <SheetClose asChild>
-                    <Button type="button" variant="outline" className="flex-1 sm:flex-none">
+                    <Button type="button" variant="outline" className="flex-1 sm:flex-none" disabled={pending}>
                       Отмена
                     </Button>
                   </SheetClose>
                   <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 sm:flex-none"
+                    disabled={pending}
+                    onClick={() => void onSaveDraft()}
+                  >
+                    {saveDraft.isPending ? 'Сохранение…' : 'Сохранить как черновик'}
+                  </Button>
+                  <Button
                     type="submit"
-                    disabled={create.isPending || lines.length === 0 || insufficient.length > 0}
+                    disabled={pending || lines.length === 0 || insufficient.length > 0}
                     className="flex-1 sm:flex-none"
                   >
                     {create.isPending ? 'Проведение…' : 'Провести списание'}
@@ -346,6 +463,7 @@ export function WriteOffStockSheet({ open, onOpenChange }: WriteOffStockSheetPro
               </SheetFooter>
             </form>
           </Form>
+          )}
         </SheetContent>
       </Sheet>
 

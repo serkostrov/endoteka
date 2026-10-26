@@ -15,6 +15,7 @@ type Row = {
     code: string
     name: string
     description: string | null
+    is_system: boolean
     created_at: string
     updated_at: string
   }
@@ -523,6 +524,8 @@ type Row = {
     write_off_date: string
     reason: string
     notes: string
+    status: string
+    draft_lines: Json
     created_by: string | null
     created_at: string
     hidden_at: string | null
@@ -756,6 +759,7 @@ export type Database = {
           code: string
           name: string
           description?: string | null
+          is_system?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -763,6 +767,7 @@ export type Database = {
           code?: string
           name?: string
           description?: string | null
+          is_system?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -1409,7 +1414,33 @@ export type Database = {
       }
       get_assignable_roles: {
         Args: Record<PropertyKey, never>
-        Returns: { id: string; code: string; name: string; description: string | null }[]
+        Returns: {
+          id: string
+          code: string
+          name: string
+          description: string | null
+          is_system: boolean
+        }[]
+      }
+      create_role: {
+        Args: {
+          p_name: string
+          p_description?: string | null
+          p_copy_from_role_id?: string | null
+        }
+        Returns: string
+      }
+      update_role: {
+        Args: {
+          p_role_id: string
+          p_name: string
+          p_description?: string | null
+        }
+        Returns: undefined
+      }
+      delete_role: {
+        Args: { p_role_id: string }
+        Returns: undefined
       }
       assign_user_role: {
         Args: { target_user_id: string; target_role_id: string }
@@ -2275,12 +2306,23 @@ export type Database = {
         Args: { target_receipt_id: string; delete_mode: string }
         Returns: undefined
       }
+      save_inventory_write_off_draft: {
+        Args: {
+          target_write_off_id?: string | null
+          doc_write_off_date?: string
+          reason_text?: string
+          notes_text?: string
+          lines?: Json
+        }
+        Returns: string
+      }
       create_inventory_write_off: {
         Args: {
           doc_write_off_date: string
           reason_text: string
           notes_text: string
           lines: Json
+          draft_write_off_id?: string | null
         }
         Returns: string
       }
@@ -2290,12 +2332,14 @@ export type Database = {
           page_size?: number
           sort_by?: string
           sort_dir?: string
+          status_filter?: string
         }
         Returns: {
           id: string
           write_off_date: string
           reason: string
           notes: string
+          status: string
           created_at: string
           actor_name: string
           line_count: number

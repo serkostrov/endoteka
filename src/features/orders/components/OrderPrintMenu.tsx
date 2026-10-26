@@ -93,16 +93,12 @@ export function OrderPrintMenu({ orderId }: OrderPrintMenuProps) {
           ref={triggerRef}
           type="button"
           variant="outline"
-          size="sm"
-          className="gap-0 px-0"
+          size="icon-sm"
+          className="relative"
           aria-label="Печать"
         >
-          <span className="px-2">
-            <Printer className="size-4" />
-          </span>
-          <span className="border-l px-1.5">
-            <ChevronDown className="size-3.5" />
-          </span>
+          <Printer className="size-4" />
+          <ChevronDown className="absolute right-0.5 bottom-0.5 size-2.5 opacity-70" aria-hidden />
         </Button>
       </PopoverTrigger>
       <PopoverContent

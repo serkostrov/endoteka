@@ -64,6 +64,31 @@ export function statusBadgeStyle(color: string | null | undefined): { background
   return { backgroundColor: color, color: contrastText(color) }
 }
 
+/** Цвет статуса как в меню смены: свой цвет, иначе цвет группы. */
+export function statusCatalogBadgeStyle(
+  item: Pick<OrderStatusCatalogItem, 'color' | 'groupColor'> | null | undefined,
+) {
+  return statusBadgeStyle(item?.color || item?.groupColor)
+}
+
+export function findStatusCatalogItem(
+  catalog: OrderStatusCatalogItem[],
+  options: { code?: string | null; name?: string | null },
+) {
+  const code = options.code?.trim()
+  if (code) {
+    const byCode = catalog.find((item) => item.code === code)
+    if (byCode) {
+      return byCode
+    }
+  }
+  const name = options.name?.trim()
+  if (!name) {
+    return undefined
+  }
+  return catalog.find((item) => item.name === name)
+}
+
 export function mergeStatusGroups(
   items: OrderStatusCatalogItem[],
   groups: { id: string; code: string; name: string; color: string; sortOrder: number }[],
@@ -91,6 +116,23 @@ export function mergeStatusGroups(
 
 export function isClosedStatusGroup(statuses: Pick<OrderStatusCatalogItem, 'isTerminal'>[]) {
   return statuses.length > 0 && statuses.every((item) => item.isTerminal)
+}
+
+/** Группы, где срок ремонта уже не актуален: готовые и закрытые. Значение в БД не трогаем — только UI. */
+export function hidesOrderDeadline(groupCode: string | null | undefined) {
+  return groupCode === 'ready' || groupCode === 'closed_ok' || groupCode === 'closed_fail'
+}
+
+export function statusCodesHidingDeadline(
+  catalog: Pick<OrderStatusCatalogItem, 'code' | 'groupCode'>[],
+) {
+  const codes = new Set<string>()
+  for (const item of catalog) {
+    if (hidesOrderDeadline(item.groupCode)) {
+      codes.add(item.code)
+    }
+  }
+  return codes
 }
 
 export function hexToRgba(color: string, alpha: number) {

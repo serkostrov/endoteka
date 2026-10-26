@@ -375,6 +375,14 @@ export function OrdersScreen() {
   }
 
   const statusOptions = (catalogQuery.data ?? []).filter((item) => item.isActive)
+  const hasPresetFilter = attentionOnly || activeOnly || deadlineState !== 'all'
+  const presetLabel = attentionOnly
+    ? 'Требуют внимания'
+    : activeOnly
+      ? 'Только активные'
+      : deadlineState !== 'all'
+        ? deadlineStateLabels[deadlineState]
+        : null
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-col gap-2">
@@ -389,32 +397,25 @@ export function OrdersScreen() {
       />
 
       <div className="space-y-2">
-        <FilterBar>
-          <SegmentedFilter
-            aria-label="Назначение"
-            value={assignmentFilter}
-            inactiveValues={['all']}
-            options={[
-              { value: 'all', label: 'Все' },
-              { value: 'me', label: 'Мне' },
-            ]}
-            onChange={setAssignmentFilter}
-          />
-          {attentionOnly || activeOnly || deadlineState !== 'all' ? (
-            <Button
-              type="button"
-              onClick={() => patchFilters({ ...PRESET_FILTER_CLEAR })}
-            >
-              {attentionOnly
-                ? 'Требуют внимания'
-                : activeOnly
-                  ? 'Только активные'
-                  : deadlineState !== 'all'
-                    ? deadlineStateLabels[deadlineState]
-                    : null}
-              <span className="opacity-80">Сбросить</span>
-            </Button>
-          ) : null}
+        <FilterBar className="max-sm:flex-col max-sm:items-stretch max-sm:overflow-visible sm:flex-nowrap">
+          <div className="hidden items-center gap-2 sm:flex">
+            <SegmentedFilter
+              aria-label="Назначение"
+              value={assignmentFilter}
+              inactiveValues={['all']}
+              options={[
+                { value: 'all', label: 'Все' },
+                { value: 'me', label: 'Мне' },
+              ]}
+              onChange={setAssignmentFilter}
+            />
+            {hasPresetFilter ? (
+              <Button type="button" onClick={() => patchFilters({ ...PRESET_FILTER_CLEAR })}>
+                {presetLabel}
+                <span className="opacity-80">Сбросить</span>
+              </Button>
+            ) : null}
+          </div>
           <SearchInput
             value={search}
             onChange={(next) => {
@@ -426,19 +427,37 @@ export function OrdersScreen() {
             label="Поиск заказов"
             placeholder="Номер, клиент или серийный номер"
             className={cn(
-              'min-w-[12rem] max-w-none flex-1',
+              'w-full min-w-0 max-w-none flex-1 sm:min-w-[12rem]',
               search.trim().length > 0 &&
-                '[&_input]:border-primary [&_input]:bg-primary [&_input]:text-primary-foreground [&_input]:placeholder:text-primary-foreground/70 [&_svg]:text-primary-foreground',
+                '[&_input]:border-primary [&_input]:bg-primary/5 [&_input]:ring-[3px] [&_input]:ring-primary/20 [&_svg]:text-primary',
             )}
           />
           {canCreate ? (
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button type="button" className="w-full sm:w-auto" onClick={() => setCreateOpen(true)}>
               Новый заказ
             </Button>
           ) : null}
         </FilterBar>
 
-        <FilterBar className="overflow-visible [&_[data-slot=select-trigger]]:min-w-0 [&_[data-slot=select-trigger]]:flex-1 [&_[data-slot=select-trigger]]:shrink">
+        <FilterBar className="[&_[data-slot=select-trigger]]:min-w-[10rem] [&_[data-slot=select-trigger]]:shrink-0 sm:[&_[data-slot=select-trigger]]:min-w-0 sm:[&_[data-slot=select-trigger]]:flex-1 sm:[&_[data-slot=select-trigger]]:shrink">
+          <div className="flex shrink-0 items-center gap-2 sm:hidden">
+            <SegmentedFilter
+              aria-label="Назначение"
+              value={assignmentFilter}
+              inactiveValues={['all']}
+              options={[
+                { value: 'all', label: 'Все' },
+                { value: 'me', label: 'Мне' },
+              ]}
+              onChange={setAssignmentFilter}
+            />
+            {hasPresetFilter ? (
+              <Button type="button" onClick={() => patchFilters({ ...PRESET_FILTER_CLEAR })}>
+                {presetLabel}
+                <span className="opacity-80">Сбросить</span>
+              </Button>
+            ) : null}
+          </div>
           <Select
             value={responsibleSelectValue}
             onValueChange={(value) => {
@@ -448,7 +467,7 @@ export function OrdersScreen() {
           >
             <SelectTrigger
               aria-label="Фильтр по ответственному"
-              className={activeFilterControlClass(responsibleParam !== 'all', 'w-auto min-w-0 flex-1')}
+              className={activeFilterControlClass(responsibleParam !== 'all', 'w-auto min-w-0')}
               onClear={
                 responsibleParam !== 'all'
                   ? () => patchFilters({ responsible: null, ...PRESET_FILTER_CLEAR })
@@ -487,7 +506,7 @@ export function OrdersScreen() {
           >
             <SelectTrigger
               aria-label="Фильтр по клиенту"
-              className={activeFilterControlClass(customerId !== 'all', 'w-auto min-w-0 flex-1')}
+              className={activeFilterControlClass(customerId !== 'all', 'w-auto min-w-0')}
               onClear={
                 customerId !== 'all'
                   ? () => patchFilters({ customer: null, ...PRESET_FILTER_CLEAR })
@@ -516,7 +535,7 @@ export function OrdersScreen() {
           <Select value={groupId} onValueChange={setGroupFilter}>
             <SelectTrigger
               aria-label="Фильтр по группе прибора"
-              className={activeFilterControlClass(groupId !== 'all', 'w-auto min-w-0 flex-1')}
+              className={activeFilterControlClass(groupId !== 'all', 'w-auto min-w-0')}
               onClear={groupId !== 'all' ? () => setGroupFilter('all') : undefined}
               clearLabel="Сбросить фильтр по группе"
             >
@@ -541,7 +560,7 @@ export function OrdersScreen() {
           >
             <SelectTrigger
               aria-label="Фильтр по бренду"
-              className={activeFilterControlClass(brandId !== 'all', 'w-auto min-w-0 flex-1')}
+              className={activeFilterControlClass(brandId !== 'all', 'w-auto min-w-0')}
               onClear={brandId !== 'all' ? () => setBrandFilter('all') : undefined}
               clearLabel="Сбросить фильтр по бренду"
             >
@@ -564,7 +583,7 @@ export function OrdersScreen() {
           >
             <SelectTrigger
               aria-label="Фильтр по модели"
-              className={activeFilterControlClass(modelId !== 'all', 'w-auto min-w-0 flex-1')}
+              className={activeFilterControlClass(modelId !== 'all', 'w-auto min-w-0')}
               onClear={
                 modelId !== 'all'
                   ? () => patchFilters({ model: null, ...PRESET_FILTER_CLEAR })

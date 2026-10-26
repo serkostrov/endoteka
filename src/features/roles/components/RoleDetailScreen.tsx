@@ -1,28 +1,40 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
 
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { PageHeader } from '@/components/shared/PageHeader'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useAuth, useHasPermission } from '@/features/auth'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
-import { toast } from 'sonner'
+import { routes } from '@/lib/constants/routes'
 
+import { EditRoleSheet } from './EditRoleSheet'
 import { PermissionMatrix } from './PermissionMatrix'
-import { useRolePermissions, useRoles, useSaveRolePermissions } from '../hooks/use-roles'
+import {
+  useDeleteRole,
+  useRolePermissions,
+  useRoles,
+  useSaveRolePermissions,
+} from '../hooks/use-roles'
 
 export function RoleDetailScreen() {
   const { id: roleId } = useParams()
+  const navigate = useNavigate()
   const { refreshUser } = useAuth()
   const canUpdate = useHasPermission(Permission.RolesUpdate)
   const rolesQuery = useRoles()
   const permissionsQuery = useRolePermissions(roleId)
   const save = useSaveRolePermissions(roleId ?? '')
+  const remove = useDeleteRole()
   const [draft, setDraft] = useState<Permission[] | null>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   const selected = draft ?? permissionsQuery.data ?? []
   const role = rolesQuery.data?.find((item) => item.id === roleId)
@@ -60,21 +72,58 @@ export function RoleDetailScreen() {
     }
   }
 
+  async function handleDelete() {
+    if (!role) {
+      return
+    }
+    try {
+      await remove.mutateAsync(role.id)
+      toast.success('Роль удалена')
+      setDeleteOpen(false)
+      navigate(routes.roles)
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
         title={role.name}
+        titleExtra={
+          role.isSystem ? (
+            <Badge variant="secondary" className="font-normal">
+              Системная
+            </Badge>
+          ) : null
+        }
         description={role.description ?? 'Права доступа для сотрудников с этой ролью.'}
         actions={
           canUpdate ? (
-            <Button type="button" onClick={() => setConfirmOpen(true)} disabled={!isDirty || save.isPending}>
-              Сохранить
-            </Button>
+            <>
+              <Button type="button" variant="outline" onClick={() => setEditOpen(true)}>
+                Изменить
+              </Button>
+              {!role.isSystem ? (
+                <Button type="button" variant="outline" onClick={() => setDeleteOpen(true)}>
+                  Удалить
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                onClick={() => setConfirmOpen(true)}
+                disabled={!isDirty || save.isPending}
+              >
+                Сохранить
+              </Button>
+            </>
           ) : null
         }
       />
 
       <PermissionMatrix selected={selected} onChange={setDraft} readOnly={!canUpdate} />
+
+      <EditRoleSheet role={role} open={editOpen} onOpenChange={setEditOpen} />
 
       <ConfirmDialog
         open={confirmOpen}
@@ -85,6 +134,16 @@ export function RoleDetailScreen() {
         isPending={save.isPending}
         onOpenChange={setConfirmOpen}
         onConfirm={() => void handleSave()}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Удалить роль"
+        description={`«${role.name}» будет удалена безвозвратно. Если роль назначена сотрудникам или есть приглашения, удаление не пройдёт.`}
+        confirmLabel="Удалить"
+        isPending={remove.isPending}
+        onOpenChange={setDeleteOpen}
+        onConfirm={() => void handleDelete()}
       />
     </div>
   )

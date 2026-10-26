@@ -1,10 +1,13 @@
 import { AppError, toAppError } from '@/lib/errors'
 import {
   InventoryReceiptStatus,
+  InventoryWriteOffStatus,
   isInventoryMovementType,
   isInventoryReceiptStatus,
+  isInventoryWriteOffStatus,
   type InventoryMovementType,
   type InventoryReceiptStatus as ReceiptStatus,
+  type InventoryWriteOffStatus as WriteOffStatus,
 } from '@/lib/constants/inventory'
 import { getSupabase } from '@/lib/supabase/client'
 import type { Json } from '@/types/database'
@@ -459,18 +462,28 @@ function sanitizeInventorySearch(value: string) {
   return value.replace(/[%_,]/g, '').trim()
 }
 
+/** Фрагменты через пробел: каждый должен встретиться (порядок не важен). */
+function inventorySearchTokens(value: string) {
+  const cleaned = sanitizeInventorySearch(value)
+  if (!cleaned) {
+    return []
+  }
+  return cleaned.split(/\s+/).filter(Boolean)
+}
+
 function folderKey(id: string | null | undefined) {
   return id?.trim() || 'none'
 }
 
 function applyInventoryItemSearch<T extends { or: (filter: string) => T }>(query: T, search: string) {
-  const term = sanitizeInventorySearch(search)
-  if (!term) {
-    return query
+  const tokens = inventorySearchTokens(search)
+  let next = query
+  for (const token of tokens) {
+    next = next.or(
+      `name.ilike.%${token}%,code.ilike.%${token}%,article.ilike.%${token}%,barcode.ilike.%${token}%`,
+    )
   }
-  return query.or(
-    `name.ilike.%${term}%,code.ilike.%${term}%,article.ilike.%${term}%,barcode.ilike.%${term}%`,
-  )
+  return next
 }
 
 async function signCoverPaths(paths: string[]) {
@@ -955,12 +968,19 @@ export type InventoryReceiptListFilters = {
 
 export type InventoryWriteOffSortColumn =
   | 'date'
+  | 'status'
   | 'reason'
   | 'lines'
   | 'qty'
   | 'amount'
   | 'actor'
   | 'created'
+
+export type InventoryWriteOffListFilters = {
+  status?: string
+  sort?: InventoryWriteOffSortColumn
+  direction?: 'asc' | 'desc'
+}
 
 export async function listInventoryReceipts(
   page: number,
@@ -1147,6 +1167,7 @@ export type InventoryWriteOffListItem = {
   writeOffDate: string
   reason: string
   notes: string
+  status: WriteOffStatus
   createdAt: string
   actorName: string
   lineCount: number
@@ -1164,6 +1185,7 @@ export type InventoryWriteOffLine = {
   quantity: number
   unitPrice: number
   amount: number
+  item?: InventoryItem
 }
 
 export type InventoryWriteOffDetail = {
@@ -1171,6 +1193,7 @@ export type InventoryWriteOffDetail = {
   writeOffDate: string
   reason: string
   notes: string
+  status: WriteOffStatus
   createdAt: string
   actorName: string
   lines: InventoryWriteOffLine[]
@@ -1202,8 +1225,35 @@ export async function createInventoryWriteOff(input: {
   reason: string
   notes: string
   lines: WriteOffLineInput[]
+  draftId?: string | null
 }): Promise<string> {
   const { data, error } = await getSupabase().rpc('create_inventory_write_off', {
+    doc_write_off_date: input.writeOffDate,
+    reason_text: input.reason,
+    notes_text: input.notes,
+    lines: input.lines.map((line) => ({
+      item_id: line.itemId,
+      quantity: line.quantity,
+    })),
+    draft_write_off_id: input.draftId ?? null,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось оформить списание.')
+  }
+
+  return data
+}
+
+export async function saveInventoryWriteOffDraft(input: {
+  draftId?: string | null
+  writeOffDate: string
+  reason: string
+  notes: string
+  lines: WriteOffLineInput[]
+}): Promise<string> {
+  const { data, error } = await getSupabase().rpc('save_inventory_write_off_draft', {
+    target_write_off_id: input.draftId ?? null,
     doc_write_off_date: input.writeOffDate,
     reason_text: input.reason,
     notes_text: input.notes,
@@ -1214,7 +1264,7 @@ export async function createInventoryWriteOff(input: {
   })
 
   if (error) {
-    throw toAppError(error, 'Не удалось оформить списание.')
+    throw toAppError(error, 'Не удалось сохранить черновик списания.')
   }
 
   return data
@@ -1223,14 +1273,14 @@ export async function createInventoryWriteOff(input: {
 export async function listInventoryWriteOffs(
   page: number,
   pageSize: number,
-  sort: InventoryWriteOffSortColumn = 'created',
-  direction: 'asc' | 'desc' = 'desc',
+  filters: InventoryWriteOffListFilters = {},
 ) {
   const { data, error } = await getSupabase().rpc('list_inventory_write_offs', {
     page_number: page,
     page_size: pageSize,
-    sort_by: sort,
-    sort_dir: direction,
+    sort_by: filters.sort ?? 'created',
+    sort_dir: filters.direction ?? 'desc',
+    status_filter: filters.status && filters.status !== 'all' ? filters.status : 'all',
   })
 
   if (error) {
@@ -1244,6 +1294,7 @@ export async function listInventoryWriteOffs(
       writeOffDate: row.write_off_date,
       reason: row.reason,
       notes: row.notes,
+      status: isInventoryWriteOffStatus(row.status) ? row.status : InventoryWriteOffStatus.Posted,
       createdAt: row.created_at,
       actorName: row.actor_name,
       lineCount: Number(row.line_count ?? 0),
@@ -1268,11 +1319,16 @@ export async function getInventoryWriteOff(id: string): Promise<InventoryWriteOf
     return null
   }
 
+  const status = isInventoryWriteOffStatus(asString(row.status))
+    ? (asString(row.status) as WriteOffStatus)
+    : InventoryWriteOffStatus.Posted
+
   return {
     id: row.id,
     writeOffDate: asString(row.write_off_date),
     reason: asString(row.reason),
     notes: asString(row.notes),
+    status,
     createdAt: asString(row.created_at),
     actorName: asString(row.actor_name),
     lines: Array.isArray(row.lines)
@@ -1281,10 +1337,35 @@ export async function getInventoryWriteOff(id: string): Promise<InventoryWriteOf
           if (!item || typeof item.id !== 'string') {
             return []
           }
+          const itemId = asString(item.item_id)
+          const mappedItem: InventoryItem | undefined =
+            status === InventoryWriteOffStatus.Draft && itemId
+              ? {
+                  id: itemId,
+                  code: asString(item.item_code),
+                  article: asString(item.item_article),
+                  barcode: asString(item.item_barcode),
+                  barcodeType: '',
+                  name: asString(item.item_name),
+                  description: '',
+                  categoryId: asString(item.category_id),
+                  categoryName: asString(item.category_name),
+                  unitId: asString(item.unit_id),
+                  unitName: asString(item.unit_name),
+                  purchasePrice: asNumber(item.item_purchase_price),
+                  repairPrice: asNumber(item.repair_price),
+                  retailPrice: asNumber(item.retail_price),
+                  isPermanent: true,
+                  stockQuantity: asNumber(item.stock_quantity),
+                  coverUrl: null,
+                  createdAt: asString(item.item_created_at),
+                  updatedAt: asString(item.item_updated_at),
+                }
+              : undefined
           return [
             {
               id: item.id,
-              itemId: asString(item.item_id),
+              itemId,
               itemName: asString(item.item_name),
               itemCode: asString(item.item_code),
               itemArticle: asString(item.item_article),
@@ -1292,6 +1373,7 @@ export async function getInventoryWriteOff(id: string): Promise<InventoryWriteOf
               quantity: asNumber(item.quantity),
               unitPrice: asNumber(item.unit_price),
               amount: asNumber(item.amount),
+              item: mappedItem,
             },
           ]
         })

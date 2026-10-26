@@ -1,7 +1,9 @@
 import { DataTable } from '@/components/shared/DataTable'
+import { EmptyState } from '@/components/shared/EmptyState'
 import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
+import { StatusBadge } from '@/components/shared/StatusBadge'
 import {
   Sheet,
   SheetContent,
@@ -10,7 +12,13 @@ import {
   SheetTitle,
   useSheetExitPresence,
 } from '@/components/ui/sheet'
-import { formatMoney, formatQuantity } from '@/lib/constants/inventory'
+import {
+  formatMoney,
+  formatQuantity,
+  InventoryWriteOffStatus,
+  inventoryWriteOffStatusLabels,
+  inventoryWriteOffStatusTone,
+} from '@/lib/constants/inventory'
 import { getErrorMessage } from '@/lib/errors'
 import { formatDate } from '@/lib/utils/date'
 
@@ -58,7 +66,7 @@ function InventoryWriteOffSheetContent({
       actions={
         writeOff ? (
           <WriteOffDeleteControl
-            writeOff={{ id: writeOff.id, reason: writeOff.reason }}
+            writeOff={{ id: writeOff.id, reason: writeOff.reason, status: writeOff.status }}
             onDeleted={onClose}
           />
         ) : null
@@ -75,10 +83,21 @@ function InventoryWriteOffSheetContent({
           <ErrorState description={getErrorMessage(writeOffQuery.error)} />
         ) : !writeOff ? (
           <ErrorState description="Списание не найдено." />
+        ) : writeOff.status === InventoryWriteOffStatus.Draft ? (
+          <EmptyState
+            title="Черновик списания"
+            description="Откройте документ из списка, чтобы продолжить заполнение или провести."
+            className="min-h-40 border-0 bg-transparent"
+          />
         ) : (
           <div className="space-y-4">
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold tracking-tight">{writeOff.reason}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-lg font-semibold tracking-tight">{writeOff.reason || '—'}</h2>
+                <StatusBadge tone={inventoryWriteOffStatusTone(writeOff.status)}>
+                  {inventoryWriteOffStatusLabels[writeOff.status]}
+                </StatusBadge>
+              </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {formatDate(writeOff.writeOffDate)}
                 {writeOff.actorName ? ` ${writeOff.actorName}` : ''}

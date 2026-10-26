@@ -203,7 +203,7 @@ export function TasksScreen() {
       </div>
 
       <FilterBar
-        className="[&_[data-slot=select-trigger]]:min-w-0 [&_[data-slot=select-trigger]]:flex-1 [&_[data-slot=select-trigger]]:shrink [&>[data-slot=search-input]]:max-w-[16rem]"
+        className="[&_[data-slot=select-trigger]]:min-w-[10rem] [&_[data-slot=select-trigger]]:shrink-0 sm:[&_[data-slot=select-trigger]]:min-w-0 sm:[&_[data-slot=select-trigger]]:flex-1 sm:[&_[data-slot=select-trigger]]:shrink [&>[data-slot=search-input]]:max-w-[16rem]"
         end={
           canCreate ? (
             <Button type="button" onClick={() => setCreateOpen(true)}>
@@ -235,7 +235,7 @@ export function TasksScreen() {
           className={cn(
             'min-w-[10rem] max-w-[16rem] flex-1',
             search.trim().length > 0 &&
-              '[&_input]:border-primary [&_input]:bg-primary [&_input]:text-primary-foreground [&_input]:placeholder:text-primary-foreground/70 [&_svg]:text-primary-foreground',
+              '[&_input]:border-primary [&_input]:bg-primary/5 [&_input]:ring-[3px] [&_input]:ring-primary/20 [&_svg]:text-primary',
           )}
         />
         {canManageOthers ? (

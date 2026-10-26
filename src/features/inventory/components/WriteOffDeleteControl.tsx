@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { IconActionButton } from '@/components/shared/IconActionButton'
 import { Button } from '@/components/ui/button'
 import { useHasPermission } from '@/features/auth'
+import { InventoryWriteOffStatus } from '@/lib/constants/inventory'
 import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 
@@ -14,6 +15,7 @@ import { useDeleteInventoryWriteOff, type InventoryWriteOffDeleteMode } from '..
 type WriteOffDeleteTarget = {
   id: string
   reason: string
+  status?: string
 }
 
 type WriteOffDeleteControlProps = {
@@ -33,6 +35,7 @@ export function WriteOffDeleteControl({
   const remove = useDeleteInventoryWriteOff()
   const [open, setOpen] = useState(false)
   const [pendingMode, setPendingMode] = useState<InventoryWriteOffDeleteMode | null>(null)
+  const isDraft = writeOff.status === InventoryWriteOffStatus.Draft
 
   if (!canWriteOff) {
     return null
@@ -43,7 +46,13 @@ export function WriteOffDeleteControl({
     try {
       await remove.mutateAsync({ id: writeOff.id, mode })
       onDeleted?.()
-      toast.success(mode === 'hide' ? 'Запись списания скрыта' : 'Списание отменено, остаток возвращён')
+      toast.success(
+        isDraft
+          ? 'Черновик удалён'
+          : mode === 'hide'
+            ? 'Запись списания скрыта'
+            : 'Списание отменено, остаток возвращён',
+      )
       setOpen(false)
     } catch (error) {
       toast.error(getErrorMessage(error))
@@ -75,6 +84,8 @@ export function WriteOffDeleteControl({
       </IconActionButton>
     )
 
+  const reasonLabel = writeOff.reason || 'без причины'
+
   return (
     <div
       onClick={(event) => event.stopPropagation()}
@@ -82,22 +93,35 @@ export function WriteOffDeleteControl({
       onPointerDown={(event) => event.stopPropagation()}
     >
       {trigger}
-      <ConfirmDialog
-        open={open}
-        title="Удалить списание?"
-        description={`${writeOff.reason}: «Удалить запись» скроет документ без изменения остатка. «Отменить списание» вернёт количество на склад.`}
-        cancelLabel="Отменить"
-        confirmLabel="Отменить списание"
-        extraAction={{
-          label: 'Удалить запись',
-          variant: 'outline',
-          isPending: pendingMode === 'hide',
-          onClick: () => void runDelete('hide'),
-        }}
-        isPending={pendingMode === 'reverse'}
-        onOpenChange={setOpen}
-        onConfirm={() => void runDelete('reverse')}
-      />
+      {isDraft ? (
+        <ConfirmDialog
+          open={open}
+          title="Удалить черновик?"
+          description={`${reasonLabel}: черновик будет удалён без изменений на складе.`}
+          cancelLabel="Отмена"
+          confirmLabel="Удалить"
+          isPending={pendingMode === 'reverse'}
+          onOpenChange={setOpen}
+          onConfirm={() => void runDelete('reverse')}
+        />
+      ) : (
+        <ConfirmDialog
+          open={open}
+          title="Удалить списание?"
+          description={`${reasonLabel}: «Удалить запись» скроет документ без изменения остатка. «Отменить списание» вернёт количество на склад.`}
+          cancelLabel="Отменить"
+          confirmLabel="Отменить списание"
+          extraAction={{
+            label: 'Удалить запись',
+            variant: 'outline',
+            isPending: pendingMode === 'hide',
+            onClick: () => void runDelete('hide'),
+          }}
+          isPending={pendingMode === 'reverse'}
+          onOpenChange={setOpen}
+          onConfirm={() => void runDelete('reverse')}
+        />
+      )}
     </div>
   )
 }

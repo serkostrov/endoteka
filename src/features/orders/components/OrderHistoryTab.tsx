@@ -2,6 +2,7 @@ import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { SectionCard } from '@/components/shared/SectionCard'
+import { DiagnosticJournalEvent } from '@/features/diagnostics/constants'
 import { useOrderJournal } from '@/features/diagnostics/hooks/use-diagnostics'
 import {
   formatJournalEventBody,
@@ -12,6 +13,7 @@ import { formatDateTime } from '@/lib/utils/date'
 import type { Json } from '@/types/database'
 
 import { orderJournalEventTypeLabel } from '../lib/journal-labels'
+import { JournalStatusChangeBody } from './OrderBadges'
 
 type OrderHistoryTabProps = {
   orderId: string
@@ -41,7 +43,11 @@ export function OrderHistoryTab({ orderId }: OrderHistoryTabProps) {
         <ol className="space-y-3">
           {events.map((event) => (
             <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
-              <p className="text-sm font-medium tabular-nums">{formatJournalEventBody(event)}</p>
+              {event.eventType === DiagnosticJournalEvent.StatusChanged ? (
+                <JournalStatusChangeBody event={event} />
+              ) : (
+                <p className="text-sm font-medium tabular-nums">{formatJournalEventBody(event)}</p>
+              )}
               <p className="text-xs text-muted-foreground">
                 {orderJournalEventTypeLabel(event.eventType, event.summary)}
                 {' · '}

@@ -30,6 +30,7 @@ import { queryKeys } from '@/lib/query-keys'
 import { useQueryClient } from '@tanstack/react-query'
 import type { DynamicFieldValueData } from '@/features/dynamic-fields/services/fields-service'
 
+import { useOrderDeadlineHidden } from './OrderBadges'
 import { useUpdateOrder } from '../hooks/use-orders'
 import type { UpdateOrderInput } from '../services/orders-service'
 import {
@@ -60,11 +61,19 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
   const queryClient = useQueryClient()
   const fieldsQuery = useDynamicFields(FieldEntity.Orders)
   const valuesQuery = useDynamicFieldValues(FieldEntity.Orders, order.id)
+  const hideDeadline = useOrderDeadlineHidden(order.statusCode)
   const activeFields = useMemo(
     () => (fieldsQuery.data ?? []).filter((field) => field.isActive),
     [fieldsQuery.data],
   )
-  const fieldGroups = useMemo(() => groupDynamicFields(activeFields), [activeFields])
+  const visibleFields = useMemo(
+    () =>
+      hideDeadline
+        ? activeFields.filter((field) => field.code !== OrderBuiltinField.Deadline)
+        : activeFields,
+    [activeFields, hideDeadline],
+  )
+  const fieldGroups = useMemo(() => groupDynamicFields(visibleFields), [visibleFields])
   const [extraDraft, setExtraDraft] = useState<Record<string, DynamicFieldValueData> | null>(null)
   const [partyDraft, setPartyDraft] = useState<PartyDraft | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
