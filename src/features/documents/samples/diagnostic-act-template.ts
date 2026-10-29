@@ -11,7 +11,7 @@ export const DIAGNOSTIC_ACT_TEMPLATE_HTML = `<div style="text-align: center;">
 <tbody>
 <tr>
 <td style="width: 17%; vertical-align: middle; border: none;">
-<img style="display: block; margin-left: auto; margin-right: auto;" src="https://i.postimg.cc/Kv6grL5w/1-kopia.png" alt="" width="150" height="150" />
+<img style="display: block; margin-left: auto; margin-right: auto;" src="https://supabase.endoteka-crm.ru/storage/v1/object/public/document-template-assets/migrated-external/7cea244d3c3a2ade.png" alt="" width="150" height="150" />
 </td>
 <td style="width: 83%; vertical-align: middle; border: none; text-align: center;">
 <p style="text-align: center; margin: 0;"><strong><span style="font-size: 28pt; font-family: 'Times New Roman', Times, serif;">ООО «ЭНДОТЕКА»</span></strong></p>
@@ -142,7 +142,7 @@ export const DIAGNOSTIC_ACT_TEMPLATE_HTML = `<div style="text-align: center;">
 <tbody>
 <tr>
 <td style="width: 50%; text-align: center; vertical-align: top; border: none; padding: 4pt;">
-<img src="https://i.postimg.cc/MHqgqkSt/Snimok-ekrana-2026-07-09-101352.png" alt="" width="280" height="153" />
+<img src="https://supabase.endoteka-crm.ru/storage/v1/object/public/document-template-assets/migrated-external/da7cf85bc6433007.png" alt="" width="280" height="153" />
 </td>
 <td style="width: 50%; text-align: center; vertical-align: top; border: none; padding: 4pt;">
 <p style="margin: 0 0 6pt;"><span style="font-size: 12pt; font-family: 'Times New Roman', Times, serif;">Представитель Заказчика</span></p>

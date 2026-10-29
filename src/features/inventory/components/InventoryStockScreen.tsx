@@ -421,6 +421,25 @@ export function InventoryStockScreen() {
               ),
             },
             {
+              id: 'stock',
+              header: 'Остаток',
+              className: 'w-[1%] whitespace-nowrap text-right',
+              cell: (row) => (
+                <StatusBadge
+                  tone={
+                    row.stockQuantity < 0
+                      ? 'danger'
+                      : row.stockQuantity === 0
+                        ? 'warning'
+                        : 'success'
+                  }
+                  className="tabular-nums"
+                >
+                  {`${formatQuantity(row.stockQuantity)} ${row.unitName}`}
+                </StatusBadge>
+              ),
+            },
+            {
               id: 'code',
               header: 'Код',
               className: 'w-[10.5rem]',
@@ -448,25 +467,6 @@ export function InventoryStockScreen() {
                 <span className="block truncate text-sm text-muted-foreground">
                   {row.categoryName || '—'}
                 </span>
-              ),
-            },
-            {
-              id: 'stock',
-              header: 'Остаток',
-              className: 'w-[1%] whitespace-nowrap text-right',
-              cell: (row) => (
-                <StatusBadge
-                  tone={
-                    row.stockQuantity < 0
-                      ? 'danger'
-                      : row.stockQuantity === 0
-                        ? 'warning'
-                        : 'success'
-                  }
-                  className="tabular-nums"
-                >
-                  {`${formatQuantity(row.stockQuantity)} ${row.unitName}`}
-                </StatusBadge>
               ),
             },
             ...(canDelete

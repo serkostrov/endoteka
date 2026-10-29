@@ -2,6 +2,7 @@ import { toast } from 'sonner'
 import { useState } from 'react'
 
 import { DatePicker } from '@/components/shared/DatePicker'
+import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { ErrorState } from '@/components/shared/ErrorState'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
@@ -141,8 +142,14 @@ function TaskSheetCard({ task }: { task: Task }) {
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge tone={task.completed ? 'success' : overdue ? 'danger' : 'neutral'}>{statusLabel}</StatusBadge>
           <StatusBadge tone={taskPriorityTone(task.priority)}>{taskPriorityLabels[task.priority]}</StatusBadge>
-          {task.orderNumber ? (
-            <span className="text-xs text-muted-foreground">Заказ {task.orderNumber}</span>
+          {task.orderId && task.orderNumber ? (
+            <EntitySheetLink
+              kind="order"
+              id={task.orderId}
+              className="text-xs text-primary hover:underline"
+            >
+              Заказ {task.orderNumber}
+            </EntitySheetLink>
           ) : null}
           <span className="text-xs text-muted-foreground">
             {task.createdByName ? `Создал ${task.createdByName}` : 'Создана'}

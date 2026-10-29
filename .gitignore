@@ -27,4 +27,5 @@ dist-ssr
 # Import reports and exported dumps (may contain PII)
 import/reports
 import/data
+tmp
 
