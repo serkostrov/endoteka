@@ -26,13 +26,14 @@ export function groupHistoryByMonthAndDay<T>(
   const now = new Date()
 
   for (const item of items) {
-    const date = toDate(getCreatedAt(item) ?? null)
+    const createdAt = getCreatedAt(item)
+    const date = createdAt ? toDate(createdAt) : null
     const monthKey = date ? format(date, 'yyyy-MM') : 'unknown'
     const dayKey = date ? format(date, 'yyyy-MM-dd') : 'unknown'
     const monthLabel = date
       ? format(date, isSameYear(date, now) ? 'LLLL' : 'LLLL yyyy', { locale: ru })
       : 'Без даты'
-    const dayLabel = date ? formatHistoryDayLabel(date, now) : 'Без даты'
+    const dayLabel = date ? formatHistoryDayLabel(date) : 'Без даты'
 
     let month = months[months.length - 1]
     if (!month || month.monthKey !== monthKey) {
@@ -52,7 +53,7 @@ export function groupHistoryByMonthAndDay<T>(
   return months
 }
 
-function formatHistoryDayLabel(date: Date, now: Date) {
+function formatHistoryDayLabel(date: Date) {
   if (isToday(date)) {
     return 'Сегодня'
   }
