@@ -211,8 +211,11 @@ function startOfToday() {
 
 export function OrderDeadlineCell({
   order,
+  empty = 'dash',
 }: {
   order: Pick<OrderListItem, 'deadline' | 'deadlineState' | 'statusCode'>
+  /** В таблицах — «—», в компактных списках лучше ничего не рисовать. */
+  empty?: 'dash' | 'empty'
 }) {
   const hidden = useOrderDeadlineHidden(order.statusCode)
   if (
@@ -221,7 +224,7 @@ export function OrderDeadlineCell({
     order.deadlineState === DeadlineState.None ||
     order.deadlineState === DeadlineState.Closed
   ) {
-    return <span className="text-muted-foreground">—</span>
+    return empty === 'empty' ? null : <span className="text-muted-foreground">—</span>
   }
 
   const tone = deadlineTone(order.deadlineState)

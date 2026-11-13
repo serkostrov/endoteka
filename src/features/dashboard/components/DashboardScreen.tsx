@@ -168,10 +168,10 @@ function OrderPreviewRow({ order }: { order: DashboardOrderPreview }) {
     <li>
       <button
         type="button"
-        className="group flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/60"
+        className="group flex w-full flex-col items-stretch gap-1.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/60"
         onClick={() => openSheet('order', order.id)}
       >
-        <span className="min-w-0 flex-1">
+        <span className="min-w-0">
           <span className="block truncate text-sm font-medium text-primary group-hover:underline">
             {order.number}
           </span>
@@ -180,16 +180,23 @@ function OrderPreviewRow({ order }: { order: DashboardOrderPreview }) {
               'Без клиента'}
           </span>
         </span>
-        <OrderStatusBadge code={order.statusCode} name={order.statusName} />
-        {isDeadlineState(order.deadlineState) ? (
-          <OrderDeadlineCell
-            order={{
-              deadline: order.deadline,
-              deadlineState: order.deadlineState,
-              statusCode: order.statusCode,
-            }}
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <OrderStatusBadge
+            code={order.statusCode}
+            name={order.statusName}
+            className="max-w-full min-w-0 shrink sm:max-w-[14rem]"
           />
-        ) : null}
+          {isDeadlineState(order.deadlineState) ? (
+            <OrderDeadlineCell
+              empty="empty"
+              order={{
+                deadline: order.deadline,
+                deadlineState: order.deadlineState,
+                statusCode: order.statusCode,
+              }}
+            />
+          ) : null}
+        </span>
       </button>
     </li>
   )
@@ -577,7 +584,7 @@ export function DashboardScreen() {
                 className="min-h-[18rem]"
               >
                 {orderFeed && orderFeed.items.length > 0 ? (
-                  <ul className="space-y-0.5">
+                  <ul className="space-y-1">
                     {orderFeed.items.map((order) => (
                       <OrderPreviewRow key={order.id} order={order} />
                     ))}
