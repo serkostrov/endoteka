@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { cn } from '@/lib/utils'
 
 type ConfirmDialogExtraAction = {
   label: string
@@ -64,10 +65,17 @@ export function ConfirmDialog({
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           {children}
-          <DialogFooter className="sm:flex-wrap">
+          <DialogFooter
+            className={cn(
+              extraAction
+                ? 'flex flex-col gap-2 sm:flex-col sm:items-stretch'
+                : 'sm:flex-row sm:justify-end',
+            )}
+          >
             {extraAction ? (
               <Button
                 type="button"
+                className="w-full"
                 variant={extraAction.variant ?? 'success'}
                 onClick={extraAction.onClick}
                 disabled={busy}
@@ -75,12 +83,31 @@ export function ConfirmDialog({
                 {extraAction.isPending ? 'Сохранение…' : extraAction.label}
               </Button>
             ) : null}
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-              {cancelLabel}
-            </Button>
-            <Button type="button" variant={confirmVariant} onClick={onConfirm} disabled={busy}>
-              {isPending ? 'Выполнение…' : confirmLabel}
-            </Button>
+            <div
+              className={cn(
+                'flex w-full gap-2',
+                extraAction ? 'flex-col sm:flex-row' : 'flex-col-reverse sm:flex-row sm:justify-end',
+              )}
+            >
+              <Button
+                type="button"
+                className={cn(extraAction && 'w-full sm:flex-1')}
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={busy}
+              >
+                {cancelLabel}
+              </Button>
+              <Button
+                type="button"
+                className={cn(extraAction && 'w-full sm:flex-1')}
+                variant={confirmVariant}
+                onClick={onConfirm}
+                disabled={busy}
+              >
+                {isPending ? 'Выполнение…' : confirmLabel}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

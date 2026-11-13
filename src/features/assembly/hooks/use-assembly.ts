@@ -5,16 +5,15 @@ import { queryKeys } from '@/lib/query-keys'
 import {
   addAssemblyAttachmentUrl,
   addAssemblyJournalNote,
-  addAssemblyPart,
   deleteAssemblyAttachment,
   getAssembly,
   getAssemblyJournal,
   listAssemblies,
   listAssemblyAttachments,
-  removeAssemblyPart,
-  updateAssemblyPart,
+  saveAssemblyParts,
   uploadAssemblyFile,
   type AssemblyListFilters,
+  type AssemblyPartSaveItem,
 } from '../services/assembly-service'
 
 function invalidateAssembly(queryClient: ReturnType<typeof useQueryClient>, orderId: string) {
@@ -55,40 +54,17 @@ export function useAssemblyAttachments(orderId: string | null) {
   })
 }
 
-export function useAddAssemblyPart(orderId: string) {
+export function useSaveAssemblyParts(orderId: string) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: { name: string; qtyRequired?: number; qtyCollected?: number; comment?: string }) =>
-      addAssemblyPart(orderId, input),
-    onSuccess: () => invalidateAssembly(queryClient, orderId),
-  })
-}
-
-export function useUpdateAssemblyPart(orderId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (input: {
-      partId: string
-      name?: string
-      qtyRequired?: number
-      qtyCollected?: number
-      comment?: string
-    }) =>
-      updateAssemblyPart(input.partId, {
-        name: input.name,
-        qtyRequired: input.qtyRequired,
-        qtyCollected: input.qtyCollected,
-        comment: input.comment,
-      }),
-    onSuccess: () => invalidateAssembly(queryClient, orderId),
-  })
-}
-
-export function useRemoveAssemblyPart(orderId: string) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (partId: string) => removeAssemblyPart(partId),
-    onSuccess: () => invalidateAssembly(queryClient, orderId),
+    mutationFn: (parts: AssemblyPartSaveItem[]) => saveAssemblyParts(orderId, parts),
+    onSuccess: async () => {
+      invalidateAssembly(queryClient, orderId)
+      await queryClient.fetchQuery({
+        queryKey: queryKeys.assemblies.detail(orderId),
+        queryFn: () => getAssembly(orderId),
+      })
+    },
   })
 }
 

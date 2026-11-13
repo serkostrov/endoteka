@@ -239,6 +239,43 @@ export async function getAssembly(orderId: string): Promise<AssemblyDetail> {
   }
 }
 
+export type AssemblyPartSaveItem = {
+  id: string | null
+  name: string
+  qty_required: number
+  qty_collected: number
+  comment: string
+  sort_order: number
+}
+
+export type SaveAssemblyPartsResult = {
+  completenessPct: number
+  changed: boolean
+  changesCount: number
+}
+
+/** Сохраняет весь список позиций одним вызовом и пишет одну запись в историю. */
+export async function saveAssemblyParts(
+  orderId: string,
+  parts: AssemblyPartSaveItem[],
+): Promise<SaveAssemblyPartsResult> {
+  const { data, error } = await getSupabase().rpc('save_order_assembly_parts', {
+    target_order_id: orderId,
+    parts: parts as unknown as Json,
+  })
+
+  if (error) {
+    throw toAppError(error, 'Не удалось сохранить сборку.')
+  }
+
+  const row = asRecord(data)
+  return {
+    completenessPct: asNumber(row?.completeness_pct, 0),
+    changed: Boolean(row?.changed),
+    changesCount: asNumber(row?.changes_count, 0),
+  }
+}
+
 export async function addAssemblyPart(
   orderId: string,
   input: { name: string; qtyRequired?: number; qtyCollected?: number; comment?: string },
@@ -449,6 +486,8 @@ export function assemblyJournalEventTypeLabel(eventType: string): string {
       return 'Задача выполнена'
     case 'task_deleted':
       return 'Задача удалена'
+    case 'assembly_updated':
+      return 'Сборка'
     case 'assembly_part_added':
       return 'Позиция добавлена'
     case 'assembly_part_updated':

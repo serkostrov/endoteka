@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { ExternalLink, History, X } from 'lucide-react'
+import { toast } from 'sonner'
 
 import { EntitySheetLink } from '@/components/shared/EntitySheetLink'
 import { ErrorState } from '@/components/shared/ErrorState'
@@ -13,14 +14,18 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  useSheetDirty,
   useSheetExitPresence,
 } from '@/components/ui/sheet'
 import { deviceSerialLine } from '@/features/devices/classification'
+import { useHasPermission } from '@/features/auth'
+import { Permission } from '@/lib/constants/permissions'
 import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
-import { useAssembly } from '../hooks/use-assembly'
-import type { AssemblyDetail } from '../services/assembly-service'
+import { useAssembly, useSaveAssemblyParts } from '../hooks/use-assembly'
+import { AssemblyPartsDraftProvider, useAssemblyPartsDraft } from '../lib/assembly-parts-draft'
+import { getAssembly, type AssemblyDetail } from '../services/assembly-service'
 import { AssemblyActivityFeed } from './AssemblyActivityFeed'
 import { AssemblyCompletenessBadge } from './AssemblyCompletenessBadge'
 import { AssemblyPartsBlock } from './AssemblyPartsBlock'
@@ -38,18 +43,12 @@ export function AssemblyDetailSheet({
   const presence = useSheetExitPresence(open, orderId)
   return (
     <Sheet open={presence.open} onOpenChange={onOpenChange}>
-      {presence.id ? (
-        <AssemblyDetailSheetContent
-          key={presence.id}
-          orderId={presence.id}
-          onClose={() => onOpenChange(false)}
-        />
-      ) : null}
+      {presence.id ? <AssemblyDetailSheetContent key={presence.id} orderId={presence.id} /> : null}
     </Sheet>
   )
 }
 
-function AssemblyDetailSheetContent({ orderId, onClose }: { orderId: string; onClose: () => void }) {
+function AssemblyDetailSheetContent({ orderId }: { orderId: string }) {
   const assemblyQuery = useAssembly(orderId)
   const [historyOpen, setHistoryOpen] = useState(false)
 
@@ -70,12 +69,13 @@ function AssemblyDetailSheetContent({ orderId, onClose }: { orderId: string; onC
       ) : !assemblyQuery.data ? (
         <ErrorState description="Сборка не найдена." />
       ) : (
-        <AssemblyDetailCard
-          assembly={assemblyQuery.data}
-          historyOpen={historyOpen}
-          onHistoryOpenChange={setHistoryOpen}
-          onClose={onClose}
-        />
+        <AssemblyPartsDraftProvider serverParts={assemblyQuery.data.parts}>
+          <AssemblyDetailCard
+            assembly={assemblyQuery.data}
+            historyOpen={historyOpen}
+            onHistoryOpenChange={setHistoryOpen}
+          />
+        </AssemblyPartsDraftProvider>
       )}
     </SheetContent>
   )
@@ -85,14 +85,36 @@ function AssemblyDetailCard({
   assembly,
   historyOpen,
   onHistoryOpenChange,
-  onClose,
 }: {
   assembly: AssemblyDetail
   historyOpen: boolean
   onHistoryOpenChange: (open: boolean) => void
-  onClose: () => void
 }) {
+  const canEdit = useHasPermission(Permission.OrdersUpdate)
+  const { parts, dirty, completenessPct, toSavePayload, resetFromServer } = useAssemblyPartsDraft()
+  const saveParts = useSaveAssemblyParts(assembly.id)
+  const [saving, setSaving] = useState(false)
   const serial = deviceSerialLine(assembly.serialNumber)
+
+  const persist = useCallback(async () => {
+    if (!dirty) {
+      return
+    }
+    setSaving(true)
+    try {
+      await saveParts.mutateAsync(toSavePayload())
+      const detail = await getAssembly(assembly.id)
+      resetFromServer(detail.parts)
+      toast.success('Сборка сохранена')
+    } catch (error) {
+      toast.error(getErrorMessage(error))
+      throw error
+    } finally {
+      setSaving(false)
+    }
+  }, [assembly.id, dirty, resetFromServer, saveParts, toSavePayload])
+
+  useSheetDirty(dirty, persist)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -102,7 +124,7 @@ function AssemblyDetailCard({
             <h2 className="truncate text-lg font-semibold tracking-tight">
               Сборка заказа {assembly.number}
             </h2>
-            <AssemblyCompletenessBadge pct={assembly.completenessPct} />
+            <AssemblyCompletenessBadge pct={completenessPct} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <EntitySheetLink
@@ -113,7 +135,22 @@ function AssemblyDetailCard({
               Открыть заказ
               <ExternalLink className="size-3.5" />
             </EntitySheetLink>
-            <AssemblyPrintButton assembly={assembly} />
+            <AssemblyPrintButton
+              assembly={{
+                ...assembly,
+                completenessPct,
+                parts: parts.map((part) => ({
+                  id: part.serverId ?? part.key,
+                  name: part.name,
+                  qtyRequired: part.qtyRequired,
+                  qtyCollected: part.qtyCollected,
+                  comment: part.comment,
+                  sortOrder: part.sortOrder,
+                  createdAt: '',
+                  updatedAt: '',
+                })),
+              }}
+            />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -125,7 +162,7 @@ function AssemblyDetailCard({
             <History className="size-4" />
           </IconActionButton>
           <SheetClose asChild>
-            <IconActionButton label="Закрыть" onClick={onClose}>
+            <IconActionButton label="Закрыть">
               <X className="size-4" />
             </IconActionButton>
           </SheetClose>
@@ -158,7 +195,7 @@ function AssemblyDetailCard({
               </p>
             </section>
 
-            <AssemblyPartsBlock orderId={assembly.id} parts={assembly.parts} />
+            <AssemblyPartsBlock />
           </div>
         </div>
 
@@ -166,6 +203,21 @@ function AssemblyDetailCard({
           <AssemblyActivityFeed orderId={assembly.id} orderNumber={assembly.number} />
         </aside>
       </div>
+
+      {canEdit && (dirty || saving) ? (
+        <footer className="flex items-center justify-between gap-3 border-t px-4 py-3">
+          <Button
+            type="button"
+            disabled={saving || !dirty}
+            onClick={() => {
+              void persist().catch(() => undefined)
+            }}
+          >
+            {saving ? 'Сохранение…' : 'Сохранить'}
+          </Button>
+          <p className="text-xs text-muted-foreground">Есть несохранённые изменения</p>
+        </footer>
+      ) : null}
 
       {historyOpen ? (
         <div className="fixed inset-0 z-50 flex flex-col bg-background lg:hidden">

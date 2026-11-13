@@ -36,16 +36,9 @@ import { getErrorMessage } from '@/lib/errors'
 import { cn } from '@/lib/utils'
 
 import {
-  useAddAssemblyPart,
-  useRemoveAssemblyPart,
-  useUpdateAssemblyPart,
-} from '../hooks/use-assembly'
-import type { AssemblyPart } from '../services/assembly-service'
-
-type AssemblyPartsBlockProps = {
-  orderId: string
-  parts: AssemblyPart[]
-}
+  useAssemblyPartsDraft,
+  type AssemblyPartDraft,
+} from '../lib/assembly-parts-draft'
 
 const cellPad = 'px-2 py-1.5'
 const spinless =
@@ -85,39 +78,12 @@ function parseNonNegative(value: string): number | null {
   return num
 }
 
-export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) {
+export function AssemblyPartsBlock() {
   const canEdit = useHasPermission(Permission.OrdersUpdate)
-  const addPart = useAddAssemblyPart(orderId)
-  const updatePart = useUpdateAssemblyPart(orderId)
-  const removePart = useRemoveAssemblyPart(orderId)
+  const { parts, addPart, updatePart, removePart } = useAssemblyPartsDraft()
   const [sheetMode, setSheetMode] = useState<'create' | 'edit' | null>(null)
-  const [openedPart, setOpenedPart] = useState<AssemblyPart | null>(null)
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
-
-  async function handleUpdate(
-    partId: string,
-    patch: { name?: string; qtyRequired?: number; qtyCollected?: number; comment?: string },
-  ) {
-    try {
-      await updatePart.mutateAsync({ partId, ...patch })
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-      throw error
-    }
-  }
-
-  async function handleDelete() {
-    if (!pendingDeleteId) {
-      return
-    }
-    try {
-      await removePart.mutateAsync(pendingDeleteId)
-      setPendingDeleteId(null)
-      toast.success('Позиция удалена')
-    } catch (error) {
-      toast.error(getErrorMessage(error))
-    }
-  }
+  const [openedPart, setOpenedPart] = useState<AssemblyPartDraft | null>(null)
+  const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null)
 
   function closeSheet() {
     setSheetMode(null)
@@ -130,7 +96,8 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
         <div className="min-w-0 space-y-1">
           <h3 className="text-sm font-medium text-foreground">Сборка запасных частей</h3>
           <p className="text-xs text-muted-foreground">
-            Позиции только для этой сборки — без склада и состава работы.
+            Позиции только для этой сборки — без склада и состава работы. Изменения сохраняются
+            кнопкой «Сохранить».
           </p>
         </div>
 
@@ -143,7 +110,6 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
               setOpenedPart(null)
               setSheetMode('create')
             }}
-            disabled={addPart.isPending}
           >
             <Plus className="size-4" />
             Добавить
@@ -162,15 +128,15 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
           <div className="space-y-2 md:hidden">
             {parts.map((part) => (
               <AssemblyPartCard
-                key={part.id}
+                key={part.key}
                 part={part}
                 canEdit={canEdit}
                 onOpen={() => {
                   setOpenedPart(part)
                   setSheetMode('edit')
                 }}
-                onUpdate={handleUpdate}
-                onDelete={() => setPendingDeleteId(part.id)}
+                onUpdate={(key, patch) => updatePart(key, patch)}
+                onDelete={() => setPendingDeleteKey(part.key)}
               />
             ))}
           </div>
@@ -208,7 +174,7 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
               <TableBody>
                 {parts.map((part) => (
                   <TableRow
-                    key={part.id}
+                    key={part.key}
                     className="group/row border-b last:border-b-0 hover:bg-muted/20"
                   >
                     <TableCell className={cn(cellPad, 'max-w-0 whitespace-normal')}>
@@ -233,7 +199,7 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
                           if (next === part.qtyRequired) {
                             return
                           }
-                          void handleUpdate(part.id, { qtyRequired: next })
+                          updatePart(part.key, { qtyRequired: next })
                         }}
                       />
                     </TableCell>
@@ -246,13 +212,14 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
                           if (next === part.qtyCollected) {
                             return
                           }
-                          void handleUpdate(part.id, { qtyCollected: next })
+                          updatePart(part.key, { qtyCollected: next })
                         }}
                       />
                     </TableCell>
                     <TableCell className={cn(cellPad, 'max-w-0')}>
                       {canEdit ? (
                         <Input
+                          key={`${part.key}:${part.comment}`}
                           defaultValue={part.comment}
                           placeholder="—"
                           aria-label="Комментарий"
@@ -262,7 +229,7 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
                             if (next === part.comment) {
                               return
                             }
-                            void handleUpdate(part.id, { comment: next })
+                            updatePart(part.key, { comment: next })
                           }}
                         />
                       ) : (
@@ -278,7 +245,7 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
                           variant="ghost"
                           size="icon-xs"
                           className="text-destructive opacity-0 transition-opacity hover:text-destructive group-hover/row:opacity-100 focus-visible:opacity-100"
-                          onClick={() => setPendingDeleteId(part.id)}
+                          onClick={() => setPendingDeleteKey(part.key)}
                         >
                           <Trash2 />
                         </IconActionButton>
@@ -297,7 +264,6 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
         part={sheetMode === 'edit' ? openedPart : null}
         open={sheetMode !== null}
         canEdit={canEdit}
-        pending={addPart.isPending || updatePart.isPending}
         onOpenChange={(open) => {
           if (!open) {
             closeSheet()
@@ -305,37 +271,36 @@ export function AssemblyPartsBlock({ orderId, parts }: AssemblyPartsBlockProps) 
         }}
         onSave={async (values) => {
           if (sheetMode === 'create') {
-            await addPart.mutateAsync({
-              name: values.name,
-              qtyRequired: values.qtyRequired,
-              qtyCollected: values.qtyCollected,
-              comment: values.comment,
-            })
-            toast.success('Позиция добавлена в сборку')
+            addPart(values)
+            toast.success('Позиция добавлена в черновик')
             closeSheet()
             return
           }
           if (!openedPart) {
             return
           }
-          await handleUpdate(openedPart.id, values)
-          toast.success('Позиция сохранена')
+          updatePart(openedPart.key, values)
+          toast.success('Позиция обновлена в черновике')
           closeSheet()
         }}
       />
 
       <ConfirmDialog
-        open={Boolean(pendingDeleteId)}
+        open={Boolean(pendingDeleteKey)}
         onOpenChange={(open) => {
           if (!open) {
-            setPendingDeleteId(null)
+            setPendingDeleteKey(null)
           }
         }}
         title="Удалить позицию?"
-        description="Позиция будет удалена из сборки запасных частей."
+        description="Позиция будет удалена из черновика. Чтобы зафиксировать удаление в истории, нажмите «Сохранить»."
         confirmLabel="Удалить"
-        isPending={removePart.isPending}
-        onConfirm={() => void handleDelete()}
+        onConfirm={() => {
+          if (pendingDeleteKey) {
+            removePart(pendingDeleteKey)
+          }
+          setPendingDeleteKey(null)
+        }}
       />
     </section>
   )
@@ -346,15 +311,13 @@ function AssemblyPartSheet({
   part,
   open,
   canEdit,
-  pending,
   onOpenChange,
   onSave,
 }: {
   mode: 'create' | 'edit'
-  part: AssemblyPart | null
+  part: AssemblyPartDraft | null
   open: boolean
   canEdit: boolean
-  pending: boolean
   onOpenChange: (open: boolean) => void
   onSave: (values: AssemblyPartFormValues) => Promise<void>
 }) {
@@ -396,7 +359,7 @@ function AssemblyPartSheet({
         <SheetHeader>
           <SheetTitle>{isCreate ? 'Новая позиция сборки' : 'Позиция сборки'}</SheetTitle>
           <SheetDescription>
-            Только для этой сборки заказа — без справочника и склада.
+            Изменения попадут в историю после «Сохранить» на карточке сборки.
           </SheetDescription>
         </SheetHeader>
         <Form {...form}>
@@ -505,9 +468,7 @@ function AssemblyPartSheet({
                 </Button>
               </SheetClose>
               {editable && (isCreate || dirty) ? (
-                <Button type="submit" disabled={pending}>
-                  {pending ? 'Сохранение…' : isCreate ? 'Добавить' : 'Готово'}
-                </Button>
+                <Button type="submit">{isCreate ? 'Добавить' : 'Готово'}</Button>
               ) : null}
             </SheetFooter>
           </form>
@@ -534,6 +495,7 @@ function InlineQtyField({
 
   return (
     <Input
+      key={String(value)}
       type="number"
       min={0}
       step="any"
@@ -571,11 +533,11 @@ function AssemblyPartCard({
   onUpdate,
   onDelete,
 }: {
-  part: AssemblyPart
+  part: AssemblyPartDraft
   canEdit: boolean
   onOpen: () => void
   onUpdate: (
-    partId: string,
+    key: string,
     patch: { name?: string; qtyRequired?: number; qtyCollected?: number; comment?: string },
   ) => void
   onDelete: () => void
@@ -613,7 +575,7 @@ function AssemblyPartCard({
             ariaLabel="Требуемое"
             onCommit={(next) => {
               if (next !== part.qtyRequired) {
-                void onUpdate(part.id, { qtyRequired: next })
+                onUpdate(part.key, { qtyRequired: next })
               }
             }}
           />
@@ -626,7 +588,7 @@ function AssemblyPartCard({
             ariaLabel="Собранное"
             onCommit={(next) => {
               if (next !== part.qtyCollected) {
-                void onUpdate(part.id, { qtyCollected: next })
+                onUpdate(part.key, { qtyCollected: next })
               }
             }}
           />
@@ -637,6 +599,7 @@ function AssemblyPartCard({
         <span className="text-[11px] font-medium text-muted-foreground">Комментарий</span>
         {canEdit ? (
           <Input
+            key={`${part.key}:${part.comment}`}
             defaultValue={part.comment}
             placeholder="—"
             aria-label="Комментарий"
@@ -644,7 +607,7 @@ function AssemblyPartCard({
             onBlur={(event) => {
               const next = event.target.value.trim()
               if (next !== part.comment) {
-                void onUpdate(part.id, { comment: next })
+                onUpdate(part.key, { comment: next })
               }
             }}
           />

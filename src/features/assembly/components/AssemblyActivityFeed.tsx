@@ -155,6 +155,9 @@ export function AssemblyActivityFeed({
                           {event.summary}
                         </p>
                       )}
+                      {event.eventType === 'assembly_updated' ? (
+                        <AssemblyChangesList payload={event.payload} />
+                      ) : null}
                       {event.actorName ? (
                         <p className="mt-0.5 text-[11px] text-muted-foreground">{event.actorName}</p>
                       ) : null}
@@ -369,6 +372,64 @@ function TaskPreview({
         </div>
       </div>
     </div>
+  )
+}
+
+function AssemblyChangesList({ payload }: { payload: Json }) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null
+  }
+  const raw = payload.changes
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return null
+  }
+
+  return (
+    <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+      {raw.map((entry, index) => {
+        if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+          return null
+        }
+        const action = typeof entry.action === 'string' ? entry.action : ''
+        const name = typeof entry.name === 'string' ? entry.name : 'Позиция'
+        if (action === 'added') {
+          return (
+            <li key={`change-${index}`}>
+              Добавлена: {name}
+              {typeof entry.qty_required === 'number' || typeof entry.qty_collected === 'number'
+                ? ` (${String(entry.qty_collected ?? 0)} / ${String(entry.qty_required ?? 0)})`
+                : ''}
+            </li>
+          )
+        }
+        if (action === 'removed') {
+          return <li key={`change-${index}`}>Удалена: {name}</li>
+        }
+        if (action === 'updated') {
+          const from = entry.from && typeof entry.from === 'object' && !Array.isArray(entry.from) ? entry.from : null
+          const to = entry.to && typeof entry.to === 'object' && !Array.isArray(entry.to) ? entry.to : null
+          const fromCol = from && typeof from.qty_collected === 'number' ? from.qty_collected : null
+          const toCol = to && typeof to.qty_collected === 'number' ? to.qty_collected : null
+          const fromReq = from && typeof from.qty_required === 'number' ? from.qty_required : null
+          const toReq = to && typeof to.qty_required === 'number' ? to.qty_required : null
+          const qtyHint =
+            fromCol !== null && toCol !== null && fromReq !== null && toReq !== null
+              ? ` (${fromCol}/${fromReq} → ${toCol}/${toReq})`
+              : ''
+          return (
+            <li key={`change-${index}`}>
+              Обновлена: {name}
+              {qtyHint}
+            </li>
+          )
+        }
+        return (
+          <li key={`change-${index}`}>
+            {name}
+          </li>
+        )
+      })}
+    </ul>
   )
 }
 

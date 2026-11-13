@@ -236,13 +236,13 @@ function Sheet({
       <ConfirmDialog
         open={confirmOpen}
         title="Несохранённые изменения"
-        description="Есть несохранённые изменения. Точно хотите выйти или остаться?"
-        confirmLabel="Выйти"
+        description="Есть несохранённые изменения. Сохранить их перед выходом?"
+        confirmLabel="Не сохранять"
         cancelLabel="Остаться"
         extraAction={
           canSaveAndExit
             ? {
-                label: "Сохранить и выйти",
+                label: "Сохранить изменения и выйти",
                 onClick: () => void saveAndExit(),
                 isPending: saving,
               }

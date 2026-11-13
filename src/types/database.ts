@@ -2812,6 +2812,13 @@ export type Database = {
         Args: { target_order_id: string }
         Returns: Json
       }
+      save_order_assembly_parts: {
+        Args: {
+          target_order_id: string
+          parts?: Json
+        }
+        Returns: Json
+      }
       add_order_assembly_part: {
         Args: {
           target_order_id: string
