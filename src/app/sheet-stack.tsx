@@ -14,13 +14,22 @@ import {
 import { useSearchParams } from 'react-router-dom'
 
 import { SHEET_EXIT_MS, SheetLayer, SheetStackMeta } from '@/components/ui/sheet'
+import { clearChunkReloadFlag, reloadOnceForChunkError } from '@/lib/chunk-load'
 
 // Props vary per sheet; keep the loader untyped at the boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type SheetComponent = ComponentType<any>
 
 function lazySheet(loader: () => Promise<{ default: SheetComponent }>) {
-  return lazy(loader)
+  return lazy(async () => {
+    try {
+      const mod = await loader()
+      clearChunkReloadFlag()
+      return mod
+    } catch (error) {
+      reloadOnceForChunkError(error)
+    }
+  })
 }
 
 const CustomerDetailSheet = lazySheet(async () => {
