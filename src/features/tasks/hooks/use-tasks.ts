@@ -46,6 +46,7 @@ function invalidateTasks(queryClient: ReturnType<typeof useQueryClient>, taskId?
     queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
     taskId ? queryClient.invalidateQueries({ queryKey: queryKeys.tasks.detail(taskId) }) : Promise.resolve(),
     orderId ? queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) }) : Promise.resolve(),
+    orderId ? queryClient.invalidateQueries({ queryKey: queryKeys.assemblies.journal(orderId) }) : Promise.resolve(),
   ])
 }
 
@@ -59,6 +60,7 @@ function refreshTasksAfterDelete(
       predicate: (query) => query.queryKey[1] !== 'detail',
     }),
     orderId ? queryClient.invalidateQueries({ queryKey: queryKeys.orders.history(orderId) }) : Promise.resolve(),
+    orderId ? queryClient.invalidateQueries({ queryKey: queryKeys.assemblies.journal(orderId) }) : Promise.resolve(),
   ])
 }
 

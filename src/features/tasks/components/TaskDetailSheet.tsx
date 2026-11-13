@@ -143,13 +143,32 @@ function TaskSheetCard({ task }: { task: Task }) {
           <StatusBadge tone={task.completed ? 'success' : overdue ? 'danger' : 'neutral'}>{statusLabel}</StatusBadge>
           <StatusBadge tone={taskPriorityTone(task.priority)}>{taskPriorityLabels[task.priority]}</StatusBadge>
           {task.orderId && task.orderNumber ? (
-            <EntitySheetLink
-              kind="order"
-              id={task.orderId}
-              className="text-xs text-primary hover:underline"
-            >
-              Заказ {task.orderNumber}
-            </EntitySheetLink>
+            task.context === 'assembly' ? (
+              <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                <EntitySheetLink
+                  kind="assembly"
+                  id={task.orderId}
+                  className="text-primary hover:underline"
+                >
+                  Сборка заказа {task.orderNumber}
+                </EntitySheetLink>
+                <EntitySheetLink
+                  kind="order"
+                  id={task.orderId}
+                  className="text-muted-foreground hover:underline"
+                >
+                  Заказ {task.orderNumber}
+                </EntitySheetLink>
+              </span>
+            ) : (
+              <EntitySheetLink
+                kind="order"
+                id={task.orderId}
+                className="text-xs text-primary hover:underline"
+              >
+                Заказ {task.orderNumber}
+              </EntitySheetLink>
+            )
           ) : null}
           <span className="text-xs text-muted-foreground">
             {task.createdByName ? `Создал ${task.createdByName}` : 'Создана'}

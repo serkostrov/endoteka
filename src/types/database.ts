@@ -685,9 +685,70 @@ type Row = {
     priority: string
     completed: boolean
     order_id: string | null
+    context: 'order' | 'assembly'
     created_by: string | null
     created_at: string
     completed_at: string | null
+  }
+  order_assembly_parts: {
+    id: string
+    order_id: string
+    name: string
+    qty_required: number
+    qty_collected: number
+    comment: string
+    sort_order: number
+    created_by: string | null
+    created_at: string
+    updated_at: string
+  }
+  order_assembly_journal_events: {
+    id: string
+    order_id: string
+    event_type: string
+    actor_id: string | null
+    summary: string
+    payload: Json
+    created_at: string
+  }
+  order_assembly_attachments: {
+    id: string
+    order_id: string
+    kind: 'photo' | 'pdf' | 'url'
+    file_path: string | null
+    file_name: string | null
+    mime_type: string | null
+    file_size: number | null
+    url: string | null
+    caption: string
+    created_by: string | null
+    created_at: string
+  }
+  order_assembly_list_items: {
+    id: string
+    number: string
+    number_seq: number
+    customer_id: string
+    customer_name: string
+    device_id: string
+    serial_number: string
+    device_group_id: string | null
+    device_brand_id: string | null
+    device_model_id: string | null
+    device_brand: string
+    device_model: string
+    device_label: string
+    status_id: string
+    status_code: string
+    status_name: string
+    is_terminal: boolean
+    responsible_id: string | null
+    responsible_name: string
+    deadline: string | null
+    deadline_state: string
+    created_at: string
+    updated_at: string
+    completeness_pct: number
   }
   import_runs: {
     id: string
@@ -1285,6 +1346,24 @@ export type Database = {
         Update: never
         Relationships: []
       }
+      order_assembly_parts: {
+        Row: Row['order_assembly_parts']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      order_assembly_journal_events: {
+        Row: Row['order_assembly_journal_events']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
+      order_assembly_attachments: {
+        Row: Row['order_assembly_attachments']
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       import_runs: {
         Row: Row['import_runs']
         Insert: {
@@ -1368,6 +1447,10 @@ export type Database = {
       }
       order_status_catalog: {
         Row: Row['order_status_catalog']
+        Relationships: []
+      }
+      order_assembly_list_items: {
+        Row: Row['order_assembly_list_items']
         Relationships: []
       }
     }
@@ -2656,10 +2739,12 @@ export type Database = {
           order_id_filter?: string | null
           page_number?: number
           page_size?: number
+          context_filter?: string
         }
         Returns: {
           id: string
           title: string
+          body: string
           assignee_id: string | null
           assignee_name: string
           due_date: string | null
@@ -2667,6 +2752,8 @@ export type Database = {
           completed: boolean
           order_id: string | null
           order_number: string
+          customer_name: string
+          context: 'order' | 'assembly'
           created_by: string | null
           created_by_name: string
           created_at: string
@@ -2690,8 +2777,99 @@ export type Database = {
           p_due_date?: string | null
           p_priority?: string
           p_order_id?: string | null
+          p_context?: string
         }
         Returns: string
+      }
+      list_order_assemblies: {
+        Args: {
+          tab_filter?: string
+          search_query?: string
+          page_number?: number
+          page_size?: number
+        }
+        Returns: {
+          id: string
+          number: string
+          number_seq: number
+          customer_id: string
+          customer_name: string
+          device_id: string
+          serial_number: string
+          device_label: string
+          device_brand: string
+          device_model: string
+          status_id: string
+          status_code: string
+          status_name: string
+          created_at: string
+          updated_at: string
+          completeness_pct: number
+          total_count: number
+        }[]
+      }
+      get_order_assembly: {
+        Args: { target_order_id: string }
+        Returns: Json
+      }
+      add_order_assembly_part: {
+        Args: {
+          target_order_id: string
+          part_name: string
+          part_qty_required?: number
+          part_qty_collected?: number
+          part_comment?: string
+        }
+        Returns: string
+      }
+      update_order_assembly_part: {
+        Args: {
+          target_part_id: string
+          part_name?: string | null
+          part_qty_required?: number | null
+          part_qty_collected?: number | null
+          part_comment?: string | null
+        }
+        Returns: undefined
+      }
+      remove_order_assembly_part: {
+        Args: { target_part_id: string }
+        Returns: undefined
+      }
+      get_order_assembly_journal: {
+        Args: { target_order_id: string }
+        Returns: {
+          id: string
+          event_type: string
+          summary: string
+          actor_id: string | null
+          actor_name: string
+          payload: Json
+          created_at: string
+        }[]
+      }
+      add_order_assembly_journal_note: {
+        Args: { target_order_id: string; p_body: string }
+        Returns: string
+      }
+      add_order_assembly_attachment_url: {
+        Args: { target_order_id: string; target_url: string; caption?: string }
+        Returns: string
+      }
+      register_order_assembly_file: {
+        Args: {
+          target_order_id: string
+          file_path: string
+          file_name: string
+          mime_type: string
+          file_size: number
+          caption?: string
+        }
+        Returns: string
+      }
+      delete_order_assembly_attachment: {
+        Args: { target_attachment_id: string }
+        Returns: undefined
       }
       update_task: {
         Args: {
@@ -2873,6 +3051,10 @@ export type OrderStatusEventRow = Database['public']['Tables']['order_status_eve
 export type OrderJournalEventRow = Database['public']['Tables']['order_journal_events']['Row']
 export type OrderDiagnosticsItemRow = Database['public']['Views']['order_diagnostics_items']['Row']
 export type OrderAttachmentRow = Database['public']['Tables']['order_attachments']['Row']
+export type OrderAssemblyPartRow = Database['public']['Tables']['order_assembly_parts']['Row']
+export type OrderAssemblyJournalEventRow = Database['public']['Tables']['order_assembly_journal_events']['Row']
+export type OrderAssemblyAttachmentRow = Database['public']['Tables']['order_assembly_attachments']['Row']
+export type OrderAssemblyListItemRow = Database['public']['Views']['order_assembly_list_items']['Row']
 export type NotificationRow = Database['public']['Tables']['notifications']['Row']
 export type NotificationRecipientRow = Database['public']['Tables']['notification_recipients']['Row']
 export type TaskRow = Database['public']['Tables']['tasks']['Row']

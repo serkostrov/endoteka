@@ -8,6 +8,7 @@ import {
   Package,
   PackageMinus,
   PackagePlus,
+  PackageSearch,
   Settings,
   Shield,
   ShoppingCart,
@@ -53,6 +54,13 @@ export const navGroups: NavGroup[] = [
         icon: ClipboardList,
         permission: Permission.OrdersRead,
         description: 'Ремонтные заказы и этапы работ',
+      },
+      {
+        label: 'Сборка заказов',
+        to: routes.assemblies,
+        icon: PackageSearch,
+        permission: Permission.OrdersRead,
+        description: 'Подготовка запасных частей к ремонту',
       },
       {
         label: 'Задачи',

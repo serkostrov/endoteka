@@ -29,6 +29,7 @@ export function OrderTasksTab({ orderId, orderNumber }: OrderTasksTabProps) {
       due: 'all',
       linked: 'all',
       orderId,
+      context: 'order',
       page: 1,
       pageSize: 50,
     },

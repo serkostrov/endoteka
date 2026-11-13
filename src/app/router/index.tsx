@@ -16,6 +16,7 @@ import { SetPasswordPage } from '@/pages/SetPasswordPage'
 const DashboardPage = lazyNamedPage(() => import('@/pages/DashboardPage'), 'DashboardPage')
 const OrderNewPage = lazyNamedPage(() => import('@/pages/OrderNewPage'), 'OrderNewPage')
 const OrdersPage = lazyNamedPage(() => import('@/pages/OrdersPage'), 'OrdersPage')
+const AssembliesPage = lazyNamedPage(() => import('@/pages/AssembliesPage'), 'AssembliesPage')
 const TasksPage = lazyNamedPage(() => import('@/pages/TasksPage'), 'TasksPage')
 const CustomersPage = lazyNamedPage(() => import('@/pages/CustomersPage'), 'CustomersPage')
 const DevicesPage = lazyNamedPage(() => import('@/pages/DevicesPage'), 'DevicesPage')
@@ -111,6 +112,11 @@ const router = createBrowserRouter([
             children: [
               { path: routes.orders, element: <OrdersPage /> },
               { path: routes.order, element: <DetailSheetRedirect listPath={routes.orders} param="order" /> },
+              { path: routes.assemblies, element: <AssembliesPage /> },
+              {
+                path: routes.assembly,
+                element: <DetailSheetRedirect listPath={routes.assemblies} param="assembly" />,
+              },
             ],
           },
           {

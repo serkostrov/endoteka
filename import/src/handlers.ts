@@ -868,6 +868,15 @@ export async function handleReceipts(ctx: HandlerContext, row: CsvRow, rowNumber
   if ('error' in identity) {
     return fail(Dataset.Receipts, rowNumber, row, identity.error, { errorCode: 'no_identity' })
   }
+  const existingKey = await ctx.store.getSourceKey(Dataset.Receipts, identity.key)
+  if (existingKey) {
+    return ok(Dataset.Receipts, rowNumber, row, 'skipped', {
+      sourceKey: identity.key,
+      entityType: 'inventory_receipt',
+      entityId: existingKey.entityId,
+      missingFields: [],
+    })
+  }
   const receiptDate = parseDate(pick(row, 'receipt_date'))
   if (!receiptDate) {
     return fail(Dataset.Receipts, rowNumber, row, 'Укажите дату прихода.', { sourceKey: identity.key })
@@ -909,15 +918,6 @@ export async function handleReceipts(ctx: HandlerContext, row: CsvRow, rowNumber
   }
 
   const hash = payloadHash({ supplier, supplierId, receiptDate, notes, lines })
-  const existingKey = await ctx.store.getSourceKey(Dataset.Receipts, identity.key)
-  if (existingKey) {
-    return ok(Dataset.Receipts, rowNumber, row, 'skipped', {
-      sourceKey: identity.key,
-      entityType: 'inventory_receipt',
-      entityId: existingKey.entityId,
-      missingFields: [],
-    })
-  }
   if (ctx.dryRun) {
     return ok(Dataset.Receipts, rowNumber, row, 'created', { sourceKey: identity.key, missingFields: [] })
   }
@@ -1028,6 +1028,15 @@ export async function handleSales(ctx: HandlerContext, row: CsvRow, rowNumber: n
   if ('error' in identity) {
     return fail(Dataset.Sales, rowNumber, row, identity.error, { errorCode: 'no_identity' })
   }
+  const existingSale = await ctx.store.getSourceKey(Dataset.Sales, identity.key)
+  if (existingSale) {
+    return ok(Dataset.Sales, rowNumber, row, 'skipped', {
+      sourceKey: identity.key,
+      entityType: 'sale',
+      entityId: existingSale.entityId,
+      missingFields: [],
+    })
+  }
   if (!number) {
     return fail(Dataset.Sales, rowNumber, row, 'Укажите номер продажи.', { sourceKey: identity.key })
   }
@@ -1100,7 +1109,7 @@ export async function handleSales(ctx: HandlerContext, row: CsvRow, rowNumber: n
   }
 
   const lines = [...merged.values()]
-  const invoiceNumber = number.startsWith('RO-') ? number : `RO-${number}`
+  const invoiceNumber = number
   const hash = payloadHash({ invoiceNumber, customerId, saleDate, lines })
   const existingKey = await ctx.store.getSourceKey(Dataset.Sales, identity.key)
   if (existingKey) {

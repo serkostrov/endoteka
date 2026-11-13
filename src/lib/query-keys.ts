@@ -73,6 +73,13 @@ export const queryKeys = {
     statusCatalog: ['orders', 'status-catalog'] as const,
     statusGroups: ['orders', 'status-groups'] as const,
   },
+  assemblies: {
+    all: ['assemblies'] as const,
+    list: (filters: unknown) => ['assemblies', 'list', filters] as const,
+    detail: (orderId: string) => ['assemblies', 'detail', orderId] as const,
+    journal: (orderId: string) => ['assemblies', 'journal', orderId] as const,
+    attachments: (orderId: string) => ['assemblies', 'attachments', orderId] as const,
+  },
   inventory: {
     all: ['inventory'] as const,
     stock: (filters: {
@@ -170,6 +177,7 @@ export const queryKeys = {
       due: string
       linked: string
       orderId?: string | null
+      context?: string
       page: number
       pageSize: number
     }) => ['tasks', 'list', filters] as const,

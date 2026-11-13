@@ -401,11 +401,14 @@ export function createSupabaseStore(client: AnyClient): ImportStore {
     },
 
     async findItemByCode(code) {
-      const { data, error } = await client.from('inventory_items').select('*').ilike('code', code).maybeSingle()
+      const { data, error } = await client.from('inventory_items').select('*').eq('code', code).limit(2)
       if (error) {
         throw new Error(error.message)
       }
-      return data ? mapItem(data) : null
+      if (!data || data.length !== 1) {
+        return null
+      }
+      return mapItem(data[0])
     },
 
     async findItemById(id) {
@@ -443,11 +446,14 @@ export function createSupabaseStore(client: AnyClient): ImportStore {
     },
 
     async findDeviceBySerial(serial) {
-      const { data, error } = await client.from('devices').select('*').ilike('serial_number', serial).maybeSingle()
+      const { data, error } = await client.from('devices').select('*').eq('serial_number', serial).limit(2)
       if (error) {
         throw new Error(error.message)
       }
-      return data ? mapDevice(data) : null
+      if (!data || data.length !== 1) {
+        return null
+      }
+      return mapDevice(data[0])
     },
 
     async upsertDevice(input) {

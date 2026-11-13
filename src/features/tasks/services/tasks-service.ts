@@ -4,6 +4,8 @@ import { formatDate, formatDateTime, toDate, toLocalDateTimeValue } from '@/lib/
 import { getSupabase } from '@/lib/supabase/client'
 import type { Json } from '@/types/database'
 
+export type TaskContext = 'order' | 'assembly'
+
 export type TaskListItem = {
   id: string
   title: string
@@ -16,6 +18,7 @@ export type TaskListItem = {
   orderId: string | null
   orderNumber: string
   customerName: string
+  context: TaskContext
   createdBy: string | null
   createdByName: string
   createdAt: string
@@ -32,6 +35,7 @@ export type TaskListFilters = {
   due: string
   linked: string
   orderId?: string | null
+  context?: string
   page: number
   pageSize: number
 }
@@ -43,6 +47,7 @@ export type CreateTaskInput = {
   dueDate: string | null
   priority: TaskPriority
   orderId: string | null
+  context?: TaskContext
 }
 
 export type UpdateTaskInput = {
@@ -80,6 +85,10 @@ function mapDueDate(value: string | null | undefined) {
   return date ? toLocalDateTimeValue(date) : null
 }
 
+function mapContext(value: string | undefined): TaskContext {
+  return value === 'assembly' ? 'assembly' : 'order'
+}
+
 function mapListItem(row: {
   id: string
   title: string
@@ -92,6 +101,7 @@ function mapListItem(row: {
   order_id: string | null
   order_number: string
   customer_name?: string
+  context?: string
   created_by: string | null
   created_by_name: string
   created_at: string
@@ -109,6 +119,7 @@ function mapListItem(row: {
     orderId: row.order_id,
     orderNumber: row.order_number,
     customerName: row.customer_name ?? '',
+    context: mapContext(row.context),
     createdBy: row.created_by,
     createdByName: row.created_by_name,
     createdAt: row.created_at,
@@ -129,6 +140,7 @@ function mapTask(row: Record<string, Json | undefined>): Task {
     orderId: typeof row.order_id === 'string' ? row.order_id : null,
     orderNumber: asString(row.order_number),
     customerName: asString(row.customer_name),
+    context: mapContext(asString(row.context, 'order')),
     createdBy: typeof row.created_by === 'string' ? row.created_by : null,
     createdByName: asString(row.created_by_name),
     createdAt: asString(row.created_at),
@@ -147,6 +159,7 @@ export async function listTasks(filters: TaskListFilters) {
     order_id_filter: filters.orderId ?? null,
     page_number: filters.page,
     page_size: filters.pageSize,
+    context_filter: filters.context ?? 'all',
   })
 
   if (error) {
@@ -195,6 +208,7 @@ export async function createTask(input: CreateTaskInput): Promise<string> {
     p_due_date: input.dueDate,
     p_priority: input.priority,
     p_order_id: input.orderId,
+    p_context: input.context ?? 'order',
   })
 
   if (error) {

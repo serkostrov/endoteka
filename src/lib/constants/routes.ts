@@ -4,6 +4,8 @@ export const routes = {
   orders: '/orders',
   ordersNew: '/orders/new',
   order: '/orders/:id',
+  assemblies: '/assemblies',
+  assembly: '/assemblies/:id',
   tasks: '/tasks',
   task: '/tasks/:id',
   customers: '/customers',
@@ -46,6 +48,7 @@ export const routes = {
 /** Карточки открываются sheet’ом на списке, не отдельной страницей. */
 export const sheets = {
   order: (id: string) => `${routes.orders}?order=${encodeURIComponent(id)}`,
+  assembly: (id: string) => `${routes.assemblies}?assembly=${encodeURIComponent(id)}`,
   task: (id: string) => `${routes.tasks}?task=${encodeURIComponent(id)}`,
   customer: (id: string, opts?: { edit?: boolean }) => sheetPath(routes.customers, 'customer', id, opts),
   device: (id: string, opts?: { edit?: boolean }) => sheetPath(routes.devices, 'device', id, opts),

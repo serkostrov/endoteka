@@ -57,9 +57,17 @@ type RoOrder = {
   malfunction?: string
   manager_notes?: string
   engineer_notes?: string
+  manager_id?: number | null
+  assignee_id?: number | null
   client?: RoClient | null
   asset?: RoAsset | null
   custom_fields?: Record<string, string>
+}
+type RoEmployee = {
+  id: number
+  first_name?: string
+  last_name?: string
+  email?: string
 }
 type RoProduct = {
   id: number
@@ -314,48 +322,70 @@ function mergeCustomerRow(
   return next
 }
 
-/** RO App status name → Endoteka order_statuses.code */
-function mapStatus(name: string): string {
-  const n = name.trim().toLocaleLowerCase('ru')
+/**
+ * Точное имя статуса RO App → код Endoteka.
+ * Неизвестное или пустое имя не подменяется (раньше всё незнакомое падало в repair).
+ */
+const STATUS_BY_NAME: Record<string, string> = {
+  новый: 'received',
+  диагностика: 'diagnostics',
+  'требует согласования': 'requires_approval',
+  'в работе': 'quality_check',
+  'в ремонт': 'repair',
+  'по гарантии': 'under_warranty',
+  донор: 'donor',
+  то: 'maintenance',
+  'на согласовании': 'waiting_approval',
+  'ждет запчасть': 'waiting_parts',
+  'потенциально на списание': 'potential_writeoff',
+  'донор отдан на подмену': 'donor_substitute',
+  доставка: 'delivery',
+  'отдан на время': 'lent_out',
+  готов: 'ready',
+  'исправный балансовый прибор': 'serviceable_balance',
+  'оплачен, ожидает отправки': 'paid_awaiting_shipment',
+  'отдан и ожидает оплаты': 'issued_awaiting_payment',
+  'отдан и оплачен': 'issued',
+  'отдан без ремонта': 'issued_no_repair',
+  отказ: 'cancelled',
+  'отказ отдан без ремонта': 'refused_no_repair',
+  'отдан без оплаты': 'issued_unpaid',
+}
+
+function mapStatus(name: string): string | null {
+  const n = name.trim().toLocaleLowerCase('ru').replaceAll('ё', 'е')
   if (!n) {
-    return 'received'
+    return null
   }
-  if (n === 'новый') {
-    return 'received'
+  return STATUS_BY_NAME[n] ?? null
+}
+
+function employeeLabel(employee: RoEmployee) {
+  const name = [employee.last_name, employee.first_name]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+  return name || String(employee.email ?? '').trim() || `сотрудник ${employee.id}`
+}
+
+async function loadCrmEmails(): Promise<Set<string>> {
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '')
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || ''
+  if (!url || !key) {
+    process.stdout.write('SUPABASE_URL не задан — employee_email в заказах не заполняется.\n')
+    return new Set()
   }
-  if (n.includes('диагност')) {
-    return 'diagnostics'
+  const response = await fetch(`${url}/rest/v1/profiles?select=email`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  })
+  if (!response.ok) {
+    const body = await response.text()
+    throw new Error(`Профили CRM: HTTP ${response.status} ${body.slice(0, 200)}`)
   }
-  if (n.includes('запчаст')) {
-    return 'waiting_parts'
-  }
-  if (n.includes('согласован') || n.includes('требует согласован') || n.includes('списание')) {
-    return 'waiting_approval'
-  }
-  if (n.includes('отказ') || n.includes('без ремонта')) {
-    return 'cancelled'
-  }
-  if (
-    n.includes('отдан') ||
-    n.includes('доставк') ||
-    n.includes('подмен') ||
-    n.includes('на время')
-  ) {
-    return 'issued'
-  }
-  if (n.includes('готов') || n.includes('исправн') || n.includes('ожидает отправ')) {
-    return 'ready'
-  }
-  if (
-    n.includes('ремонт') ||
-    n.includes('работе') ||
-    n.includes('гарант') ||
-    n === 'донор' ||
-    n === 'то'
-  ) {
-    return 'repair'
-  }
-  return 'repair'
+  const rows = (await response.json()) as Array<{ email?: string | null }>
+  return new Set(
+    rows.map((row) => String(row.email ?? '').trim().toLowerCase()).filter(Boolean),
+  )
 }
 
 async function apiGet<T>(apiKey: string, pathName: string): Promise<T> {
@@ -497,7 +527,14 @@ async function main() {
   const customers = new Map<string, Record<string, string>>()
   const models = new Map<string, Record<string, string>>()
   const orderRows: Record<string, string>[] = []
+  const skippedOrders: Record<string, string>[] = []
+  const unmatchedResponsibles: Record<string, string>[] = []
   const statusReport: Record<string, string> = {}
+
+  await sleep(PAGE_DELAY_MS)
+  const employees = await fetchAllPages<RoEmployee>(apiKey, '/company/employees', 'Сотрудники')
+  const employeesById = new Map(employees.filter((row) => row?.id).map((row) => [row.id, row] as const))
+  const crmEmails = await loadCrmEmails()
 
   for (const person of people) {
     if (!person?.id) {
@@ -513,7 +550,13 @@ async function main() {
   }
 
   for (const status of statuses) {
-    statusReport[status.name] = mapStatus(status.name)
+    const code = mapStatus(status.name)
+    if (!code) {
+      throw new Error(
+        `Статус RO App «${status.name}» не сопоставлен с Endoteka. Выгрузка остановлена, подстановка repair запрещена.`,
+      )
+    }
+    statusReport[status.name] = code
   }
 
   for (const order of orders) {
@@ -573,8 +616,46 @@ async function main() {
     const malfunction = String(order.malfunction || '').trim() || notes.join(' · ')
 
     if (!client?.id) {
+      skippedOrders.push({
+        source_id: `ro-ord-${order.id}`,
+        number: String(order.number || ''),
+        reason: 'нет клиента',
+      })
       process.stdout.write(`Пропуск заказа ${order.number}: нет клиента\n`)
       continue
+    }
+    if (!statusCode) {
+      skippedOrders.push({
+        source_id: `ro-ord-${order.id}`,
+        number: String(order.number || ''),
+        reason: `неизвестный статус «${statusName || 'пусто'}»`,
+      })
+      process.stdout.write(`Пропуск заказа ${order.number}: неизвестный статус «${statusName}»\n`)
+      continue
+    }
+
+    const responsibleIds = [order.assignee_id, order.manager_id].filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value),
+    )
+    let employeeEmail = ''
+    for (const employeeId of responsibleIds) {
+      const employee = employeesById.get(employeeId)
+      const email = String(employee?.email ?? '').trim().toLowerCase()
+      if (email && crmEmails.has(email)) {
+        employeeEmail = email
+        break
+      }
+    }
+    if (!employeeEmail && responsibleIds.length > 0) {
+      const labels = responsibleIds.map((employeeId) => {
+        const employee = employeesById.get(employeeId)
+        return employee ? employeeLabel(employee) : `id ${employeeId}`
+      })
+      unmatchedResponsibles.push({
+        source_id: `ro-ord-${order.id}`,
+        number: String(order.number || ''),
+        ro_responsible: labels.join(' / '),
+      })
     }
 
     orderRows.push({
@@ -590,7 +671,7 @@ async function main() {
       deadline: order.due_date ? String(order.due_date).slice(0, 10) : '',
       status_code: statusCode,
       employee_source_id: '',
-      employee_email: '',
+      employee_email: employeeEmail,
       created_at: order.created_at ? String(order.created_at) : '',
     })
   }
@@ -920,6 +1001,16 @@ async function main() {
   for (const [fileName, headers, rows] of files) {
     await writeFile(path.join(outDir, fileName), toCsv(headers, rows), 'utf8')
   }
+  await writeFile(
+    path.join(outDir, 'skipped-orders.csv'),
+    toCsv(['source_id', 'number', 'reason'], skippedOrders),
+    'utf8',
+  )
+  await writeFile(
+    path.join(outDir, 'unmatched-responsibles.csv'),
+    toCsv(['source_id', 'number', 'ro_responsible'], unmatchedResponsibles),
+    'utf8',
+  )
 
   const summary = {
     exportedAt: new Date().toISOString(),
@@ -930,6 +1021,8 @@ async function main() {
       barcodes: barcodes.length,
       prices: prices.length,
       orders: orderRows.length,
+      skippedOrders: skippedOrders.length,
+      unmatchedResponsibles: unmatchedResponsibles.length,
       sales: saleRows.length,
       saleLines: saleLineRows.length,
       receipts: receiptRows.length,
@@ -945,6 +1038,8 @@ async function main() {
       'Услуги (catalog/services) в импорт номенклатуры не включены — в Endoteka это отдельный модуль шаблонов работ.',
       'Клиенты: полный список из /contacts/people и /contacts/organizations; заказы только дополняют пустые поля.',
       'Приборы (модели) собраны из asset заказов.',
+      'Статусы сопоставлены по точному имени. Неизвестное имя не выгружается и не подменяется.',
+      'employee_email заполнен только если email сотрудника RO есть в profiles CRM. Остальные ФИО — unmatched-responsibles.csv.',
       `Категории номенклатуры: ${categoryById.size} из /catalog/products/categories; позиции без category_id → «Запчасти».`,
       'После миграции перевыпустите API-ключ RO App.',
     ],

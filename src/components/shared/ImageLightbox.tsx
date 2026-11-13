@@ -441,15 +441,26 @@ export function ImageHoverPreview({ src, alt, className, children }: ImageHoverP
         ? createPortal(
             <div
               role="tooltip"
-              className="pointer-events-none fixed z-[100] overflow-hidden rounded-lg border bg-background p-2 shadow-xl"
+              className="pointer-events-none fixed z-[100] flex flex-col overflow-hidden rounded-lg border bg-background p-2 shadow-xl"
               style={{ top: coords.top, left: coords.left, width: coords.width, maxHeight: coords.height }}
             >
               <img
                 src={src}
                 alt={alt || ''}
-                className="h-full max-h-full w-full max-w-full rounded-md object-contain"
-                style={{ maxHeight: coords.height - 16, maxWidth: coords.width - 16 }}
+                className="max-h-full w-full max-w-full flex-1 rounded-md object-contain"
+                style={{
+                  maxHeight: coords.height - (alt ? 42 : 16),
+                  maxWidth: coords.width - 16,
+                }}
               />
+              {alt ? (
+                <p
+                  className="mt-1.5 truncate px-1 text-center text-[11px] font-medium text-muted-foreground"
+                  title={alt}
+                >
+                  {alt}
+                </p>
+              ) : null}
             </div>,
             document.body,
           )

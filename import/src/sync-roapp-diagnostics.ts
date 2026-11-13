@@ -30,8 +30,16 @@ type RoOrder = {
   manager_notes?: string
   engineer_notes?: string
   resume?: string
+  manager_id?: number | null
+  assignee_id?: number | null
   custom_fields?: Record<string, string>
   asset?: { id?: number; state?: string; uid?: string } | null
+}
+type RoEmployee = {
+  id: number
+  first_name?: string
+  last_name?: string
+  email?: string
 }
 
 type DiagField = { id: string; code: string; name: string; field_type: string }
@@ -95,6 +103,39 @@ function normTitle(value: string) {
     .replace(/ё/g, 'е')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function employeeLabel(employee: RoEmployee) {
+  const name = [employee.last_name, employee.first_name]
+    .map((part) => String(part ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+  return name || String(employee.email ?? '').trim() || `сотрудник ${employee.id}`
+}
+
+function unmatchedResponsibleLabel(
+  order: RoOrder,
+  employeesById: Map<number, RoEmployee>,
+  crmEmails: Set<string>,
+) {
+  const ids = [order.assignee_id, order.manager_id].filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value),
+  )
+  if (ids.length === 0) {
+    return ''
+  }
+  for (const employeeId of ids) {
+    const email = String(employeesById.get(employeeId)?.email ?? '').trim().toLowerCase()
+    if (email && crmEmails.has(email)) {
+      return ''
+    }
+  }
+  return ids
+    .map((employeeId) => {
+      const employee = employeesById.get(employeeId)
+      return employee ? employeeLabel(employee) : `id ${employeeId}`
+    })
+    .join(' / ')
 }
 
 function text(value: unknown) {
@@ -292,6 +333,20 @@ async function main() {
     }
   }
 
+  const employeeRows = await roGet<{ data?: RoEmployee[] }>(apiKey, '/company/employees?page=1')
+  const employeesById = new Map(
+    (employeeRows.data ?? []).filter((row) => row?.id).map((row) => [row.id, row] as const),
+  )
+  const { data: profileRows, error: profileError } = await supabase.from('profiles').select('email')
+  if (profileError) {
+    throw new Error(profileError.message)
+  }
+  const crmEmails = new Set(
+    (profileRows ?? [])
+      .map((row) => String(row.email ?? '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+
   const roOrders = await loadAllOrders(apiKey)
   const report: string[] = [
     'number,status,fields,notes,parsed_from_asset',
@@ -312,10 +367,11 @@ async function main() {
     }
     matched += 1
     const picked = pickRoProtocol(order, idToCode)
+    const unmatchedResponsible = unmatchedResponsibleLabel(order, employeesById, crmEmails)
     const fieldCount = Object.keys(picked.fields).length
     const extraCount = Object.keys(picked.extras).length
     const fromAsset = picked.parsedFromAsset ? 1 : 0
-    if (fieldCount === 0 && extraCount === 0) {
+    if (fieldCount === 0 && extraCount === 0 && !unmatchedResponsible) {
       skippedEmpty += 1
       report.push(`${order.number},empty,0,0,0`)
       continue
@@ -421,6 +477,23 @@ async function main() {
       journalBits.push({
         key: `roapp:${order.id}:asset_state`,
         body: `Состояние прибора (RO App):\n${picked.extras._asset_state}`,
+      })
+    }
+    if (unmatchedResponsible) {
+      journalBits.push({
+        key: `roapp:${order.id}:responsible`,
+        body: `Ответственный RO App (учётной записи в CRM нет):\n${unmatchedResponsible}`,
+      })
+    }
+    const unmappedProtocol = Object.entries(picked.fields).filter(
+      ([code]) => code !== 'zaklyuchenie' && !fieldByCode.has(code),
+    )
+    if (unmappedProtocol.length > 0) {
+      journalBits.push({
+        key: `roapp:${order.id}:protocol`,
+        body: `Протокол RO App (нет поля в карточке диагностики):\n${unmappedProtocol
+          .map(([code, body]) => `${code}: ${body}`)
+          .join('\n')}`,
       })
     }
 

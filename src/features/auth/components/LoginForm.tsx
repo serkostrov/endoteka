@@ -8,11 +8,13 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input'
 import { getErrorMessage } from '@/lib/errors'
 
+import { useAuth } from '../hooks/use-auth'
 import { SavedAccountsOnLogin } from './AccountSwitcher'
 import { loginSchema, type LoginFormValues } from '../schemas'
 import { signInWithPassword } from '../services/auth-service'
 
 export function LoginForm() {
+  const { errorMessage: authErrorMessage } = useAuth()
   const [formError, setFormError] = useState<string | null>(null)
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -32,14 +34,16 @@ export function LoginForm() {
     }
   }
 
+  const visibleError = formError || authErrorMessage
+
   return (
     <Form {...form}>
       <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
         <SavedAccountsOnLogin />
-        {formError ? (
+        {visibleError ? (
           <Alert variant="destructive">
             <AlertTitle>Вход не выполнен</AlertTitle>
-            <AlertDescription>{formError}</AlertDescription>
+            <AlertDescription>{visibleError}</AlertDescription>
           </Alert>
         ) : null}
 

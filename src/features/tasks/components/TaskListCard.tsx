@@ -113,13 +113,13 @@ export function TaskListCard({ task, onOpen, selected, onSelectedChange }: TaskL
         <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
           {task.orderId && task.orderNumber ? (
             <EntitySheetLink
-              kind="order"
+              kind={task.context === 'assembly' ? 'assembly' : 'order'}
               id={task.orderId}
               className="inline-flex max-w-full items-center gap-1 truncate text-primary hover:underline"
             >
               <Link2 className="size-3.5 shrink-0" aria-hidden="true" />
               <span className="truncate">
-                {task.orderNumber}
+                {task.context === 'assembly' ? `Сборка ${task.orderNumber}` : task.orderNumber}
                 {task.customerName ? ` · ${task.customerName}` : ''}
               </span>
             </EntitySheetLink>

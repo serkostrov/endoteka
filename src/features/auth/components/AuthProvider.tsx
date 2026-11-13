@@ -44,11 +44,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
-        setState({
-          status: 'anonymous',
-          user: null,
-          errorMessage: null,
-        })
+        // Keep PROFILE_MISSING / ACCOUNT_DISABLED text after forced local sign-out.
+        // Intentional logout uses full reload or refreshUser success which clears it.
+        setState((prev) =>
+          prev.errorMessage
+            ? { status: 'error', user: null, errorMessage: prev.errorMessage }
+            : { status: 'anonymous', user: null, errorMessage: null },
+        )
         return
       }
 

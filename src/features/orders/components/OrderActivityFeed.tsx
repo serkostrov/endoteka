@@ -1,5 +1,4 @@
 import { format } from 'date-fns'
-import { ru } from 'date-fns/locale'
 import { Calendar, ExternalLink, FileText, ListTodo, Trash2, User } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -7,9 +6,11 @@ import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/shared/ConfirmDialog'
 import { EmptyState } from '@/components/shared/EmptyState'
 import { ErrorState } from '@/components/shared/ErrorState'
+import { HistoryMonthSections, groupHistoryByMonthAndDay } from '@/components/shared/history-timeline'
 import { ImageHoverPreview, ImageLightbox, type ImageLightboxItem } from '@/components/shared/ImageLightbox'
 import { LoadingState } from '@/components/shared/LoadingState'
 import { StatusBadge } from '@/components/shared/StatusBadge'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useHasPermission, useCurrentUser } from '@/features/auth'
 import { DiagnosticJournalEvent } from '@/features/diagnostics/constants'
 import { useAddOrderJournalNote, useOrderJournal } from '@/features/diagnostics/hooks/use-diagnostics'
@@ -70,6 +71,7 @@ export function OrderActivityFeed({ orderId, orderNumber, hideHeader = false }: 
       due: 'all',
       linked: 'all',
       orderId,
+      context: 'order',
       page: 1,
       pageSize: 100,
     },
@@ -91,7 +93,13 @@ export function OrderActivityFeed({ orderId, orderNumber, hideHeader = false }: 
     [attachmentsQuery.data],
   )
   const feedEntries = useMemo(() => collapseAttachmentBatches(events), [events])
-  const dayGroups = useMemo(() => groupFeedByDay(feedEntries), [feedEntries])
+  const monthGroups = useMemo(
+    () =>
+      groupHistoryByMonthAndDay(feedEntries, (entry) =>
+        entry.kind === 'attachments' ? entry.events[0]?.createdAt : entry.event.createdAt,
+      ),
+    [feedEntries],
+  )
 
   useEffect(() => {
     const node = scrollerRef.current
@@ -132,114 +140,110 @@ export function OrderActivityFeed({ orderId, orderNumber, hideHeader = false }: 
             description="Напишите событие, прикрепите фото или создайте задачу."
           />
         ) : (
-          <div className="space-y-4">
-            {dayGroups.map((group) => (
-              <section key={group.label}>
-                <h3 className="mb-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-                  {group.label}
-                </h3>
-                <ol className="relative space-y-3 border-l border-border/70 pl-4">
-                  {group.entries.map((entry) => {
-                    if (entry.kind === 'attachments') {
-                      const head = entry.events[0]
-                      if (!head) {
-                        return null
-                      }
-                      const batchAttachments = entry.events
-                        .map((event) =>
-                          attachmentsById.get(payloadString(event.payload, 'attachment_id') ?? ''),
-                        )
-                        .filter((item): item is OrderAttachment => Boolean(item))
-                      if (batchAttachments.length === 0) {
-                        return null
-                      }
-                      return (
-                        <li key={entry.events.map((event) => event.id).join('-')} className="relative">
-                          <span className="absolute top-1.5 -left-5 size-1.5 rounded-full bg-muted-foreground/50" />
-                          <div className="mb-1 flex flex-wrap items-center gap-2">
-                            <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                              {orderJournalEventTypeLabel(OrderJournalEventType.Attachment)}
-                            </span>
-                            <span className="text-[11px] text-muted-foreground">
-                              {toDate(head.createdAt)
-                                ? format(toDate(head.createdAt) as Date, 'HH:mm')
-                                : ''}
-                            </span>
-                          </div>
-                          {eventActorName(head) ? (
-                            <p className="mt-0.5 text-[11px] text-muted-foreground">{eventActorName(head)}</p>
-                          ) : null}
-                          <JournalAttachmentBatch
-                            attachments={batchAttachments}
-                            canDelete={canDelete}
-                            deleting={removeAttachment.isPending}
-                            onDelete={handleDeleteAttachment}
-                          />
-                        </li>
-                      )
+          <HistoryMonthSections
+            groups={monthGroups}
+            renderDayItems={(entries) => (
+              <ol className="relative space-y-3 border-l border-border/70 pl-4">
+                {entries.map((entry) => {
+                  if (entry.kind === 'attachments') {
+                    const head = entry.events[0]
+                    if (!head) {
+                      return null
                     }
-
-                    const event = entry.event
+                    const batchAttachments = entry.events
+                      .map((event) =>
+                        attachmentsById.get(payloadString(event.payload, 'attachment_id') ?? ''),
+                      )
+                      .filter((item): item is OrderAttachment => Boolean(item))
+                    if (batchAttachments.length === 0) {
+                      return null
+                    }
                     return (
-                      <li key={event.id} className="relative">
+                      <li key={entry.events.map((event) => event.id).join('-')} className="relative">
                         <span className="absolute top-1.5 -left-5 size-1.5 rounded-full bg-muted-foreground/50" />
                         <div className="mb-1 flex flex-wrap items-center gap-2">
                           <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                            {orderJournalEventTypeLabel(event.eventType, event.summary)}
+                            {orderJournalEventTypeLabel(OrderJournalEventType.Attachment)}
                           </span>
                           <span className="text-[11px] text-muted-foreground">
-                            {toDate(event.createdAt)
-                              ? format(toDate(event.createdAt) as Date, 'HH:mm')
+                            {toDate(head.createdAt)
+                              ? format(toDate(head.createdAt) as Date, 'HH:mm')
                               : ''}
                           </span>
                         </div>
-                        {isTaskJournalEvent(event.eventType) ? null : event.eventType ===
-                          DiagnosticJournalEvent.StatusChanged ? (
-                          <JournalStatusChangeBody event={event} />
-                        ) : (
-                          <p
-                            className={cn(
-                              event.eventType === OrderJournalEventType.Comment && 'whitespace-pre-wrap',
-                              isMoneyJournalEvent(event) && 'font-medium tabular-nums text-foreground',
-                            )}
-                          >
-                            {formatJournalEventBody(event)}
-                          </p>
-                        )}
-                        {eventActorName(event) ? (
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">{eventActorName(event)}</p>
+                        {eventActorName(head) ? (
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">{eventActorName(head)}</p>
                         ) : null}
-                        {event.changes.length > 0 && event.eventType !== 'total_changed' ? (
-                          <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
-                            {event.changes.map((change) => (
-                              <li key={`${event.id}-${change.field}`} className="tabular-nums">
-                                {change.label}:{' '}
-                                {formatJournalValue(change.from, {
-                                  field: change.field,
-                                  label: change.label,
-                                })}{' '}
-                                →{' '}
-                                {formatJournalValue(change.to, {
-                                  field: change.field,
-                                  label: change.label,
-                                })}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : null}
-                        <JournalTaskPreview
-                          event={event}
-                          task={tasks.get(payloadString(event.payload, 'task_id') ?? '')}
-                          currentUserId={user?.id}
-                          onOpen={(taskId) => setOpenTaskId(taskId)}
+                        <JournalAttachmentBatch
+                          attachments={batchAttachments}
+                          canDelete={canDelete}
+                          deleting={removeAttachment.isPending}
+                          onDelete={handleDeleteAttachment}
                         />
                       </li>
                     )
-                  })}
-                </ol>
-              </section>
-            ))}
-          </div>
+                  }
+
+                  const event = entry.event
+                  return (
+                    <li key={event.id} className="relative">
+                      <span className="absolute top-1.5 -left-5 size-1.5 rounded-full bg-muted-foreground/50" />
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          {orderJournalEventTypeLabel(event.eventType, event.summary)}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {toDate(event.createdAt)
+                            ? format(toDate(event.createdAt) as Date, 'HH:mm')
+                            : ''}
+                        </span>
+                      </div>
+                      {isTaskJournalEvent(event.eventType) ? null : event.eventType ===
+                        DiagnosticJournalEvent.StatusChanged ? (
+                        <JournalStatusChangeBody event={event} />
+                      ) : (
+                        <p
+                          className={cn(
+                            event.eventType === OrderJournalEventType.Comment && 'whitespace-pre-wrap',
+                            isMoneyJournalEvent(event) && 'font-medium tabular-nums text-foreground',
+                          )}
+                        >
+                          {formatJournalEventBody(event)}
+                        </p>
+                      )}
+                      {eventActorName(event) ? (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">{eventActorName(event)}</p>
+                      ) : null}
+                      {event.changes.length > 0 && event.eventType !== 'total_changed' ? (
+                        <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                          {event.changes.map((change) => (
+                            <li key={`${event.id}-${change.field}`} className="tabular-nums">
+                              {change.label}:{' '}
+                              {formatJournalValue(change.from, {
+                                field: change.field,
+                                label: change.label,
+                              })}{' '}
+                              →{' '}
+                              {formatJournalValue(change.to, {
+                                field: change.field,
+                                label: change.label,
+                              })}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      <JournalTaskPreview
+                        event={event}
+                        task={tasks.get(payloadString(event.payload, 'task_id') ?? '')}
+                        currentUserId={user?.id}
+                        onOpen={(taskId) => setOpenTaskId(taskId)}
+                      />
+                    </li>
+                  )
+                })}
+              </ol>
+            )}
+          />
         )}
       </div>
       {showComposer ? (
@@ -429,11 +433,13 @@ function AttachmentFeedTile({
 }) {
   const label = item.fileName || item.caption || item.url || 'Вложение'
   const thumb = <AttachmentFeedThumb item={item} />
+  const isPhoto = item.kind === 'photo' && Boolean(item.signedUrl)
+  const showNameTooltip = overflow === 0 && !isPhoto
 
-  return (
+  const tile = (
     <div
       className={cn(
-        'group relative size-16 shrink-0',
+        'group relative size-16 shrink-0 hover:z-30 focus-within:z-30',
         revealed && 'animate-in fade-in-0 zoom-in-95 duration-200',
       )}
     >
@@ -443,8 +449,8 @@ function AttachmentFeedTile({
         aria-label={overflow > 0 ? `Показать ещё ${overflow}` : `Открыть «${label}»`}
         onClick={onOpen}
       >
-        {item.kind === 'photo' && item.signedUrl && overflow === 0 ? (
-          <ImageHoverPreview src={item.signedUrl} alt={label} className="size-full">
+        {isPhoto && overflow === 0 ? (
+          <ImageHoverPreview src={item.signedUrl as string} alt={label} className="size-full">
             <span className="block size-full">{thumb}</span>
           </ImageHoverPreview>
         ) : (
@@ -455,11 +461,19 @@ function AttachmentFeedTile({
             +{overflow}
           </span>
         ) : null}
+        {overflow === 0 && isPhoto ? (
+          <span
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] truncate bg-gradient-to-t from-black/80 via-black/50 to-transparent px-1 pt-4 pb-0.5 text-left text-[9px] leading-tight font-medium text-white opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
+            title={label}
+          >
+            {label}
+          </span>
+        ) : null}
       </button>
       {canDelete ? (
         <button
           type="button"
-          className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-sm bg-background/90 text-destructive opacity-100 shadow-sm ring-1 ring-border transition-opacity focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+          className="absolute top-0.5 right-0.5 z-[1] flex size-4 items-center justify-center rounded-sm bg-background/90 text-destructive opacity-100 shadow-sm ring-1 ring-border transition-opacity focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100"
           aria-label={`Удалить «${label}»`}
           disabled={deleting}
           onClick={(event) => {
@@ -471,6 +485,23 @@ function AttachmentFeedTile({
         </button>
       ) : null}
     </div>
+  )
+
+  if (!showNameTooltip) {
+    return tile
+  }
+
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>{tile}</TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        sideOffset={6}
+        className="z-[200] max-w-[16rem] px-2 py-1 text-[11px] font-medium break-all"
+      >
+        {label}
+      </TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -658,21 +689,3 @@ function collapseAttachmentBatches(events: OrderJournalEvent[]): FeedEntry[] {
   return entries
 }
 
-function groupFeedByDay(entries: FeedEntry[]) {
-  const groups: { label: string; entries: FeedEntry[] }[] = []
-
-  for (const entry of entries) {
-    const createdAt =
-      entry.kind === 'attachments' ? entry.events[0]?.createdAt : entry.event.createdAt
-    const date = createdAt ? toDate(createdAt) : null
-    const label = date ? format(date, 'd MMMM', { locale: ru }) : 'Дата неизвестна'
-    const current = groups[groups.length - 1]
-    if (current?.label === label) {
-      current.entries.push(entry)
-    } else {
-      groups.push({ label, entries: [entry] })
-    }
-  }
-
-  return groups
-}

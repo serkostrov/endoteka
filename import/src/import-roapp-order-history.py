@@ -15,6 +15,7 @@
   --dry-run   только разбор
   --resume    продолжить с state-файла (по умолчанию вкл.)
   --no-files  не качать файлы (только события)
+  --no-tasks  не создавать и не менять tasks (если задачи уже загружены из API)
 """
 from __future__ import annotations
 
@@ -426,6 +427,11 @@ def main():
     parser.add_argument("--out", default="import/reports/roapp-order-history")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-files", action="store_true")
+    parser.add_argument(
+        "--no-tasks",
+        action="store_true",
+        help="Не создавать и не менять tasks: список задач уже загружен из API.",
+    )
     parser.add_argument("--workers", type=int, default=10)
     parser.add_argument("--resume", action="store_true", default=True)
     parser.add_argument("--limit", type=int, default=0)
@@ -532,7 +538,7 @@ def main():
         if en.startswith("задача"):
             title = re.sub(r"\s*\(задача\s*#?\d+\)\s*$", "", row["desc"]).strip() or "Задача из RO App"
             task_id = None
-            if not args.dry_run:
+            if not args.dry_run and not args.no_tasks:
                 with lock:
                     task_id = ensure_task(sb, order_id, title, row["desc"], row["created"], task_cache)
                     if en == "задача выполнена":

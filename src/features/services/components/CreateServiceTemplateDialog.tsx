@@ -43,6 +43,9 @@ type CreateServiceTemplateDialogProps = {
     quantity: number
   }) => void
   initialQuery?: string
+  /** Подпись кнопки «только для заказа/сборки». */
+  orderOnlyLabel?: string
+  orderOnlyDescription?: string
 }
 
 export function CreateServiceTemplateDialog({
@@ -53,6 +56,8 @@ export function CreateServiceTemplateDialog({
   onCreatedForOrder,
   onDraftForOrder,
   initialQuery = '',
+  orderOnlyLabel = 'Создать только для заказа',
+  orderOnlyDescription,
 }: CreateServiceTemplateDialogProps) {
   const create = useCreateServiceTemplate()
   const addCustom = useAddOrderCustomServiceLine(orderId ?? '')
@@ -139,7 +144,10 @@ export function CreateServiceTemplateDialog({
           <SheetTitle>Новая услуга</SheetTitle>
           <SheetDescription>
             {orderId
-              ? 'Можно добавить только в этот заказ или сохранить шаблон в справочник. Окно заказа останется открытым.'
+              ? orderOnlyDescription ??
+                (canSaveCatalog
+                  ? 'Можно добавить только в этот заказ или сохранить шаблон в справочник. Окно заказа останется открытым.'
+                  : 'Услуга будет добавлена только в текущую запись, без справочника.')
               : 'Шаблон появится в поиске состава работы и в настройках.'}
           </SheetDescription>
         </SheetHeader>
@@ -193,7 +201,7 @@ export function CreateServiceTemplateDialog({
               ) : null}
               {orderId ? (
                 <Button type="submit" disabled={pending}>
-                  {addCustom.isPending ? 'Добавление…' : 'Создать только для заказа'}
+                  {addCustom.isPending ? 'Добавление…' : orderOnlyLabel}
                 </Button>
               ) : null}
             </SheetFooter>

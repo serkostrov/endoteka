@@ -27,6 +27,30 @@ function num(value: string | undefined, fallback = 0) {
   return Number.isFinite(n) ? n : fallback
 }
 
+async function loadSourceRows(
+  supabase: ReturnType<typeof createClient>,
+  dataset: string,
+  columns: string,
+) {
+  const rows: Array<Record<string, string>> = []
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase
+      .from('import_source_keys')
+      .select(columns)
+      .eq('dataset', dataset)
+      .range(from, from + 999)
+    if (error) {
+      throw new Error(error.message)
+    }
+    const chunk = (data ?? []) as Array<Record<string, string>>
+    rows.push(...chunk)
+    if (chunk.length < 1000) {
+      break
+    }
+  }
+  return rows
+}
+
 async function main() {
   const url = process.env.SUPABASE_URL?.trim() || process.env.VITE_SUPABASE_URL?.trim()
   const key =
@@ -45,16 +69,8 @@ async function main() {
   const { rows: serviceRows } = parseCsv(serviceText)
   const { rows: partRows } = parseCsv(partText)
 
-  const { data: orderKeys, error: orderKeysError } = await supabase
-    .from('import_source_keys')
-    .select('source_key, entity_id')
-    .eq('dataset', 'orders')
-  if (orderKeysError) {
-    throw new Error(orderKeysError.message)
-  }
-  const orderBySource = new Map(
-    (orderKeys ?? []).map((row) => [row.source_key, row.entity_id] as const),
-  )
+  const orderKeys = await loadSourceRows(supabase, 'orders', 'source_key, entity_id')
+  const orderBySource = new Map(orderKeys.map((row) => [row.source_key, row.entity_id] as const))
 
   // Fallback: order number → id
   const neededNumbers = new Set<string>()
@@ -94,24 +110,17 @@ async function main() {
     return number ? (orderByNumber.get(number) ?? null) : null
   }
 
-  const { data: existingServiceKeys } = await supabase
-    .from('import_source_keys')
-    .select('source_key')
-    .eq('dataset', 'order_service_lines')
-  const existingServices = new Set((existingServiceKeys ?? []).map((row) => row.source_key))
-
-  const { data: existingPartKeys } = await supabase
-    .from('import_source_keys')
-    .select('source_key')
-    .eq('dataset', 'order_part_lines')
-  const existingParts = new Set((existingPartKeys ?? []).map((row) => row.source_key))
-
-  // Resolve inventory items by source key / code
-  const { data: itemKeys } = await supabase
-    .from('import_source_keys')
-    .select('source_key, entity_id')
-    .eq('dataset', 'warehouse_items')
-  const itemBySource = new Map((itemKeys ?? []).map((row) => [row.source_key, row.entity_id] as const))
+  const existingServices = new Set(
+    (await loadSourceRows(supabase, 'order_service_lines', 'source_key')).map((row) => row.source_key),
+  )
+  const existingParts = new Set(
+    (await loadSourceRows(supabase, 'order_part_lines', 'source_key')).map((row) => row.source_key),
+  )
+  const itemBySource = new Map(
+    (await loadSourceRows(supabase, 'warehouse_items', 'source_key, entity_id')).map(
+      (row) => [row.source_key, row.entity_id] as const,
+    ),
+  )
 
   let servicesCreated = 0
   let servicesSkipped = 0
@@ -181,6 +190,7 @@ async function main() {
     ...new Set(partRows.map((row) => String(row.item_code ?? '').trim()).filter(Boolean)),
   ]
   const itemByCode = new Map<string, string>()
+  const ambiguousCodes = new Set<string>()
   for (let offset = 0; offset < codes.length; offset += CHUNK) {
     const chunk = codes.slice(offset, offset + CHUNK)
     const { data, error } = await supabase.from('inventory_items').select('id, code').in('code', chunk)
@@ -188,6 +198,11 @@ async function main() {
       throw new Error(error.message)
     }
     for (const row of data ?? []) {
+      if (ambiguousCodes.has(row.code) || itemByCode.has(row.code)) {
+        itemByCode.delete(row.code)
+        ambiguousCodes.add(row.code)
+        continue
+      }
       itemByCode.set(row.code, row.id)
     }
   }
@@ -260,10 +275,86 @@ async function main() {
     }
   }
 
+  const templateByName = new Map<string, { id: string; unitPrice: number }>()
+  const { data: existingTemplates, error: templatesError } = await supabase
+    .from('service_templates')
+    .select('id, name, unit_price')
+  if (templatesError) {
+    throw new Error(templatesError.message)
+  }
+  for (const row of existingTemplates ?? []) {
+    templateByName.set(String(row.name).trim().toLowerCase(), {
+      id: row.id,
+      unitPrice: num(String(row.unit_price), 0),
+    })
+  }
+
+  let templatesCreated = 0
+  for (const row of serviceRows) {
+    const name = String(row.name ?? '').trim()
+    if (!name) {
+      continue
+    }
+    const key = name.toLowerCase()
+    if (templateByName.has(key)) {
+      continue
+    }
+    const unitPrice = num(row.unit_price, 0)
+    const { data, error } = await supabase
+      .from('service_templates')
+      .insert({
+        name,
+        description: '',
+        unit_price: unitPrice,
+        is_active: true,
+      })
+      .select('id, name, unit_price')
+      .single()
+    if (error || !data) {
+      if (error?.code === '23505') {
+        const { data: found } = await supabase
+          .from('service_templates')
+          .select('id, name, unit_price')
+          .ilike('name', name)
+          .limit(1)
+          .maybeSingle()
+        if (found) {
+          templateByName.set(key, { id: found.id, unitPrice: num(String(found.unit_price), 0) })
+        }
+        continue
+      }
+      throw new Error(error?.message ?? `Не удалось создать шаблон «${name}»`)
+    }
+    templateByName.set(key, { id: data.id, unitPrice: num(String(data.unit_price), 0) })
+    templatesCreated += 1
+  }
+
+  let linesLinked = 0
+  for (const row of serviceRows) {
+    const name = String(row.name ?? '').trim()
+    const template = templateByName.get(name.toLowerCase())
+    const orderId = resolveOrderId(row)
+    if (!template || !orderId || !name) {
+      continue
+    }
+    const { data, error } = await supabase
+      .from('order_service_lines')
+      .update({ template_id: template.id })
+      .eq('order_id', orderId)
+      .eq('name', name)
+      .is('template_id', null)
+      .select('id')
+    if (error) {
+      throw new Error(error.message)
+    }
+    linesLinked += data?.length ?? 0
+  }
+
   process.stdout.write(
     [
       `Услуги: created=${servicesCreated} skipped=${servicesSkipped} failed=${servicesFailed}`,
       `Запчасти: created=${partsCreated} skipped=${partsSkipped} failed=${partsFailed}`,
+      `Шаблоны работ: created=${templatesCreated} linked_lines=${linesLinked}`,
       '',
     ].join('\n'),
   )

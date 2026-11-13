@@ -35,6 +35,9 @@ type CreateItemDialogProps = {
   /** Если задан — позиция только для заказа уходит в черновик, без немедленного сохранения. */
   onDraftForOrder?: (input: { name: string; unitPrice: number; quantity: number }) => void
   initialQuery?: string
+  /** Подпись кнопки «только для заказа/сборки». */
+  orderOnlyLabel?: string
+  orderOnlyDescription?: string
 }
 
 export function CreateItemDialog({
@@ -45,6 +48,8 @@ export function CreateItemDialog({
   onCreatedForOrder,
   onDraftForOrder,
   initialQuery = '',
+  orderOnlyLabel = 'Создать только для заказа',
+  orderOnlyDescription,
 }: CreateItemDialogProps) {
   const create = useCreateInventoryItem()
   const addCustom = useAddOrderCustomPartLine(orderId ?? '')
@@ -155,7 +160,10 @@ export function CreateItemDialog({
           <SheetTitle>Новая позиция</SheetTitle>
           <SheetDescription>
             {orderId
-              ? 'Можно добавить только в этот заказ или сохранить в справочник. Окно заказа останется открытым.'
+              ? orderOnlyDescription ??
+                (canSaveCatalog
+                  ? 'Можно добавить только в этот заказ или сохранить в справочник. Окно заказа останется открытым.'
+                  : 'Позиция будет добавлена только в текущую запись, без справочника и склада.')
               : 'Наименование уникально. После сохранения позиция применится к карточке.'}
           </SheetDescription>
         </SheetHeader>
@@ -221,7 +229,7 @@ export function CreateItemDialog({
                     })
                   }}
                 >
-                  {addCustom.isPending ? 'Добавление…' : 'Создать только для заказа'}
+                  {addCustom.isPending ? 'Добавление…' : orderOnlyLabel}
                 </Button>
               ) : null}
             </SheetFooter>

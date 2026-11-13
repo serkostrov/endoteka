@@ -25,6 +25,7 @@
     "import:roapp-receipts": "tsx import/src/run-roapp-receipts.ts",
     "import:roapp-stock-sync": "tsx import/src/sync-roapp-stock.ts",
     "import:roapp-diagnostics": "tsx import/src/sync-roapp-diagnostics.ts",
+    "import:roapp-tasks": "tsx import/src/sync-roapp-tasks.ts",
     "import:roapp-order-history": "python3 import/src/import-roapp-order-history.py",
     "import:test": "tsx --test import/tests/duplicate.test.ts import/tests/partial-failure.test.ts import/tests/interrupted.test.ts",
     "migrate:external-files": "tsx scripts/migrate-external-files-to-storage.mts"

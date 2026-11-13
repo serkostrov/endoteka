@@ -47,6 +47,10 @@ const OrderDetailSheet = lazySheet(async () => {
   const mod = await import('@/features/orders/components/OrderDetailScreen')
   return { default: mod.OrderDetailSheet }
 })
+const AssemblyDetailSheet = lazySheet(async () => {
+  const mod = await import('@/features/assembly/components/AssemblyDetailScreen')
+  return { default: mod.AssemblyDetailSheet }
+})
 const SaleDetailSheet = lazySheet(async () => {
   const mod = await import('@/features/sales/components/SaleDetailScreen')
   return { default: mod.SaleDetailSheet }
@@ -61,6 +65,7 @@ export type EntitySheetKind =
   | 'device'
   | 'item'
   | 'order'
+  | 'assembly'
   | 'task'
   | 'sale'
   | 'count'
@@ -88,6 +93,7 @@ const KINDS = new Set<EntitySheetKind>([
   'device',
   'item',
   'order',
+  'assembly',
   'task',
   'sale',
   'count',
@@ -307,6 +313,9 @@ export function SheetStackHost() {
               ) : null}
               {entry.kind === 'order' ? (
                 <OrderDetailSheet orderId={entry.id} open={open} onOpenChange={onOpenChange} />
+              ) : null}
+              {entry.kind === 'assembly' ? (
+                <AssemblyDetailSheet orderId={entry.id} open={open} onOpenChange={onOpenChange} />
               ) : null}
               {entry.kind === 'task' ? (
                 <TaskDetailSheet taskId={entry.id} open={open} onOpenChange={onOpenChange} />

@@ -31,12 +31,14 @@ import { localDateTimeToIso } from '@/lib/utils/date'
 import { TaskAssigneeSelect } from './TaskAssigneeSelect'
 import { TaskOrderPicker } from './TaskOrderPicker'
 import { useCreateTask } from '../hooks/use-tasks'
+import type { TaskContext } from '../services/tasks-service'
 
 type CreateTaskDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   presetOrderId?: string
   presetOrderNumber?: string
+  presetContext?: TaskContext
 }
 
 export function CreateTaskDialog({
@@ -44,20 +46,27 @@ export function CreateTaskDialog({
   onOpenChange,
   presetOrderId,
   presetOrderNumber,
+  presetContext = 'order',
 }: CreateTaskDialogProps) {
+  const linkedLabel =
+    presetContext === 'assembly' && presetOrderNumber
+      ? `К сборке заказа ${presetOrderNumber}.`
+      : presetOrderNumber
+        ? `К заказу ${presetOrderNumber}.`
+        : 'Назначение, срок и связь с заказом.'
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="flex w-full flex-col overflow-y-auto sm:max-w-xl">
         <SheetHeader>
           <SheetTitle>Новая задача</SheetTitle>
-          <SheetDescription>
-            {presetOrderNumber ? `К заказу ${presetOrderNumber}.` : 'Назначение, срок и связь с заказом.'}
-          </SheetDescription>
+          <SheetDescription>{linkedLabel}</SheetDescription>
         </SheetHeader>
         {open ? (
           <CreateTaskForm
             presetOrderId={presetOrderId}
             presetOrderNumber={presetOrderNumber}
+            presetContext={presetContext}
             onOpenChange={onOpenChange}
           />
         ) : null}
@@ -69,10 +78,12 @@ export function CreateTaskDialog({
 function CreateTaskForm({
   presetOrderId,
   presetOrderNumber,
+  presetContext,
   onOpenChange,
 }: {
   presetOrderId?: string
   presetOrderNumber?: string
+  presetContext: TaskContext
   onOpenChange: (open: boolean) => void
 }) {
   const user = useCurrentUser()
@@ -108,6 +119,7 @@ function CreateTaskForm({
       dueDate: localDateTimeToIso(dueDate),
       priority: isTaskPriority(priority) ? priority : TaskPriority.Normal,
       orderId: presetOrderId ?? order.orderId,
+      context: presetContext,
     })
     toast.success('Задача создана')
   }
@@ -171,7 +183,10 @@ function CreateTaskForm({
         <DatePicker id="task-due" withTime value={dueDate} onChange={setDueDate} />
       </div>
       {presetOrderId ? (
-        <p className="text-sm text-muted-foreground">Заказ {presetOrderNumber || presetOrderId}</p>
+        <p className="text-sm text-muted-foreground">
+          {presetContext === 'assembly' ? 'Сборка заказа' : 'Заказ'}{' '}
+          {presetOrderNumber || presetOrderId}
+        </p>
       ) : canPickOrder ? (
         <div className="space-y-2">
           <Label>Заказ</Label>
