@@ -225,8 +225,12 @@ type Row = {
     number: string
     number_seq: number
     customer_id: string
-    device_id: string
+    device_id: string | null
     serial_number: string
+    device_group: string
+    device_brand: string
+    device_model: string
+    device_label: string
     claimed_malfunction: string
     completeness: string
     external_condition: string
@@ -244,7 +248,7 @@ type Row = {
     number_seq: number
     customer_id: string
     customer_name: string
-    device_id: string
+    device_id: string | null
     serial_number: string
     device_group_id: string | null
     device_brand_id: string | null
@@ -730,7 +734,7 @@ type Row = {
     number_seq: number
     customer_id: string
     customer_name: string
-    device_id: string
+    device_id: string | null
     serial_number: string
     device_group_id: string | null
     device_brand_id: string | null

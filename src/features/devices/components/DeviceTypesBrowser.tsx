@@ -1126,7 +1126,7 @@ function DeleteReferenceItem({
     <ConfirmDialog
       open={open}
       title="Удалить запись"
-      description={`${item.name} будет удалена вместе с пустыми дочерними записями. Если к этой ветке привязаны приборы или склад, удаление не пройдёт.`}
+      description={`${item.name} будет удалена вместе с дочерними записями. Приборы отвяжутся от этой ветки; в заказах останется снимок бренда/модели.`}
       confirmLabel="Удалить"
       isPending={remove.isPending}
       onOpenChange={onOpenChange}

@@ -140,7 +140,7 @@ function DeviceDetailSheetContent({ deviceId, onClose }: { deviceId: string; onC
         title="Удалить прибор"
         description={
           device
-            ? `${deviceTitle(device)}. ${deviceSerialLine(device.serialNumber)} будет удалён. Если по нему есть заказы, удаление не пройдёт.`
+            ? `${deviceTitle(device)}. ${deviceSerialLine(device.serialNumber)} будет удалён из справочника. В заказах останется снимок прибора (бренд, модель, СН) без ссылки.`
             : ''
         }
         confirmLabel="Удалить"
@@ -323,7 +323,7 @@ function DeviceCardBody({
         <ConfirmDialog
           open={deleteOpen}
           title="Удалить прибор"
-          description={`${deviceTitle(device)}. ${deviceSerialLine(device.serialNumber)} будет удалён. Если по нему есть заказы, удаление не пройдёт.`}
+          description={`${deviceTitle(device)}. ${deviceSerialLine(device.serialNumber)} будет удалён из справочника. В заказах останется снимок прибора (бренд, модель, СН) без ссылки.`}
           confirmLabel="Удалить"
           isPending={remove.isPending}
           onOpenChange={setDeleteOpen}
