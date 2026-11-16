@@ -35,84 +35,86 @@ export function htmlTemplateBody(
 }
 
 export function sanitizeDocumentHtml(html: string) {
-  return DOMPurify.sanitize(normalizeTableColumnWidths(html), {
-    ALLOWED_TAGS: [
-      'p',
-      'br',
-      'hr',
-      'div',
-      'span',
-      'strong',
-      'b',
-      'em',
-      'i',
-      'u',
-      's',
-      'strike',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'table',
-      'thead',
-      'tbody',
-      'tfoot',
-      'colgroup',
-      'col',
-      'caption',
-      'tr',
-      'th',
-      'td',
-      'img',
-      'ul',
-      'ol',
-      'li',
-      'a',
-      'blockquote',
-      'sup',
-      'sub',
-      'font',
-      'svg',
-      'path',
-      'text',
-    ],
-    ALLOWED_ATTR: [
-      'class',
-      'style',
-      'src',
-      'alt',
-      'href',
-      'target',
-      'rel',
-      'width',
-      'height',
-      'span',
-      'colspan',
-      'rowspan',
-      'border',
-      'cellpadding',
-      'cellspacing',
-      'data-code',
-      'data-field',
-      'data-date-format',
-      'data-barcode-type',
-      'viewBox',
-      'preserveAspectRatio',
-      'd',
-      'stroke',
-      'stroke-width',
-      'fill',
-      'x',
-      'y',
-      'text-anchor',
-      'font-size',
-      'role',
-      'aria-label',
-    ],
-    ALLOW_DATA_ATTR: true,
-  })
+  return unwrapNestedDocFieldsHtml(
+    DOMPurify.sanitize(normalizeTableColumnWidths(html), {
+      ALLOWED_TAGS: [
+        'p',
+        'br',
+        'hr',
+        'div',
+        'span',
+        'strong',
+        'b',
+        'em',
+        'i',
+        'u',
+        's',
+        'strike',
+        'h1',
+        'h2',
+        'h3',
+        'h4',
+        'h5',
+        'h6',
+        'table',
+        'thead',
+        'tbody',
+        'tfoot',
+        'colgroup',
+        'col',
+        'caption',
+        'tr',
+        'th',
+        'td',
+        'img',
+        'ul',
+        'ol',
+        'li',
+        'a',
+        'blockquote',
+        'sup',
+        'sub',
+        'font',
+        'svg',
+        'path',
+        'text',
+      ],
+      ALLOWED_ATTR: [
+        'class',
+        'style',
+        'src',
+        'alt',
+        'href',
+        'target',
+        'rel',
+        'width',
+        'height',
+        'span',
+        'colspan',
+        'rowspan',
+        'border',
+        'cellpadding',
+        'cellspacing',
+        'data-code',
+        'data-field',
+        'data-date-format',
+        'data-barcode-type',
+        'viewBox',
+        'preserveAspectRatio',
+        'd',
+        'stroke',
+        'stroke-width',
+        'fill',
+        'x',
+        'y',
+        'text-anchor',
+        'font-size',
+        'role',
+        'aria-label',
+      ],
+      ALLOW_DATA_ATTR: true,
+    }),
+  )
 }
 
 /**
@@ -652,9 +654,57 @@ function expandRepeatingTable(table: HTMLTableElement, context: DocumentContext)
   })
 }
 
+/**
+ * Вложенные .doc-field (поле внутри поля) ломают печать: внешний токен
+ * затирает внутренний своим значением. Оставляем самый глубокий токен.
+ */
+export function unwrapNestedDocFieldsHtml(html: string) {
+  if (typeof DOMParser === 'undefined' || !html.includes('doc-field')) {
+    return html
+  }
+  const parsed = new DOMParser().parseFromString(`<div id="root">${html}</div>`, 'text/html')
+  const root = parsed.getElementById('root')
+  if (!root) {
+    return html
+  }
+  unwrapNestedDocFields(root)
+  return root.innerHTML
+}
+
+export function unwrapNestedDocFields(root: Element) {
+  let guard = 0
+  while (guard < 50) {
+    guard += 1
+    const outer = [...root.querySelectorAll<HTMLElement>('.doc-field[data-field]')].find((el) =>
+      Boolean(el.querySelector('.doc-field[data-field]')),
+    )
+    if (!outer) {
+      return
+    }
+    let leaf = outer.querySelector<HTMLElement>('.doc-field[data-field]')
+    if (!leaf) {
+      return
+    }
+    while (true) {
+      const deeper = leaf.querySelector<HTMLElement>('.doc-field[data-field]')
+      if (!deeper) {
+        break
+      }
+      leaf = deeper
+    }
+    outer.replaceWith(leaf)
+  }
+}
+
 function interpolateNode(node: Element, values: Record<string, string>) {
+  unwrapNestedDocFields(node)
+
   for (const element of node.querySelectorAll<HTMLElement>('.doc-field[data-field]')) {
     if (element.closest('tr[data-doc-repeat]')) {
+      continue
+    }
+    // Только «листовые» токены: обёртка с вложенным полем не заполняется.
+    if (element.querySelector('.doc-field[data-field]')) {
       continue
     }
     const key = element.getAttribute('data-field')?.trim() ?? ''

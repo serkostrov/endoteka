@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Импорт поля «Заключение» из Excel в order_diagnostics по номеру заказа.
+"""Импорт поля «Заключение» из Excel в диагностику по номеру заказа.
+
+Пишет сразу в оба хранилища:
+  - order_diagnostics.conclusion
+  - dynamic_field_values поля diagnostics.zaklyuchenie (вкладка «Диагностика» / сборка)
 
 Использование:
   python3 scripts/import-diagnostics-conclusions.py [/path/to/Заключение.xlsx] [--dry-run]
@@ -8,7 +12,7 @@
   - матч по orders.number (без учёта регистра лишних пробелов);
   - пустые ячейки Excel не затирают уже сохранённые заключения;
   - текст нормализуется (trim, \\r\\n → \\n, хвостовые пробелы в строках);
-  - upsert в order_diagnostics без RPC, чтобы не засорять журнал 981 событием.
+  - upsert без RPC, чтобы не засорять журнал сотнями событий.
 """
 
 from __future__ import annotations
@@ -153,12 +157,26 @@ class SupabaseRest:
             offset += PAGE
         return mapping
 
-    def fetch_existing_conclusions(self, order_ids: list[str]) -> dict[str, str]:
+    def fetch_zaklyuchenie_field_id(self) -> str:
+        rows = self.request(
+            'GET',
+            'dynamic_fields',
+            params={
+                'select': 'id',
+                'entity_code': 'eq.diagnostics',
+                'code': 'eq.zaklyuchenie',
+                'limit': '1',
+            },
+        )
+        assert isinstance(rows, list) and rows, 'Не найдено поле diagnostics.zaklyuchenie'
+        return rows[0]['id']
+
+    def fetch_existing_conclusions(self, order_ids: list[str], field_id: str) -> dict[str, str]:
         existing: dict[str, str] = {}
         for i in range(0, len(order_ids), 100):
             chunk = order_ids[i : i + 100]
             in_list = '(' + ','.join(chunk) + ')'
-            rows = self.request(
+            diag_rows = self.request(
                 'GET',
                 'order_diagnostics',
                 params={
@@ -166,18 +184,49 @@ class SupabaseRest:
                     'order_id': f'in.{in_list}',
                 },
             )
-            assert isinstance(rows, list)
-            for row in rows:
+            assert isinstance(diag_rows, list)
+            for row in diag_rows:
                 existing[row['order_id']] = normalize_conclusion(row.get('conclusion'))
+
+            field_rows = self.request(
+                'GET',
+                'dynamic_field_values',
+                params={
+                    'select': 'record_id,value',
+                    'field_id': f'eq.{field_id}',
+                    'record_id': f'in.{in_list}',
+                },
+            )
+            assert isinstance(field_rows, list)
+            for row in field_rows:
+                text = normalize_conclusion(row.get('value'))
+                current = existing.get(row['record_id'], '')
+                if len(text) > len(current):
+                    existing[row['record_id']] = text
         return existing
 
-    def upsert_conclusions(self, rows: list[dict[str, str]]) -> None:
+    def upsert_conclusions(self, rows: list[dict[str, str]], field_id: str) -> None:
         for i in range(0, len(rows), UPSERT_CHUNK):
             chunk = rows[i : i + UPSERT_CHUNK]
             self.request(
                 'POST',
                 'order_diagnostics',
                 body=chunk,
+                prefer='resolution=merge-duplicates,return=minimal',
+            )
+            field_rows = [
+                {
+                    'field_id': field_id,
+                    'entity_code': 'diagnostics',
+                    'record_id': row['order_id'],
+                    'value': row['conclusion'],
+                }
+                for row in chunk
+            ]
+            self.request(
+                'POST',
+                'dynamic_field_values',
+                body=field_rows,
                 prefer='resolution=merge-duplicates,return=minimal',
             )
 
@@ -209,7 +258,9 @@ def main() -> int:
 
     api = SupabaseRest(base_url, service_key)
     orders = api.fetch_all_orders()
+    field_id = api.fetch_zaklyuchenie_field_id()
     print(f'Заказов в БД: {len(orders)}')
+    print(f'Поле zaklyuchenie: {field_id}')
 
     missing: list[str] = []
     planned: list[tuple[str, str, str]] = []  # number, order_id, conclusion
@@ -220,7 +271,10 @@ def main() -> int:
             continue
         planned.append((number, order_id, conclusion))
 
-    existing = api.fetch_existing_conclusions([order_id for _, order_id, _ in planned])
+    existing = api.fetch_existing_conclusions(
+        [order_id for _, order_id, _ in planned],
+        field_id,
+    )
     to_write: list[dict[str, str]] = []
     unchanged = 0
     now = datetime.now(timezone.utc).isoformat()
@@ -249,8 +303,8 @@ def main() -> int:
         return 0
 
     if to_write:
-        api.upsert_conclusions(to_write)
-        print(f'Записано: {len(to_write)}')
+        api.upsert_conclusions(to_write, field_id)
+        print(f'Записано в order_diagnostics + zaklyuchenie: {len(to_write)}')
     else:
         print('Нечего писать')
 

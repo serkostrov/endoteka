@@ -46,6 +46,7 @@ import { registerTablePropsDialog } from '../table-props-dialog'
 import { registerLineHeightControl } from '../line-height-control'
 import { registerBlockSpacingControl } from '../block-spacing-control'
 import { registerDocFieldGuards, unlockDocFieldsForSelection } from '../doc-field-editing'
+import { unwrapNestedDocFields } from '../html-template'
 import { normalizePageMargins, type PageMarginsMm } from '../template-schema'
 
 type ImageDialogRequest = {
@@ -803,6 +804,16 @@ function insertFieldToken(
   dateFormat?: string,
   getSettingsFields?: () => PlaceholderDefinition[],
 ) {
+  // Не вкладываем поле в поле: иначе при печати внешний токен затирает внутренний.
+  const node = editor.selection.getNode()
+  const existing =
+    node instanceof HTMLElement
+      ? node.closest('.doc-field')
+      : node.parentElement?.closest('.doc-field')
+  if (existing instanceof HTMLElement) {
+    editor.selection.select(existing)
+  }
+
   const formatAttr = dateFormat ? ` data-date-format="${escapeAttr(dateFormat)}"` : ''
   const preview = escapeHtml(fieldPreviewText(key, dateFormat, getSettingsFields?.() ?? []))
   editor.insertContent(
@@ -850,6 +861,7 @@ function hydrateFieldPreviews(editor: TinyMCEEditor, settingsFields: Placeholder
     return
   }
   unlockDocFieldsForSelection(body)
+  unwrapNestedDocFields(body)
   for (const el of body.querySelectorAll<HTMLElement>('.doc-field')) {
     let key = el.getAttribute('data-field')?.trim() ?? ''
     let dateFormat = el.getAttribute('data-date-format')?.trim() || undefined
