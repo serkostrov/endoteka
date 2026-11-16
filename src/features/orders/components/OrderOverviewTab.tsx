@@ -252,7 +252,7 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
             title="Прибор"
             name={order.deviceLabel}
             detail={deviceSerialLine(order.serialNumber)}
-            onOpen={() => openSheet('device', order.deviceId)}
+            onOpen={order.deviceId ? () => openSheet('device', order.deviceId!) : undefined}
           />
           <EntityCard
             title="Клиент"
@@ -406,17 +406,27 @@ function EntityCard({
   title: string
   name: string
   detail?: string
-  onOpen: () => void
+  onOpen?: () => void
 }) {
+  const body = (
+    <>
+      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{title}</p>
+      <p className="mt-1 truncate text-sm font-medium">{name}</p>
+      {detail ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p> : null}
+    </>
+  )
+
+  if (!onOpen) {
+    return <div className="block w-full rounded-lg border bg-background p-3 text-left">{body}</div>
+  }
+
   return (
     <button
       type="button"
       onClick={onOpen}
       className="block w-full rounded-lg border bg-background p-3 text-left transition-colors hover:bg-muted/40"
     >
-      <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{title}</p>
-      <p className="mt-1 truncate text-sm font-medium">{name}</p>
-      {detail ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p> : null}
+      {body}
     </button>
   )
 }

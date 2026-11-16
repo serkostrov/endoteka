@@ -51,7 +51,7 @@ export type OrderListItem = {
   numberSeq: number
   customerId: string
   customerName: string
-  deviceId: string
+  deviceId: string | null
   serialNumber: string
   deviceBrand: string
   deviceModel: string
