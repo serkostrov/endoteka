@@ -805,11 +805,9 @@ function insertFieldToken(
   getSettingsFields?: () => PlaceholderDefinition[],
 ) {
   // Не вкладываем поле в поле: иначе при печати внешний токен затирает внутренний.
-  const node = editor.selection.getNode()
-  const existing =
-    node instanceof HTMLElement
-      ? node.closest('.doc-field')
-      : node.parentElement?.closest('.doc-field')
+  const node = editor.selection.getNode() as Node
+  const host = node instanceof HTMLElement ? node : node.parentElement
+  const existing = host?.closest('.doc-field')
   if (existing instanceof HTMLElement) {
     editor.selection.select(existing)
   }

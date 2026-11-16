@@ -681,17 +681,20 @@ export function unwrapNestedDocFields(root: Element) {
     if (!outer) {
       return
     }
-    let leaf = outer.querySelector<HTMLElement>('.doc-field[data-field]')
+
+    let leaf: HTMLElement | null = outer.querySelector<HTMLElement>('.doc-field[data-field]')
     if (!leaf) {
       return
     }
-    while (true) {
-      const deeper = leaf.querySelector<HTMLElement>('.doc-field[data-field]')
+
+    for (;;) {
+      const deeper: HTMLElement | null = leaf.querySelector<HTMLElement>('.doc-field[data-field]')
       if (!deeper) {
         break
       }
       leaf = deeper
     }
+
     outer.replaceWith(leaf)
   }
 }
