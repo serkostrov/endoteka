@@ -94,10 +94,20 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
       return
     }
 
-    const draft = extraDraft ?? mergeOrderCardValues(order, valuesQuery.data ?? {})
-    const values = { ...mergeOrderCardValues(order, valuesQuery.data ?? {}), ...draft }
+    const baseline = mergeOrderCardValues(order, valuesQuery.data ?? {})
+    const draft = extraDraft ?? baseline
+    const values = { ...baseline, ...draft }
     const filled = filledFieldValues(activeFields, values)
-    const parsed = buildEntityValuesSchema(activeFields).safeParse(filled)
+    // Partial save: validate only fields the user actually changed.
+    // Empty required fields left untouched must not block clearing deadline etc.
+    const dirtyFields = activeFields.filter((field) => {
+      const next = filled[field.code]
+      const prev = baseline[field.code] ?? emptyFieldValue(field)
+      return next !== prev
+    })
+    const parsed = buildEntityValuesSchema(dirtyFields).safeParse(
+      Object.fromEntries(dirtyFields.map((field) => [field.code, filled[field.code]])),
+    )
     if (!parsed.success) {
       const nextErrors: Record<string, string> = {}
       for (const issue of parsed.error.issues) {
@@ -111,7 +121,7 @@ export function OrderOverviewTab({ order }: OrderOverviewTabProps) {
     }
 
     setFieldErrors({})
-    const { builtin, extra } = splitOrderFieldValues(parsed.data)
+    const { builtin, extra } = splitOrderFieldValues({ ...baseline, ...parsed.data, ...filled })
     const columns = orderColumnsFromBuiltin(builtin)
     const activeCodes = new Set(activeFields.map((field) => field.code))
     const coverActive = activeCodes.has(OrderBuiltinField.CoverNote)

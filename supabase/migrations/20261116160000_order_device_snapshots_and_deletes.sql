@@ -54,7 +54,7 @@ begin
   end if;
 
   select * into snap from public.device_classification_snapshot(target_device_id);
-  if snap.serial_number is null then
+  if not found then
     return;
   end if;
 
@@ -206,7 +206,7 @@ begin
   end if;
 
   select * into snap from public.device_classification_snapshot(target_device_id);
-  if snap.serial_number is null then
+  if not found then
     raise exception 'Прибор не найден.';
   end if;
 
@@ -315,6 +315,11 @@ declare
   next_responsible uuid;
   next_customer uuid;
   next_device uuid;
+  next_serial text;
+  next_device_group text;
+  next_device_brand text;
+  next_device_model text;
+  next_device_label text;
   old_customer_name text;
   new_customer_name text;
   old_device_label text;
@@ -350,14 +355,25 @@ begin
     end if;
   end if;
 
+  next_serial := current_row.serial_number;
+  next_device_group := current_row.device_group;
+  next_device_brand := current_row.device_brand;
+  next_device_model := current_row.device_model;
+  next_device_label := current_row.device_label;
+
   if change_device then
     if target_device_id is null then
       raise exception 'Укажите прибор.';
     end if;
     select * into snap from public.device_classification_snapshot(target_device_id);
-    if snap.serial_number is null then
+    if not found then
       raise exception 'Прибор не найден.';
     end if;
+    next_serial := snap.serial_number;
+    next_device_group := snap.device_group;
+    next_device_brand := snap.device_brand;
+    next_device_model := snap.device_model;
+    next_device_label := snap.device_label;
   end if;
 
   previous_responsible := current_row.responsible_id;
@@ -472,7 +488,7 @@ begin
       nullif(btrim(current_row.serial_number), ''),
       ''
     );
-    new_device_label := trim(both ' ' from concat_ws(' ', snap.device_brand, snap.device_model, snap.serial_number));
+    new_device_label := trim(both ' ' from concat_ws(' ', next_device_brand, next_device_model, next_serial));
     changes := changes || jsonb_build_array(jsonb_build_object(
       'field', 'device_id',
       'label', 'Прибор',
@@ -500,26 +516,11 @@ begin
     responsible_id = next_responsible,
     customer_id = next_customer,
     device_id = next_device,
-    serial_number = case
-      when change_device then snap.serial_number
-      else orders.serial_number
-    end,
-    device_group = case
-      when change_device then snap.device_group
-      else orders.device_group
-    end,
-    device_brand = case
-      when change_device then snap.device_brand
-      else orders.device_brand
-    end,
-    device_model = case
-      when change_device then snap.device_model
-      else orders.device_model
-    end,
-    device_label = case
-      when change_device then snap.device_label
-      else orders.device_label
-    end
+    serial_number = next_serial,
+    device_group = next_device_group,
+    device_brand = next_device_brand,
+    device_model = next_device_model,
+    device_label = next_device_label
   where id = target_order_id;
 
   if assigned then
