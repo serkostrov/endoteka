@@ -195,8 +195,16 @@ export function formatJournalValue(
 }
 
 /**
+ * Денежное число целиком: «15000», «42 160», «42 160,00», «1 250,5 ₽».
+ * Группы тысяч через пробел/nbsp берутся только если есть хотя бы одна группа `\s\d{3}`.
+ */
+const JOURNAL_MONEY_AMOUNT_RE =
+  /-?(?:\d{1,3}(?:[\s\u00a0]\d{3})+|\d+)(?:[.,]\d+)?(?:\s*₽)?/g
+
+/**
  * Текст summary журнала: суммы вроде «0 → 15000» или «Сумма: 12500.5»
  * приводим к «0,00 ₽ → 15 000,00 ₽».
+ * Свободный текст («… рублей 00 копеек») не трогаем.
  */
 export function formatJournalSummary(summary: string): string {
   const text = summary.trim()
@@ -204,15 +212,22 @@ export function formatJournalSummary(summary: string): string {
     return text
   }
 
+  // Не считать «рублей/рубля» в прописи триггером — иначе ломаются комментарии.
   const looksLikeMoneyEvent =
-    /сумм|итог|₽|руб/i.test(text) ||
-    /^-?\d[\d\s.,]*\s*(→|->|—|-)\s*-?\d/.test(text)
+    /сумм|итог|₽/i.test(text) ||
+    /^-?\d[\d\s\u00a0.,]*\s*(→|->|—|-)\s*-?\d/.test(text)
 
   if (!looksLikeMoneyEvent) {
     return text
   }
 
-  return text.replace(/-?\d+(?:[.,]\d+)?(?:\s*₽)?/g, (raw) => {
+  return text.replace(JOURNAL_MONEY_AMOUNT_RE, (raw, offset: number, full: string) => {
+    // «00 копеек» / «0 копеек» — часть прописи, не отдельная сумма.
+    const after = full.slice(offset + raw.length)
+    if (/^\s*копе/i.test(after)) {
+      return raw
+    }
+
     const numPart = raw.replace(/\s*₽/g, '').trim()
     const parsed = parseMoney(numPart)
     if (parsed == null) {
@@ -228,6 +243,11 @@ export function formatJournalEventBody(event: {
   summary: string
   changes: DiagnosticChange[]
 }): string {
+  // Комментарии пользователя показываем как ввели — без автоформата сумм.
+  if (event.eventType === 'comment') {
+    return event.summary
+  }
+
   if (event.eventType === 'total_changed') {
     const change = event.changes.find((item) => item.field === 'total') ?? event.changes[0]
     if (change) {
